@@ -1,0 +1,3092 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Chart Builder</title>
+<style>
+/* ==========================================================================
+   DESIGN TOKENS
+   ========================================================================== */
+:root{
+  --bg:#14171c; --bg-panel:#1b1f27; --bg-panel-2:#20242e; --bg-input:#262b36;
+  --border:#2e3440; --border-soft:#242833;
+  --text:#e7e9ee; --text-dim:#9aa2b1; --text-faint:#5f6779;
+  --accent:#e8a13f; --accent-dim:#8a5f24; --accent-text:#1b1406;
+  --chord:#7fc8ff; --danger:#e2637a; --good:#68c98f;
+  --radius:8px; --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --chord-lyric-gap:2px;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+  font-size:14px; display:flex; flex-direction:column; height:100vh; overflow:hidden;
+}
+button{font-family:var(--sans); cursor:pointer;}
+input,select,textarea{font-family:var(--sans); color:var(--text); background:var(--bg-input); border:1px solid var(--border); border-radius:6px; padding:6px 8px;}
+input:focus,select:focus,textarea:focus{outline:1px solid var(--accent);}
+button{background:var(--bg-input); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:13px;}
+button:hover{border-color:var(--accent-dim);}
+button.primary{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+button.primary:hover{filter:brightness(1.08);}
+button.ghost{background:transparent;}
+button:disabled{opacity:.4; cursor:not-allowed;}
+input:disabled, select:disabled{opacity:.4; cursor:not-allowed; background:var(--bg);}
+button.icon{padding:6px 8px; line-height:1;}
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+h1,h2,h3{margin:0;}
+small{color:var(--text-faint);}
+.hidden{display:none !important;}
+
+/* ==========================================================================
+   TOP BAR
+   ========================================================================== */
+#topbar{
+  display:flex; align-items:center; gap:10px; padding:8px 12px;
+  background:var(--bg-panel); border-bottom:1px solid var(--border-soft); flex-shrink:0; z-index:20;
+}
+#topbar .brand{font-weight:700; font-size:15px; letter-spacing:.2px; margin-right:8px; white-space:nowrap;}
+#topbar .brand span{color:var(--accent);}
+.tb-group{display:flex; gap:6px; align-items:center; padding-right:10px; border-right:1px solid var(--border-soft); margin-right:2px;}
+.tb-group:last-child{border-right:none;}
+#topbar .spacer{flex:1;}
+#saveStatus{font-size:12px; color:var(--text-faint); white-space:nowrap;}
+#btnNNMode{font-size:12px; padding:5px 10px; border-radius:14px; white-space:nowrap;}
+#btnNNMode.on{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+#btnNNMode.off{background:var(--bg-input); color:var(--text-dim);}
+.circle-btn{background:linear-gradient(135deg,#8b6ef2,#6a4fd8); color:#fff; border:1px solid #7a5ce8; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
+.circle-btn:hover{filter:brightness(1.1); border-color:#8b6ef2;}
+
+/* Intro popup */
+#nnIntroBackdrop{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:60; display:flex; align-items:center; justify-content:center;}
+#nnIntroModal{background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; max-width:420px; width:92vw; padding:22px 24px; box-shadow:0 12px 40px rgba(0,0,0,.5);}
+#nnIntroModal h3{font-size:16px; margin-bottom:10px;}
+#nnIntroModal p{font-size:13px; line-height:1.6; color:var(--text-dim); margin:0 0 14px;}
+#nnIntroModal .nn-intro-actions{display:flex; justify-content:flex-end; gap:8px;}
+
+/* ==========================================================================
+   APP LAYOUT
+   ========================================================================== */
+#app{flex:1; display:flex; min-height:0;}
+#sidebar{
+  width:270px; flex-shrink:0; background:var(--bg-panel); border-right:1px solid var(--border-soft);
+  display:flex; flex-direction:column; min-height:0;
+}
+#sidebar .sb-head{padding:10px; display:flex; flex-direction:column; gap:6px; border-bottom:1px solid var(--border-soft);}
+#sidebar .sb-head input{width:100%;}
+#tagFilters{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border-soft);}
+.tag-chip{font-size:11px; padding:3px 8px; border-radius:12px; background:var(--bg-input); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; white-space:nowrap;}
+.tag-chip.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
+#songList{flex:1; overflow-y:auto; padding:6px;}
+.song-item{padding:8px 10px; border-radius:6px; cursor:pointer; margin-bottom:2px; border:1px solid transparent;}
+.song-item:hover{background:var(--bg-panel-2);}
+.song-item.active{background:var(--bg-panel-2); border-color:var(--accent-dim);}
+.song-item .si-title{font-weight:600; font-size:13.5px;}
+.song-item .si-meta{font-size:11.5px; color:var(--text-faint); margin-top:2px; display:flex; gap:6px; flex-wrap:wrap;}
+.song-item .si-tags{display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;}
+.si-tag{font-size:10px; background:var(--bg-input); color:var(--text-dim); padding:1px 6px; border-radius:8px;}
+#sidebar .sb-empty{padding:20px 14px; color:var(--text-faint); font-size:12.5px; line-height:1.5;}
+
+#main{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;}
+
+/* Metadata bar */
+#metaBar{
+  display:flex; flex-direction:column; gap:10px;
+  padding:10px 12px; background:var(--bg-panel-2); border-bottom:1px solid var(--border-soft); flex-shrink:0;
+}
+.meta-row{display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 14px;}
+#metaBar .field.transpose-field #origKeyNote{display:block; text-align:center; font-size:11px; color:var(--text-faint); margin-top:2px; min-height:14px;}
+#metaBar .field{flex:1 1 120px; min-width:110px;}
+#metaBar .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:3px;}
+#metaBar input, #metaBar select{width:100%;}
+.align-controls{display:flex; gap:3px; margin-top:4px;}
+.align-controls .align-btn{flex:1; padding:3px 0; font-size:12px; line-height:1;}
+.align-controls .align-btn.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
+#settingsAlignControls{margin-top:4px;}
+#settingsAlignControls .align-btn{padding:6px 10px;}
+.copyright-input-row{display:flex; align-items:center; gap:6px;}
+.copyright-input-row input{flex:1 1 auto; min-width:0;}
+.copyright-mode-controls{display:inline-flex; gap:3px; flex-shrink:0;}
+#copyrightModeControls button{padding:4px 8px; font-size:11px; line-height:1;}
+#copyrightModeControls button.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+#copyrightModeControls .copyright-symbol-btn{font-size:19px; font-weight:700; padding:2px 9px;}
+#metaBar .field.transpose-field{display:flex; flex-direction:column;}
+.transpose-controls{display:flex; align-items:center; gap:4px;}
+.transpose-controls button{padding:5px 9px;}
+
+/* Structure toolbar */
+#structBar{
+  display:flex; gap:6px; padding:6px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border-soft);
+  flex-shrink:0; overflow-x:auto; align-items:center;
+}
+#structBar .lbl{font-size:11px; color:var(--text-faint); margin-right:4px; white-space:nowrap;}
+#structBar button{font-size:12px; padding:5px 9px; white-space:nowrap;}
+.dynamic-group{display:inline-flex; gap:4px; margin-right:6px;}
+.dynamic-group button.next-num{border-color:var(--accent-dim); color:var(--accent);}
+.dynamic-group button.next-num:hover{border-color:var(--accent);}
+.right-controls{display:flex; align-items:center; gap:8px; margin-left:auto; flex-shrink:0;}
+.capo-control{display:flex; align-items:center; gap:6px; flex-shrink:0;}
+#btnRomanNumerals{font-size:12px; padding:5px 10px; border-radius:14px;}
+#btnRomanNumerals.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+.capo-control select{padding:5px 8px; font-size:12px;}
+
+/* Split pane */
+#splitPane{flex:1; display:flex; min-height:0;}
+#editorPane, #previewPane{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
+#editorPane{border-right:1px solid var(--border-soft);}
+.pane-head{display:flex; justify-content:space-between; align-items:center; padding:6px 12px; background:var(--bg-panel-2); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); flex-shrink:0;}
+.pane-head .hint{text-transform:none; letter-spacing:0; font-size:11px;}
+#editor{
+  flex:1; resize:none; border:none; border-radius:0; background:var(--bg); color:var(--text);
+  font-family:var(--mono); font-size:14px; line-height:1.6; padding:14px; white-space:pre; overflow:auto;
+}
+#previewScroll{flex:1; overflow:auto; background:#0e1014; padding:24px; display:flex; flex-direction:column; align-items:center;}
+/* Live preview pages: real A4 mm dimensions + real 0.25in margin baked in as
+   padding (since there's no browser @page mechanism outside of an actual
+   print), then visually scaled to fit the pane via JS-computed transform.
+   Because it's a uniform CSS transform, fonts/spacing/margins all shrink
+   together exactly proportionally — a true miniature of the print output,
+   not a separately-tuned approximation. */
+.a4-page-wrap{margin-bottom:24px; flex-shrink:0;}
+.a4-page{
+  width:210mm; height:297mm; padding:0.25in; box-sizing:border-box;
+  background:#fff; color:#111; box-shadow:0 4px 24px rgba(0,0,0,.4); border-radius:2px;
+  overflow:hidden; transform-origin:top left;
+}
+.a4-page.cols-2{column-count:2; column-gap:32px;}
+/* NOTE: title/artist/meta were previously scoped to #chordSheet only, which
+   meant the actual print/PDF output (rendered into .cs-page, a different
+   container) never received this styling at all. Made global so preview and
+   print are visually identical, not just proportionally similar. */
+.cs-title{font-size:20px; font-weight:700; margin:0 0 2px;}
+.cs-artist{font-size:8pt; color:#555; margin:0 0 2px;}
+.cs-meta{font-size:10.5px; color:#888; display:flex; gap:14px; border-top:1px solid #ddd; padding-top:4px; margin-bottom:10px; flex-wrap:wrap;}
+.cs-copyright{font-size:8pt; color:#666; margin:0 0 3px;}
+.cs-permission{font-size:8pt; color:#666; margin:0 0 3px;}
+.cs-roadmap{font-size:14pt; font-weight:700; letter-spacing:.4px; color:#7a5ce8; margin-bottom:10px;}
+.cs-section{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
+.cs-section-label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#a06a1e; margin-bottom:3px;}
+.cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:12px;}
+.cs-line{display:flex; flex-direction:column; white-space:pre;}
+.chord-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:13.5px; line-height:1.1; white-space:pre; margin-bottom:var(--chord-lyric-gap);}
+.lyric-row{font-family:var(--mono); font-size:13.5px; line-height:1.5; white-space:pre; color:#111;}
+.chordonly-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:13px; margin:2px 0;}
+.comment-row{font-family:var(--sans); font-style:italic; color:#888; font-size:12px; margin:2px 0;}
+.chord-note{font-family:var(--mono); font-weight:800; color:#c0392b; font-style:normal;}
+
+/* Panels (settings / api mocks) shown as overlay drawer */
+.drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:40; display:flex; justify-content:flex-end;}
+.drawer{width:420px; max-width:92vw; background:var(--bg-panel); height:100%; box-shadow:-8px 0 30px rgba(0,0,0,.5); display:flex; flex-direction:column;}
+.drawer-head{display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border-soft);}
+.drawer-body{flex:1; overflow-y:auto; padding:16px;}
+.drawer-body h4{font-size:12px; text-transform:uppercase; color:var(--text-faint); letter-spacing:.5px; margin:18px 0 8px;}
+.drawer-body h4:first-child{margin-top:0;}
+.form-row{margin-bottom:10px;}
+.form-row label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;}
+.form-row input,.form-row select,.form-row textarea{width:100%;}
+.badge{font-size:10px; padding:1px 6px; border-radius:8px; background:var(--bg-input); color:var(--text-dim);}
+.mock-result{background:var(--bg-input); border:1px solid var(--border); border-radius:6px; padding:10px; margin-top:10px; font-size:12.5px; line-height:1.6;}
+.mock-note{font-size:11px; color:var(--text-faint); border-left:2px solid var(--accent-dim); padding-left:8px; margin-top:10px;}
+
+/* Version history */
+.version-row{display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border-soft); font-size:12.5px;}
+.version-row button{font-size:11px; padding:3px 8px;}
+
+/* Toast */
+#toast{position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--bg-panel-2); border:1px solid var(--border); color:var(--text); padding:9px 16px; border-radius:8px; font-size:13px; z-index:100; box-shadow:0 6px 20px rgba(0,0,0,.4); opacity:0; pointer-events:none; transition:opacity .2s;}
+
+/* Chord insertion popup (double-click in editor) */
+#chordPopup{position:fixed; z-index:80; width:236px; background:var(--bg-panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.5); padding:10px; font-size:12px;}
+#chordPopup .cp-row{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;}
+#chordPopup .cp-label{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:4px;}
+#chordPopup button{font-size:12px; padding:4px 0; flex:1 0 20%; min-width:30px;}
+#chordPopup .cp-accidental button, #chordPopup .cp-quality button{flex:1 0 auto; padding:4px 8px;}
+#chordPopup button.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+#chordPopup .cp-root button{flex:1 0 22%;}
+#chordPopup .cp-custom{display:flex; gap:4px; margin-top:4px;}
+#chordPopup .cp-custom input{flex:1; font-size:12px; padding:4px 6px;}
+#chordPopup .cp-preview{font-size:11px; color:var(--text-faint); text-align:center; margin-bottom:6px; min-height:14px;}
+#chordPopup .cp-bass-toggle-row{font-size:11px; color:var(--text-dim); margin-bottom:8px; padding-top:2px; border-top:1px solid var(--border-soft);}
+#chordPopup .cp-bass-toggle-row label{display:flex; align-items:center; gap:6px; cursor:pointer; padding-top:6px;}
+#chordPopup .cp-bass-toggle-row input{width:auto;}
+#chordPopup .cp-bass-accidental, #chordPopup .cp-bass-root{background:rgba(127,200,255,.06); border-radius:6px; padding:4px;}
+#chordPopup .cp-bass-wait{font-size:11px; color:var(--text-faint); font-style:italic; padding:8px 4px; text-align:center; background:rgba(127,200,255,.06); border-radius:6px; margin-bottom:8px;}
+#toast.show{opacity:1;}
+
+/* Note-annotation insertion popup (right-click in editor) */
+#notePopup{position:fixed; z-index:80; width:260px; background:var(--bg-panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.5); padding:10px; font-size:12px;}
+#notePopup .np-label{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:6px;}
+#notePopup input{width:100%; margin-bottom:8px;}
+#notePopup .np-row{display:flex; gap:6px; justify-content:flex-end;}
+#notePopup button{font-size:12px; padding:5px 10px;}
+
+/* PRINT — A4, fixed 0.25in margins */
+@page{ size: A4; margin: 0.25in; }
+@media print{
+  body *{visibility:hidden;}
+  #printArea, #printArea *{visibility:visible;}
+  #printArea{position:absolute; top:0; left:0; width:100%;}
+  .cs-page{page-break-after:always; padding:0;}
+  .cs-page:last-child{page-break-after:auto;}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================== TOP BAR ============================== -->
+<div id="topbar">
+  <div class="brand">Chart<span>Builder</span></div>
+  <div class="tb-group">
+    <button id="btnNew" title="New song (Ctrl+N)">＋ New</button>
+    <button id="btnSave" class="primary" title="Save (Ctrl+S)">Save</button>
+    <button id="btnUndo" class="icon" title="Undo (Ctrl+Z)">↶</button>
+    <button id="btnRedo" class="icon" title="Redo (Ctrl+Shift+Z)">↷</button>
+  </div>
+  <div class="tb-group">
+    <button id="btnImport">Import</button>
+    <input type="file" id="fileImport" accept=".json,.txt,.chordpro,.cho,.pro,.xml" class="hidden">
+    <select id="exportFormat">
+      <option value="json">JSON (.json)</option>
+      <option value="txt">Chords-over-Lyrics (.txt)</option>
+      <option value="chordpro">ChordPro (.cho)</option>
+    </select>
+    <button id="btnExport">Export</button>
+    <button id="btnPDF">PDF</button>
+    <button id="btnPrint">Print</button>
+  </div>
+  <div class="spacer"></div>
+  <button id="btnCircle" class="circle-btn" title="Open Circle of Fifths chord wheel in a new window">⭘ Circle of 5ths</button>
+  <button id="btnNNMode" class="ghost" title="Toggle Nashville Number System mode">NN Mode: ON</button>
+  <span id="saveStatus">No song loaded</span>
+  <div class="tb-group" style="border-right:none;">
+    <button id="btnCCLI" title="CCLI metadata lookup (mock)">CCLI Lookup</button>
+    <button id="btnPP" title="ProPresenter sync (mock)">ProPresenter</button>
+    <button id="btnVersions" title="Version history">History</button>
+    <button id="btnSettings" title="Settings & Parameters">⚙</button>
+  </div>
+</div>
+
+<!-- ============================== APP BODY ============================== -->
+<div id="app">
+  <!-- SIDEBAR: song library -->
+  <div id="sidebar">
+    <div class="sb-head">
+      <input type="text" id="searchBox" placeholder="Search title, artist, lyrics…">
+    </div>
+    <div id="tagFilters"></div>
+    <div id="songList"></div>
+  </div>
+
+  <!-- MAIN -->
+  <div id="main">
+    <div id="metaBar">
+      <div class="meta-row">
+        <div class="field" style="flex:2 1 240px;">
+          <label>Title</label>
+          <input id="mTitle" placeholder="Song Title">
+          <div class="align-controls" id="titleAlignControls">
+            <button type="button" class="icon align-btn" data-align="left" title="Align left">⟸</button>
+            <button type="button" class="icon align-btn" data-align="center" title="Align center">≡</button>
+            <button type="button" class="icon align-btn" data-align="right" title="Align right">⟹</button>
+          </div>
+        </div>
+        <div class="field" style="flex:1.3 1 150px;"><label>Artist</label><input id="mArtist" placeholder="Artist / Author"></div>
+        <div class="field transpose-field">
+          <label>Key</label>
+          <div class="transpose-controls">
+            <button id="btnTransDown" class="icon" title="Transpose down">−</button>
+            <select id="mKey">
+              <option value="NN">Nashville #s (NN)</option>
+              <option>C</option><option>C#</option><option>Db</option><option>D</option><option>Eb</option>
+              <option>E</option><option>F</option><option>F#</option><option>Gb</option><option>G</option>
+              <option>Ab</option><option>A</option><option>Bb</option><option>B</option>
+              <option>Am</option><option>Bm</option><option>Cm</option><option>Dm</option><option>Em</option><option>Fm</option><option>Gm</option>
+            </select>
+            <button id="btnTransUp" class="icon" title="Transpose up">+</button>
+          </div>
+          <small id="origKeyNote"></small>
+        </div>
+        <div class="field" style="flex:1.4 1 170px;"><label>Tags (comma-sep)</label><input id="mTags" placeholder="fast, christmas, key-of-g"></div>
+      </div>
+      <div class="meta-row">
+        <div class="field" style="flex:2 1 240px;">
+          <label>Copyright</label>
+          <div class="copyright-input-row">
+            <div class="copyright-mode-controls" id="copyrightModeControls">
+              <button type="button" class="copyright-symbol-btn" data-mode="©" title="Copyright">©</button>
+              <button type="button" data-mode="CC" title="Creative Commons">CC</button>
+              <button type="button" data-mode="PD" title="Public Domain">PD</button>
+            </div>
+            <input id="mCopyright" placeholder="Publisher, year, license details...">
+          </div>
+        </div>
+        <div class="field"><label>Song CCLI #</label><input id="mCCLI" placeholder="1234567"></div>
+        <div class="field"><label>Church CCLI #</label><input id="mChurchCCLI" placeholder="License # (optional)"></div>
+      </div>
+    </div>
+
+    <div id="structBar">
+      <span class="lbl">Insert Section:</span>
+      <button data-tag="Intro">Intro</button>
+      <span id="verseButtonGroup" class="dynamic-group"></span>
+      <span id="prechorusButtonGroup" class="dynamic-group"></span>
+      <span id="chorusButtonGroup" class="dynamic-group"></span>
+      <span id="bridgeButtonGroup" class="dynamic-group"></span>
+      <span id="tagButtonGroup" class="dynamic-group"></span>
+      <span id="interludeButtonGroup" class="dynamic-group"></span>
+      <button data-tag="Outro">Outro</button>
+      <div class="right-controls">
+        <button type="button" id="btnRomanNumerals" class="hidden" title="Display and enter chords as Roman numerals (I, ii, IV...) instead of Nashville Numbers">RN</button>
+        <div class="capo-control">
+          <label class="lbl" style="margin:0;">Capo:</label>
+          <select id="mCapo">
+            <option value="">None</option>
+            <option value="1">1</option>
+            <option value="2">2</option>
+            <option value="3">3</option>
+            <option value="4">4</option>
+            <option value="5">5</option>
+            <option value="6">6</option>
+            <option value="7">7</option>
+            <option value="8">8</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <div id="splitPane">
+      <div id="editorPane">
+        <div class="pane-head">
+          <span>Editor — <code>[1]word</code> Nashville Number or <code>[C]word</code> letter chord markup</span>
+          <span class="hint" id="parseStatus">0 lines</span>
+        </div>
+        <textarea id="editor" spellcheck="false" placeholder="Verse 1:
+[1]Amazing grace how [4]sweet the [1]sound
+That saved a [5]wretch like [1]me
+
+Chorus:
+[4]I once was [1]lost but [5]now I'm [1]found
+Was [6m]blind but [5]now I [1]see"></textarea>
+      </div>
+      <div id="previewPane">
+        <div class="pane-head">
+          <span>Live Preview</span>
+          <label style="display:flex; align-items:center; gap:5px; font-size:11px; text-transform:none;">
+            <input type="checkbox" id="toggle2col" style="width:auto;"> 2-column layout
+          </label>
+        </div>
+        <div id="previewScroll"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="printArea" class="hidden"></div>
+<div id="toast"></div>
+<div id="chordPopup" class="hidden"></div>
+<div id="notePopup" class="hidden"></div>
+
+<div id="nnIntroBackdrop" class="hidden">
+  <div id="nnIntroModal">
+    <h3>Nashville Number Mode is ON by default</h3>
+    <p>New charts start in the Nashville Number System — chords are entered as scale-degree numbers (1–7) that stay the same no matter what key you play in. Pick a Key above to preview or print it as letter chords.</p>
+    <p>Prefer working directly in letter keys (C, G, D…) instead? Turn it off any time with the <b>NN Mode</b> button in the top bar.</p>
+    <div class="nn-intro-actions">
+      <button id="nnIntroDismiss" class="primary">Got it</button>
+    </div>
+  </div>
+</div>
+
+<!-- Templates for drawers injected by JS -->
+<script>
+/* ============================================================================
+   WORSHIP CHART BUILDER — PHASE 1
+   Single-file, client-side only. IIFE modules. IndexedDB storage.
+   Comment tags used throughout:
+     // [FUTURE-PYTHON]  -> where a FastAPI/Python backend would later replace a client mock
+     // [PARAMETER-HOOK] -> ties to the ACTIVE PARAMETERS list / settings panel
+     // [API-MOCK]       -> mocked external API integration (ToS-safe)
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   0b. NN MODE STORE  [PARAMETER-HOOK]
+   Persists whether Nashville Number System mode is the app's default starting
+   point (ON) or whether the Key selector should behave like a conventional
+   letter-key transposer for musicians building charts the older way (OFF).
+   Also tracks whether the one-time "NN is on by default" intro popup has
+   already been dismissed, so it doesn't nag returning users.
+--------------------------------------------------------------------------- */
+const NNModeStore = (() => {
+  const MODE_KEY = 'wcb_nn_mode_enabled';
+  const DISMISS_KEY = 'wcb_nn_intro_dismissed';
+  function isEnabled(){
+    const raw = localStorage.getItem(MODE_KEY);
+    return raw === null ? true : raw === 'true'; // ON by default
+  }
+  function setEnabled(val){ localStorage.setItem(MODE_KEY, val ? 'true' : 'false'); }
+  function introDismissed(){ return localStorage.getItem(DISMISS_KEY) === 'true'; }
+  function dismissIntro(){ localStorage.setItem(DISMISS_KEY, 'true'); }
+  function resetIntro(){ localStorage.removeItem(DISMISS_KEY); }
+  return { isEnabled, setEnabled, introDismissed, dismissIntro, resetIntro };
+})();
+
+// Persisted user preference for which alignment new songs start with
+// (title/artist/copyright/permission/roadmap all follow the same setting).
+// Doesn't touch songs that already have an alignment saved — only the
+// default applied to brand-new ones.
+const DefaultAlignStore = (() => {
+  const KEY = 'wcb_default_title_align';
+  function get(){
+    const val = localStorage.getItem(KEY);
+    return (val === 'left' || val === 'center' || val === 'right') ? val : 'center';
+  }
+  function set(val){ localStorage.setItem(KEY, val); }
+  return { get, set };
+})();
+
+// Persisted chord-to-lyric spacing preference — a global app-level display
+// setting (not per-song), applied via a single CSS custom property so it
+// automatically reaches the live preview, the offscreen pagination
+// measurement pass, and print/PDF alike without needing separate wiring.
+const ChordSpacingStore = (() => {
+  const KEY = 'wcb_chord_lyric_gap';
+  const DEFAULT_PX = 2;
+  const MIN_PX = 0, MAX_PX = 12;
+  function get(){
+    const val = parseInt(localStorage.getItem(KEY), 10);
+    return (!isNaN(val) && val >= MIN_PX && val <= MAX_PX) ? val : DEFAULT_PX;
+  }
+  function set(px){ localStorage.setItem(KEY, String(px)); }
+  function apply(px){ document.documentElement.style.setProperty('--chord-lyric-gap', px + 'px'); }
+  return { get, set, apply, MIN_PX, MAX_PX, DEFAULT_PX };
+})();
+
+/* ---------------------------------------------------------------------------
+   1. CHORD / LYRIC PARSER
+   Markup: [Chord]lyricSyllable  — ChordPro-style, OpenSong/OnSong compatible.
+   Section headers: a line ending in ":" (e.g. "Chorus:", "Verse 2:") starts
+   a new structure section. Blank lines separate phrase blocks.
+--------------------------------------------------------------------------- */
+const ChordParser = (() => {
+  const CHORD_TOKEN = /\[([^\]]+)\]/g;
+
+  // Split raw source into sections: {label, lines:[...]}
+  // A header line can optionally carry chord tokens after the colon —
+  // "Outro: [G] [C] [D] [G]" — for lead-in chords before the lyrics start,
+  // or a section that's pure instrumental progression with no lyrics at all
+  // (a whole Outro can be just the header line, nothing else needed below).
+  // The trailing part must be ONLY chord tokens/whitespace, never lyric
+  // text, so a real lyric line that happens to contain a colon can't be
+  // misread as a section header.
+  function parseSections(src){
+    const rawLines = src.replace(/\r\n/g,'\n').split('\n');
+    const sections = [];
+    let current = {label:null, lines:[]};
+    const sectionHeaderRe = /^\s*([A-Za-z][A-Za-z0-9 \-\/]{0,30}):\s*(.*)$/;
+    const chordsOnlyTrailingRe = /^(?:\s*\[[^\]]+\])*\s*$/;
+    rawLines.forEach(line => {
+      const m = line.match(sectionHeaderRe);
+      if(m && chordsOnlyTrailingRe.test(m[2])){
+        if(current.label !== null || current.lines.length){ sections.push(current); }
+        current = {label:m[1].trim(), lines:[]};
+        const trailing = m[2].trim();
+        if(trailing) current.lines.push(trailing);
+      } else {
+        current.lines.push(line);
+      }
+    });
+    sections.push(current);
+    return sections.filter(s => s.label !== null || s.lines.some(l=>l.trim()!==''));
+  }
+
+  // Parse a single lyric+chord line into tokens: {chord, text}
+  // "text" is the lyric fragment that follows the chord up to the next chord.
+  function parseLine(line){
+    if(line.trim()==='') return {type:'blank'};
+    // full-line comment: wrap in parentheses or start with '#'
+    if(/^\s*#/.test(line)) return {type:'comment', text: line.replace(/^\s*#\s?/,'')};
+    if(!line.includes('[')){
+      return {type:'lyric-only', text:line};
+    }
+    const tokens = [];
+    let lastIndex = 0; let m;
+    CHORD_TOKEN.lastIndex = 0;
+    let hadText = false;
+    while((m = CHORD_TOKEN.exec(line))){
+      const before = line.slice(lastIndex, m.index);
+      if(before) { tokens.push({chord:null, text:before}); hadText = true; }
+      // find lyric text up to next chord token
+      lastIndex = CHORD_TOKEN.lastIndex;
+      const nextMatch = line.slice(lastIndex).match(/^[^\[]*/);
+      const followingText = nextMatch ? nextMatch[0] : '';
+      tokens.push({chord:m[1], text:followingText});
+      lastIndex += followingText.length;
+      hadText = hadText || followingText.trim()!=='';
+      CHORD_TOKEN.lastIndex = lastIndex;
+    }
+    if(!hadText){
+      // chord-only line, e.g. instrumental: [G] [C] [D]
+      return {type:'chords-only', chords: tokens.map(t=>t.chord).filter(Boolean)};
+    }
+    return {type:'line', tokens};
+  }
+
+  function parse(src){
+    return parseSections(src).map(sec => ({
+      label: sec.label,
+      lines: sec.lines.map(parseLine)
+    }));
+  }
+
+  return { parse, parseSections, parseLine, CHORD_TOKEN };
+})();
+
+/* ---------------------------------------------------------------------------
+   2. TRANSPOSITION ENGINE
+   Semitone interval mapping. Handles naturals, sharps, flats, slash chords
+   (e.g. D/F#), and extended qualities/accidentals (maj7, m7b5, sus4, add9, °, +).
+--------------------------------------------------------------------------- */
+const Transposer = (() => {
+  const SHARP_SCALE = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const FLAT_SCALE  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+  const NOTE_TO_INDEX = {};
+  SHARP_SCALE.forEach((n,i)=>NOTE_TO_INDEX[n]=i);
+  FLAT_SCALE.forEach((n,i)=>NOTE_TO_INDEX[n]=i);
+  // enharmonic aliases
+  Object.assign(NOTE_TO_INDEX, {'E#':5,'B#':0,'Fb':4,'Cb':11});
+
+  const FLAT_KEYS = new Set(['F','Bb','Eb','Ab','Db','Gb','Cb','Dm','Gm','Cm','Fm','Bbm','Ebm']);
+
+  const CHORD_RE = /^([A-G](?:#|b)?)(.*)$/;
+
+  function transposeRoot(root, semis, preferFlat){
+    const idx = NOTE_TO_INDEX[root];
+    if(idx === undefined) return root; // not a recognizable root, leave as-is
+    let newIdx = ((idx + semis) % 12 + 12) % 12;
+    return preferFlat ? FLAT_SCALE[newIdx] : SHARP_SCALE[newIdx];
+  }
+
+  // Transpose one chord symbol, preserving quality/extensions and slash bass.
+  function transposeChord(symbol, semis, preferFlat){
+    if(semis === 0) return symbol;
+    const parts = symbol.split('/');
+    const out = parts.map((part, i) => {
+      const m = part.match(CHORD_RE);
+      if(!m) return part; // e.g. annotations like "N.C." pass through untouched
+      const [, root, rest] = m;
+      return transposeRoot(root, semis, preferFlat) + rest;
+    });
+    return out.join('/');
+  }
+
+  function transposeText(src, semis, preferFlat){
+    if(semis === 0) return src;
+    return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${transposeChord(chord, semis, preferFlat)}]`);
+  }
+
+  function keyIndex(key){
+    const clean = key.replace(/m$/,'');
+    return NOTE_TO_INDEX[clean];
+  }
+
+  function semitoneDelta(fromKey, toKey){
+    const a = keyIndex(fromKey), b = keyIndex(toKey);
+    if(a===undefined || b===undefined) return 0;
+    let d = b - a;
+    if(d > 6) d -= 12;
+    if(d < -6) d += 12;
+    return d;
+  }
+
+  return {
+    transposeChord, transposeText, semitoneDelta, FLAT_KEYS, SHARP_SCALE, FLAT_SCALE,
+    noteIndex: (n) => NOTE_TO_INDEX[n],
+    noteAtIndex: (i, preferFlat) => (preferFlat ? FLAT_SCALE : SHARP_SCALE)[((i%12)+12)%12],
+  };
+})();
+
+/* ---------------------------------------------------------------------------
+   2b. NASHVILLE NUMBER SYSTEM (NNS)
+   Reference: en.wikipedia.org/wiki/Nashville_Number_System
+   Numbers denote SCALE DEGREES (1-7) of the major scale relative to a stated
+   key/tonic, NOT absolute pitches — that's the entire point of the system:
+   "the numbers do not change when transposing... they are relative to the
+   new Tonic." So a Nashville chart is written ONCE and is inherently
+   key-independent; picking a performance Key is a RENDERING choice (numbers
+   -> letters for that key), never a mutation of the underlying numbers.
+   Conventions per the wiki:
+     - Bare number = major triad (1, 4, 5...)
+     - Minor = trailing "-" or "m" (6-, 6m)
+     - Chromatic (non-scale) roots = leading accidental (b3, #4)
+     - Extensions pass through as familiar symbols (7, sus, add9, Δ/maj7, °, ø, +)
+     - Slash/inversions use scale-degree bass numbers relative to the TONIC's
+       scale, e.g. in C: 5/7 = G/B, 6m/5 = Am/G
+--------------------------------------------------------------------------- */
+const NashvilleSystem = (() => {
+  const MAJOR_SCALE_SEMITONES = [0, 2, 4, 5, 7, 9, 11]; // scale degrees 1-7
+  const TOKEN_RE = /^([#\u266f]|b|\u266d)?([1-7])(.*)$/; // [accidental][degree][quality]
+  // Roman numerals share the "longest match first" trick so "IV" isn't
+  // misread as "I" followed by leftover "V" — vii/vi/v/iv/iii/ii/i, in that
+  // order, is the only ordering where every numeral matches its full length.
+  const ROMAN_TOKEN_RE = /^([#\u266f]|b|\u266d)?(vii|vi|v|iv|iii|ii|i)(.*)$/i;
+  const ROMAN_UPPER = ['I','II','III','IV','V','VI','VII'];
+  const ROMAN_LOWER = ['i','ii','iii','iv','v','vi','vii'];
+  const ROMAN_TO_DEGREE = {I:1, II:2, III:3, IV:4, V:5, VI:6, VII:7};
+
+  function normalizeAccidental(a){
+    if(a === '#' || a === '\u266f') return '#';
+    if(a === 'b' || a === '\u266d') return 'b';
+    return '';
+  }
+
+  function isNumberToken(token){
+    if(!token) return false;
+    const first = token.split('/')[0];
+    return /^([#\u266f]|b|\u266d)?[1-7]/.test(first);
+  }
+
+  function isRomanToken(token){
+    if(!token) return false;
+    const first = token.split('/')[0];
+    return ROMAN_TOKEN_RE.test(first);
+  }
+
+  // Converts one NNS root+quality (no slash) into a letter chord for keyRoot.
+  function degreeToLetterRoot(accidental, degree, keyRoot, preferFlat){
+    const keyIdx = Transposer.noteIndex(keyRoot);
+    if(keyIdx === undefined) return null;
+    let semis = MAJOR_SCALE_SEMITONES[degree - 1];
+    // An explicit accidental on the token dictates its own spelling
+    // (the wiki's own example: in C major, a b3 triad reads as "Eb", not "D#").
+    let spelling = preferFlat;
+    if(accidental === '#'){ semis += 1; spelling = false; }
+    if(accidental === 'b'){ semis -= 1; spelling = true; }
+    return Transposer.noteAtIndex(keyIdx + semis, spelling);
+  }
+
+  function normalizeQuality(q){
+    if(!q) return '';
+    // NNS shorthand -> conventional letter-chord shorthand for readability
+    let out = q.replace(/^-/, 'm');        // 6-   -> 6m style minor
+    out = out.replace(/^\u03947?/, 'maj7'); // Δ or Δ7 -> maj7 (both mean the same symbol)
+    return out;
+  }
+
+  // Converts a full NNS token (e.g. "6m", "b7", "5/7", "2m7") into a letter chord.
+  function numberChordToLetter(token, keyRoot, preferFlat){
+    const parts = token.split('/');
+    const converted = parts.map((part, i) => {
+      const m = part.match(TOKEN_RE);
+      if(!m) return part; // not actually a number token (e.g. bass letter) — leave as-is
+      const accidental = normalizeAccidental(m[1]);
+      const degree = parseInt(m[2], 10);
+      const quality = i === 0 ? normalizeQuality(m[3]) : ''; // bass part: root only
+      const root = degreeToLetterRoot(accidental, degree, keyRoot, preferFlat);
+      if(root === null) return part;
+      return root + quality;
+    });
+    return converted.join('/');
+  }
+
+  // Roman numeral analysis convention: uppercase = major-family (I, IV, V,
+  // sus/add/maj7 chords included, since none of those imply a minor third),
+  // lowercase = minor-family, and diminished keeps the lowercase-plus-°
+  // combination the wiki-verified chip panel already uses elsewhere in this
+  // app (e.g. "vii°"). The case itself carries the quality information that
+  // NNS otherwise has to spell out with a trailing "m" — so converting FROM
+  // arabic strips that redundant "m" once the numeral's case already says it.
+  function arabicToRoman(token){
+    const parts = token.split('/');
+    const converted = parts.map((part, i) => {
+      const m = part.match(TOKEN_RE);
+      if(!m) return part;
+      const accidental = normalizeAccidental(m[1]);
+      const degree = parseInt(m[2], 10);
+      const quality = i === 0 ? normalizeQuality(m[3]) : '';
+      let numeral, suffix;
+      if(/^(dim|\u00b0)/.test(quality)){
+        numeral = ROMAN_LOWER[degree - 1];
+        suffix = quality.replace(/^dim/, '\u00b0');
+      } else if(/^m(?!aj)/.test(quality)){
+        numeral = ROMAN_LOWER[degree - 1];
+        suffix = quality.replace(/^m/, '');
+      } else {
+        numeral = ROMAN_UPPER[degree - 1];
+        suffix = quality;
+      }
+      return accidental + numeral + suffix;
+    });
+    return converted.join('/');
+  }
+
+  // The reverse conversion — used both when toggling notation style back to
+  // arabic, and internally so roman tokens can reuse the already-verified
+  // numberChordToLetter path rather than duplicating the letter-conversion
+  // math in a second place.
+  function romanToArabic(token){
+    const parts = token.split('/');
+    const converted = parts.map((part, i) => {
+      const m = part.match(ROMAN_TOKEN_RE);
+      if(!m) return part;
+      const accidental = normalizeAccidental(m[1]);
+      const degree = ROMAN_TO_DEGREE[m[2].toUpperCase()];
+      if(i > 0) return accidental + degree; // bass notes carry no quality, regardless of the case someone typed it in
+      const isLower = m[2] === m[2].toLowerCase();
+      const suffix = m[3] || '';
+      let quality;
+      if(suffix.charAt(0) === '\u00b0'){
+        quality = suffix; // diminished is already fully expressed by the symbol
+      } else if(isLower){
+        quality = 'm' + suffix;
+      } else {
+        quality = suffix;
+      }
+      return accidental + degree + quality;
+    });
+    return converted.join('/');
+  }
+
+  // Single entry point the renderer uses — dispatches to whichever notation
+  // the token is actually written in (arabic or roman), or passes through
+  // unchanged if it's neither (a literal letter chord).
+  function toLetterChord(token, keyRoot, preferFlat){
+    if(isRomanToken(token)) return numberChordToLetter(romanToArabic(token), keyRoot, preferFlat);
+    if(isNumberToken(token)) return numberChordToLetter(token, keyRoot, preferFlat);
+    return token;
+  }
+
+  return { isNumberToken, isRomanToken, numberChordToLetter, arabicToRoman, romanToArabic, toLetterChord };
+})();
+
+/* ---------------------------------------------------------------------------
+   3. RENDERER — builds the chord-sheet DOM from parsed sections
+--------------------------------------------------------------------------- */
+const Renderer = (() => {
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Builds the copyright-line display text based on the selected mode.
+  // PD ignores the field entirely; CC uses Creative Commons' own recommended
+  // plain-language phrasing ("[Work] is licensed under [License]"), compacted
+  // for a small credit line; © prepends the symbol unless the field already
+  // has one (keeps older saved songs — which typed "©" into the field by
+  // hand before this mode system existed — from showing a doubled symbol).
+  function buildCopyrightText(song){
+    const mode = song.copyrightMode || '\u00a9';
+    const field = (song.copyright || '').trim();
+    if(mode === 'PD') return 'Public Domain';
+    if(mode === 'CC') return field ? ('Licensed under Creative Commons: ' + field) : 'Licensed under Creative Commons';
+    if(!field) return '';
+    return field.charAt(0) === '\u00a9' ? field : ('\u00a9 ' + field);
+  }
+
+  // Converts a chord token for display purposes only: numeric NNS tokens render
+  // as letter chords when a real performance key is selected; when displayKey is
+  // 'NN' (or unset) the raw numbers are shown as typed. Letter chords pass through
+  // untouched either way — they're absolute, not key-relative. Note-annotations
+  // (tokens starting with '*', e.g. [*Repeat 2x]) are never chords — pass through.
+  //
+  // Capo handling: a capo raises every open-string pitch by however many frets
+  // it's on, so the SOUNDING chord equals (shape played) + (capo frets). To keep
+  // the sounding key constant once a capo is added, the SHAPE shown on the chart
+  // must be shifted DOWN by that many semitones — e.g. capo 3 in the key of G
+  // displays E-shapes (E + 3 semitones = G), which is the standard "capo 3, play
+  // in E to sound in G" convention guitarists already use. This applies whether
+  // the chord came from an NNS number or was typed as a literal letter chord —
+  // capo affects the physical shape either way. It intentionally does NOT apply
+  // when displayKey is 'NN' or unset, since raw scale-degree numbers are already
+  // key-independent and aren't a physical shape to shift.
+  function formatChordForDisplay(token, displayKey, capo){
+    if(token.charAt(0) === '*') return token;
+    if(!displayKey || displayKey === 'NN') return token;
+    let letterChord = token;
+    if(NashvilleSystem.isNumberToken(token) || NashvilleSystem.isRomanToken(token)){
+      const preferFlat = Transposer.FLAT_KEYS.has(displayKey);
+      const keyRoot = displayKey.replace(/m$/, '');
+      try{ letterChord = NashvilleSystem.toLetterChord(token, keyRoot, preferFlat); }
+      catch(e){ letterChord = token; }
+    }
+    const capoNum = parseInt(capo, 10);
+    if(capoNum > 0){
+      const preferFlat = Transposer.FLAT_KEYS.has(displayKey);
+      letterChord = Transposer.transposeChord(letterChord, -capoNum, preferFlat);
+    }
+    return letterChord;
+  }
+
+  // Renders one chord/note token as HTML at a given monospace column offset.
+  // Note-annotations (leading '*') render as bold superscript instructions
+  // rather than plain monospace chord text — they're editorial marks, not chords.
+  function renderTokenHtml(displayChord){
+    if(displayChord.charAt(0) === '*'){
+      return `<sup class="chord-note">${escapeHtml(displayChord.slice(1))}</sup>`;
+    }
+    return escapeHtml(displayChord);
+  }
+
+  function renderLine(parsedLine, displayKey, capo){
+    if(parsedLine.type === 'blank') return `<div class="cs-line">&nbsp;</div>`;
+    if(parsedLine.type === 'comment') return `<div class="comment-row">${escapeHtml(parsedLine.text)}</div>`;
+    if(parsedLine.type === 'lyric-only') return `<div class="lyric-row">${escapeHtml(parsedLine.text)}</div>`;
+    if(parsedLine.type === 'chords-only'){
+      const html = parsedLine.chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo))).join('   ');
+      return `<div class="chordonly-row">${html}</div>`;
+    }
+    // 'line': build a chord row aligned above a lyric row using padding.
+    // Chord DISPLAY text (post NNS-conversion) is used for alignment math so
+    // columns still line up even when numbers expand/shrink into letter chords.
+    // Note-annotations are rendered as HTML (bold/superscript) rather than
+    // plain spliced text — fine since they're inserted at line end, so there's
+    // nothing after them whose column alignment could be thrown off.
+    let offset = 0; let builtHtml = ''; let col = 0;
+    parsedLine.tokens.forEach(tok => {
+      const lyricText = tok.text || '';
+      if(tok.chord){
+        const displayChord = formatChordForDisplay(tok.chord, displayKey, capo);
+        while(col < offset){ builtHtml += ' '; col++; }
+        builtHtml += renderTokenHtml(displayChord);
+        col += displayChord.length;
+      }
+      offset += lyricText.length;
+    });
+    const lyricRow = parsedLine.tokens.map(t => t.text || '').join('');
+    return `<div class="cs-line"><div class="chord-row">${builtHtml}</div><div class="lyric-row">${escapeHtml(lyricRow) || '&nbsp;'}</div></div>`;
+  }
+
+  function renderSections(sections, displayKey, capo){
+    return sections.map(sec => {
+      // If the section's FIRST content line is chords-only (a lead-in
+      // progression, or the entire content for something like a pure-
+      // instrumental Outro), render those chords INLINE with the label on
+      // the same visual row instead of as a separate block below it — that's
+      // what "same line" means in the rendered output, not just in the raw
+      // editor text. Any lines after that still render normally underneath.
+      let inlineChordsHtml = '';
+      let remainingLines = sec.lines;
+      if(sec.lines.length && sec.lines[0].type === 'chords-only'){
+        const chordsHtml = sec.lines[0].chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo))).join('&nbsp;&nbsp;&nbsp;');
+        inlineChordsHtml = ` <span class="cs-inline-chords">${chordsHtml}</span>`;
+        remainingLines = sec.lines.slice(1);
+      }
+      const label = sec.label ? `<div class="cs-section-label">${escapeHtml(sec.label)}:${inlineChordsHtml}</div>` : '';
+      const lines = remainingLines.map(l => renderLine(l, displayKey, capo)).join('');
+      return `<div class="cs-section" data-section="${sec.label ? escapeHtml(sec.label) : ''}">${label}${lines}</div>`;
+    }).join('');
+  }
+
+  // Builds the "song order" roadmap line: shorthand for each labeled section
+  // in the order it appears. Verse and Chorus specifically carry their number
+  // straight from the label text ("Verse 2" -> "V2", "Chorus 1" -> "C1") per
+  // explicit instruction — every other section type keeps the plain
+  // first-letter abbreviation, except Pre-Chorus which uses "PC" (a bare "P"
+  // would be unhelpfully generic). Numbering Verse/Chorus is also what makes
+  // the collapse rule below correctly tell two DIFFERENT verses apart rather
+  // than folding them into a false "V(2)" repeat. Consecutive repeats of the
+  // exact same entry (e.g. the same chorus sung twice back-to-back) still
+  // collapse into one with a "(N)" count. Entries are separated by " | ".
+  function buildRoadmap(sections){
+    const raw = [];
+    sections.forEach(sec => {
+      if(!sec.label) return;
+      const label = sec.label.trim();
+      if(/^pre.?chorus/i.test(label)) { raw.push('PC'); return; }
+      const verseMatch = label.match(/^verse\s*(\d+)/i);
+      if(verseMatch) { raw.push('V' + verseMatch[1]); return; }
+      const chorusMatch = label.match(/^chorus\s*(\d+)/i);
+      if(chorusMatch) { raw.push('C' + chorusMatch[1]); return; }
+      const firstLetterMatch = label.match(/[A-Za-z]/);
+      if(firstLetterMatch) raw.push(firstLetterMatch[0].toUpperCase());
+    });
+    const collapsed = [];
+    raw.forEach(code => {
+      const last = collapsed[collapsed.length - 1];
+      if(last && last.code === code) last.count++;
+      else collapsed.push({code, count:1});
+    });
+    return collapsed.map(c => c.count > 1 ? `${c.code}(${c.count})` : c.code).join(' | ');
+  }
+
+  function renderChordSheet(container, song, opts={}){
+    const sections = ChordParser.parse(song.content || '');
+    const metaBits = [];
+    if(song.key) metaBits.push(`Key: ${song.key}`);
+    if(song.capo) metaBits.push(`Capo: ${song.capo} (chords shown as played)`);
+    const titleAlign = song.titleAlign || DefaultAlignStore.get();
+    const artistLineParts = [];
+    if(song.artist) artistLineParts.push('Authored By: ' + escapeHtml(song.artist));
+    if(song.ccli) artistLineParts.push('CCLI Song #' + escapeHtml(song.ccli));
+    const copyrightText = buildCopyrightText(song);
+    const roadmap = buildRoadmap(sections);
+    container.innerHTML = `
+      <div class="cs-title" style="text-align:${titleAlign};">${escapeHtml(song.title || 'Untitled')}</div>
+      <div class="cs-artist" style="text-align:${titleAlign};">${artistLineParts.join(' | ')}</div>
+      ${copyrightText ? `<div class="cs-copyright" style="text-align:${titleAlign};">${escapeHtml(copyrightText)}</div>` : ''}
+      ${song.churchCcli ? `<div class="cs-permission" style="text-align:${titleAlign};">Used by Permission CCLI #: ${escapeHtml(song.churchCcli)}</div>` : ''}
+      ${roadmap ? `<div class="cs-roadmap" style="text-align:${titleAlign};">${escapeHtml(roadmap)}</div>` : ''}
+      ${metaBits.length ? `<div class="cs-meta">${metaBits.map(escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
+      ${renderSections(sections, song.key, song.capo)}
+    `;
+    container.classList.toggle('cols-2', !!opts.twoCol);
+    return sections;
+  }
+
+  return { renderChordSheet, renderSections, escapeHtml, buildCopyrightText, buildRoadmap };
+})();
+
+/* ---------------------------------------------------------------------------
+   4. PAGINATION ENGINE — phrase-aware.
+   Sections (verse/chorus/etc.) are treated as atomic blocks that must not
+   split across a page. Used for PDF export and multi-page print preview.
+--------------------------------------------------------------------------- */
+const Paginator = (() => {
+  // Measures rendered section elements and greedily packs them into pages
+  // without breaking a section's internal lines. maxHeightPx = usable page height.
+  function paginate(sourceContainer, maxHeightPx){
+    const sectionEls = Array.from(sourceContainer.querySelectorAll('.cs-section'));
+    const pages = [[]];
+    let used = 0;
+    // Measure through whichever header line ACTUALLY sits lowest on the page —
+    // order-agnostic, so future header reordering can't silently break this
+    // (title/artist/copyright/permission/roadmap/meta can appear in any order).
+    const headerCandidates = ['.cs-title', '.cs-artist', '.cs-copyright', '.cs-permission', '.cs-roadmap', '.cs-meta']
+      .map(sel => sourceContainer.querySelector(sel))
+      .filter(Boolean);
+    const headerHeight = headerCandidates.length ?
+      Math.max(...headerCandidates.map(el => el.getBoundingClientRect().bottom)) - sourceContainer.getBoundingClientRect().top : 0;
+    used = headerHeight;
+    sectionEls.forEach(el => {
+      const h = el.getBoundingClientRect().height + 14; // + margin-bottom
+      if(used + h > maxHeightPx && pages[pages.length-1].length > 0){
+        pages.push([]);
+        used = 0;
+      }
+      pages[pages.length-1].push(el.outerHTML);
+      used += h;
+    });
+    return pages;
+  }
+  return { paginate };
+})();
+
+/* ---------------------------------------------------------------------------
+   5. INDEXEDDB DATA LAYER
+   Schema:
+     songs store (keyPath: id, autoIncrement)
+       { id, title, artist, ccli, copyright, key, capo, tags:[string],
+         content: string (raw markup, ALWAYS stored in the song's ORIGINAL key),
+         structure: [string] (derived section labels, cached),
+         versions: [{ ts, content, key, note }],  // simple version history
+         createdAt, updatedAt }
+     prefs store (keyPath: key) -> user preferences (single-row settings blob)
+--------------------------------------------------------------------------- */
+const DB = (() => {
+  const DB_NAME = 'WorshipChartBuilderDB';
+  const DB_VERSION = 1;
+  let dbPromise = null;
+
+  function open(){
+    if(dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = (e) => {
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains('songs')){
+          const store = db.createObjectStore('songs', {keyPath:'id', autoIncrement:true});
+          store.createIndex('title', 'title', {unique:false});
+          store.createIndex('artist', 'artist', {unique:false});
+          store.createIndex('updatedAt', 'updatedAt', {unique:false});
+        }
+        if(!db.objectStoreNames.contains('prefs')){
+          db.createObjectStore('prefs', {keyPath:'key'});
+        }
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+
+  async function tx(store, mode){
+    const db = await open();
+    return db.transaction(store, mode).objectStore(store);
+  }
+
+  async function getAllSongs(){
+    const store = await tx('songs', 'readonly');
+    return new Promise((res, rej) => {
+      const req = store.getAll();
+      req.onsuccess = () => res(req.result.sort((a,b)=> (b.updatedAt||0) - (a.updatedAt||0)));
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function putSong(song){
+    const store = await tx('songs', 'readwrite');
+    return new Promise((res, rej) => {
+      const req = store.put(song);
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function deleteSong(id){
+    const store = await tx('songs', 'readwrite');
+    return new Promise((res, rej) => {
+      const req = store.delete(id);
+      req.onsuccess = () => res();
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  async function getPref(key, fallback){
+    const store = await tx('prefs', 'readonly');
+    return new Promise((res) => {
+      const req = store.get(key);
+      req.onsuccess = () => res(req.result ? req.result.value : fallback);
+      req.onerror = () => res(fallback);
+    });
+  }
+
+  async function setPref(key, value){
+    const store = await tx('prefs', 'readwrite');
+    return new Promise((res, rej) => {
+      const req = store.put({key, value});
+      req.onsuccess = () => res();
+      req.onerror = () => rej(req.error);
+    });
+  }
+
+  return { getAllSongs, putSong, deleteSong, getPref, setPref };
+})();
+
+/* ---------------------------------------------------------------------------
+   5b. LOCAL BACKUP FOLDER (File System Access API)
+   NOTE: Cookies cannot hold a folder reference (4KB text only, no filesystem
+   access whatsoever) so this uses the browser's real File System Access API
+   instead. The chosen FileSystemDirectoryHandle is structured-cloneable and
+   is persisted in the same IndexedDB 'prefs' store DB already uses, so the
+   app can re-offer the same folder next time the page loads. Chrome/Edge only
+   — Firefox/Safari fall back to the existing JSON Export button.
+--------------------------------------------------------------------------- */
+const FolderBackup = (() => {
+  const PREF_KEY = 'backupDirHandle';
+  let dirHandle = null;
+
+  function supported(){ return 'showDirectoryPicker' in window; }
+
+  async function loadStoredHandle(){
+    dirHandle = await DB.getPref(PREF_KEY, null);
+    return dirHandle;
+  }
+
+  // Checks current permission WITHOUT prompting (safe to call on page load).
+  async function currentStatus(){
+    if(!supported()) return {state:'unsupported'};
+    if(!dirHandle) await loadStoredHandle();
+    if(!dirHandle) return {state:'none'};
+    try{
+      const perm = await dirHandle.queryPermission({mode:'readwrite'});
+      return {state: perm, name: dirHandle.name};
+    }catch(e){
+      return {state:'none'};
+    }
+  }
+
+  // Must be called from a user gesture (button click) — browsers require this.
+  async function chooseFolder(){
+    if(!supported()) throw new Error('File System Access API not supported in this browser');
+    const handle = await window.showDirectoryPicker({id:'wcbBackupFolder', mode:'readwrite'});
+    dirHandle = handle;
+    await DB.setPref(PREF_KEY, handle);
+    return handle;
+  }
+
+  // Must be called from a user gesture — re-requests permission if needed.
+  async function ensurePermission(){
+    if(!dirHandle) await loadStoredHandle();
+    if(!dirHandle) throw new Error('No backup folder selected yet');
+    let perm = await dirHandle.queryPermission({mode:'readwrite'});
+    if(perm !== 'granted') perm = await dirHandle.requestPermission({mode:'readwrite'});
+    if(perm !== 'granted') throw new Error('Permission to the folder was not granted');
+    return dirHandle;
+  }
+
+  async function writeFile(filename, content){
+    const fileHandle = await dirHandle.getFileHandle(filename, {create:true});
+    const writable = await fileHandle.createWritable();
+    await writable.write(content);
+    await writable.close();
+  }
+
+  // Saves the entire local song library into the chosen folder as one .json file per song —
+  // intended for large work sets (whole setlists/libraries), not single-song export.
+  async function saveAllSongsToFolder(songs){
+    await ensurePermission();
+    let count = 0;
+    for(const song of songs){
+      const base = (song.title || 'untitled_' + song.id).replace(/[^\w\-]+/g,'_');
+      await writeFile(`${base}.json`, JSON.stringify(song, null, 2));
+      count++;
+    }
+    return count;
+  }
+
+  function forget(){
+    dirHandle = null;
+    return DB.setPref(PREF_KEY, null);
+  }
+
+  return { supported, currentStatus, chooseFolder, ensurePermission, saveAllSongsToFolder, forget };
+})();
+
+/* ---------------------------------------------------------------------------
+   6. IMPORT / EXPORT
+   - JSON: native round-trip format.
+   - Chords-over-lyrics .txt: OpenSong/OnSong-compatible plain text
+     (chords on their own line directly above the lyric line).
+   - ChordPro .cho: {title:}, {artist:}, {key:} tags + [C]lyric inline markup.
+   - Basic OpenSong XML import (best-effort) since that's the reference format.
+--------------------------------------------------------------------------- */
+const IO = (() => {
+  function toChordProText(song){
+    let out = '';
+    if(song.title) out += `{title: ${song.title}}\n`;
+    if(song.artist) out += `{artist: ${song.artist}}\n`;
+    if(song.key) out += `{key: ${song.key}}\n`;
+    if(song.ccli) out += `{ccli: ${song.ccli}}\n`;
+    if(song.copyright) out += `{copyright: ${song.copyright}}\n`;
+    out += '\n' + (song.content || '');
+    return out;
+  }
+
+  // Convert [C]word inline markup into two physical lines: chords above lyrics.
+  function toChordsOverLyricsText(song){
+    const sections = ChordParser.parse(song.content || '');
+    let out = `${song.title || 'Untitled'}\n${song.artist || ''}\n`;
+    if(song.key) out += `Key: ${song.key}\n`;
+    out += '\n';
+    sections.forEach(sec => {
+      if(sec.label) out += `${sec.label}:\n`;
+      sec.lines.forEach(pl => {
+        if(pl.type === 'blank'){ out += '\n'; return; }
+        if(pl.type === 'comment'){ out += `; ${pl.text}\n`; return; }
+        if(pl.type === 'lyric-only'){ out += `${pl.text}\n`; return; }
+        if(pl.type === 'chords-only'){ out += `${pl.chords.join('   ')}\n`; return; }
+        let offset = 0, chordLine = '', lyricLine = '';
+        pl.tokens.forEach(tok => {
+          if(tok.chord){
+            while(chordLine.length < offset) chordLine += ' ';
+            chordLine = chordLine.slice(0, offset) + tok.chord + chordLine.slice(offset + tok.chord.length);
+          }
+          lyricLine += tok.text || '';
+          offset += (tok.text || '').length;
+        });
+        out += chordLine.trimEnd() + '\n' + lyricLine + '\n';
+      });
+      out += '\n';
+    });
+    return out.trim() + '\n';
+  }
+
+  function parseChordProText(text){
+    const song = {title:'', artist:'', key:'', ccli:'', copyright:'', content:''};
+    const lines = text.split(/\r?\n/);
+    const bodyLines = [];
+    lines.forEach(line => {
+      const m = line.match(/^\{(\w+):\s*(.*)\}\s*$/);
+      if(m){
+        const tag = m[1].toLowerCase();
+        const val = m[2].trim();
+        if(tag === 'title' || tag === 't') song.title = val;
+        else if(tag === 'artist' || tag === 'subtitle' || tag === 'st') song.artist = val;
+        else if(tag === 'key' || tag === 'k') song.key = val;
+        else if(tag === 'ccli') song.ccli = val;
+        else if(tag === 'copyright') song.copyright = val;
+        else bodyLines.push(line);
+      } else {
+        bodyLines.push(line);
+      }
+    });
+    song.content = bodyLines.join('\n').replace(/^\n+/, '');
+    return song;
+  }
+
+  // Best-effort "chords over lyrics" plain text importer (OpenSong/OnSong .txt style):
+  // pairs of lines where the first line is mostly chord tokens get merged into [C]word markup.
+  function parseChordsOverLyricsText(text){
+    const lines = text.split(/\r?\n/);
+    const song = {title:'', artist:'', key:'', ccli:'', copyright:''};
+    let idx = 0;
+    if(lines[0]) { song.title = lines[0].trim(); idx = 1; }
+    if(lines[1] && !/^Key:/i.test(lines[1])) { song.artist = lines[1].trim(); idx = 2; }
+    const keyLine = lines.find(l => /^Key:\s*/i.test(l));
+    if(keyLine) song.key = keyLine.replace(/^Key:\s*/i,'').trim();
+
+    const CHORD_LINE_RE = /^[\sA-G0-9#b\/majinsudgo°+()\-]*$/;
+    function looksLikeChordLine(l){
+      if(l.trim()==='') return false;
+      const tokens = l.trim().split(/\s+/);
+      return tokens.length>0 && tokens.every(t => /^[A-G](#|b)?(m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/[A-G](#|b)?)?$/.test(t));
+    }
+    const rest = lines.slice(idx).filter(l => !/^Key:\s*/i.test(l));
+    let out = [];
+    for(let i=0;i<rest.length;i++){
+      const line = rest[i];
+      if(/^[A-Za-z][A-Za-z0-9 \-]{0,30}:\s*$/.test(line.trim())){
+        out.push(line.trim()); continue;
+      }
+      if(looksLikeChordLine(line) && rest[i+1] !== undefined && rest[i+1].trim() !== '' && !looksLikeChordLine(rest[i+1])){
+        const chordLine = line, lyricLine = rest[i+1];
+        // map chord positions onto lyric line using column index
+        let positions = [];
+        const re = /\S+/g; let m;
+        while((m = re.exec(chordLine))){ positions.push({chord:m[0], col:m.index}); }
+        let merged = '';
+        let cursor = 0;
+        positions.sort((a,b)=>a.col-b.col).forEach(p => {
+          const col = Math.min(p.col, lyricLine.length);
+          merged += lyricLine.slice(cursor, col) + `[${p.chord}]`;
+          cursor = col;
+        });
+        merged += lyricLine.slice(cursor);
+        out.push(merged);
+        i++; // consumed lyric line too
+      } else if(looksLikeChordLine(line) && (rest[i+1]===undefined || rest[i+1].trim()==='')){
+        out.push('[' + line.trim().split(/\s+/).join('] [') + ']');
+      } else {
+        out.push(line);
+      }
+    }
+    song.content = out.join('\n');
+    return song;
+  }
+
+  // Minimal best-effort OpenSong XML importer (reference format from sourceforge project)
+  function parseOpenSongXML(text){
+    const song = {title:'', artist:'', key:'', ccli:'', copyright:''};
+    const dom = new DOMParser().parseFromString(text, 'application/xml');
+    const get = tag => { const el = dom.querySelector(tag); return el ? el.textContent.trim() : ''; };
+    song.title = get('title');
+    song.artist = get('author');
+    song.key = get('key');
+    song.ccli = get('ccli') || get('song_number');
+    song.copyright = get('copyright');
+    const lyricsEl = dom.querySelector('lyrics');
+    let raw = lyricsEl ? lyricsEl.textContent : '';
+    // OpenSong uses . and section markers like [V1] on their own line, plus inline chords in [ ]? Actually
+    // OpenSong stores chords on the line ABOVE lyrics using a leading '.' marker for chord lines.
+    const lines = raw.split(/\r?\n/);
+    let out = [];
+    for(let i=0;i<lines.length;i++){
+      let line = lines[i];
+      const sec = line.match(/^\[(.*)\]$/);
+      if(sec){ out.push(sec[1] + ':'); continue; }
+      if(line.startsWith('.')){
+        const chordLine = line.slice(1);
+        const lyricLine = lines[i+1] !== undefined ? lines[i+1] : '';
+        let positions = [];
+        const re = /\S+/g; let m;
+        while((m = re.exec(chordLine))){ positions.push({chord:m[0], col:m.index}); }
+        let merged = '', cursor = 0;
+        positions.forEach(p => {
+          const col = Math.min(p.col, lyricLine.length);
+          merged += lyricLine.slice(cursor, col) + `[${p.chord}]`;
+          cursor = col;
+        });
+        merged += lyricLine.slice(cursor);
+        out.push(merged);
+        i++;
+      } else {
+        out.push(line);
+      }
+    }
+    song.content = out.join('\n').trim();
+    return song;
+  }
+
+  function detectAndParse(filename, text){
+    if(/\.json$/i.test(filename)) return {type:'json', song: JSON.parse(text)};
+    if(/\.xml$/i.test(filename)) return {type:'opensong-xml', song: parseOpenSongXML(text)};
+    if(/\.(cho|chordpro|pro)$/i.test(filename)) return {type:'chordpro', song: parseChordProText(text)};
+    // .txt: try chordpro-tag detection first, else chords-over-lyrics
+    if(/\{title:/i.test(text)) return {type:'chordpro', song: parseChordProText(text)};
+    return {type:'chords-over-lyrics', song: parseChordsOverLyricsText(text)};
+  }
+
+  return { toChordProText, toChordsOverLyricsText, parseChordProText, parseChordsOverLyricsText, parseOpenSongXML, detectAndParse };
+})();
+
+/* ---------------------------------------------------------------------------
+   7. APP STATE / CONTROLLER
+--------------------------------------------------------------------------- */
+const App = (() => {
+  let songs = [];
+  let currentSong = null; // in-memory working copy
+  let originalKey = null; // key of the song as stored (untransposed baseline)
+  let liveKey = null; // key the editor content is CURRENTLY written in (source of truth for transposition)
+  let dirty = false;
+  let activeTagFilter = null;
+  let undoStack = [], redoStack = [];
+  let undoTimer = null;
+
+  const el = id => document.getElementById(id);
+
+  function toast(msg){
+    const t = el('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(()=>t.classList.remove('show'), 1800);
+  }
+
+  function newSong(){
+    const startKey = NNModeStore.isEnabled() ? 'NN' : 'C';
+    currentSong = {
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:startKey, capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
+      tags:[], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
+    };
+    originalKey = startKey;
+    liveKey = startKey;
+    undoStack = []; redoStack = [];
+    loadIntoForm();
+    dirty = false;
+    updateSaveStatus();
+  }
+
+  function setCopyrightMode(mode, markDirty=true){
+    if(!currentSong) return;
+    currentSong.copyrightMode = mode;
+    document.querySelectorAll('#copyrightModeControls button').forEach(b => {
+      b.classList.toggle('active', b.dataset.mode === mode);
+    });
+    el('mCopyright').disabled = (mode === 'PD');
+    if(markDirty){ dirty = true; updateSaveStatus(); }
+    renderPreview();
+  }
+
+  // Converts every chord token in the editor between arabic Nashville
+  // Numbers ("4", "6m") and Roman numeral notation ("IV", "vi") in place.
+  // Note-annotations ([*text]) and literal letter chords are left untouched
+  // — only tokens actually written in the OTHER numbering system get
+  // rewritten, so this is safe to run even on mixed/legacy content.
+  function convertEditorNotation(toStyle){
+    const ta = el('editor');
+    ta.value = ta.value.replace(/\[([^\]]+)\]/g, (full, inner) => {
+      if(inner.charAt(0) === '*') return full;
+      if(toStyle === 'roman' && NashvilleSystem.isNumberToken(inner)){
+        return `[${NashvilleSystem.arabicToRoman(inner)}]`;
+      }
+      if(toStyle === 'arabic' && NashvilleSystem.isRomanToken(inner)){
+        return `[${NashvilleSystem.romanToArabic(inner)}]`;
+      }
+      return full;
+    });
+  }
+
+  function updateNotationStyleButton(){
+    const btn = el('btnRomanNumerals');
+    if(!btn) return;
+    const active = !!(currentSong && currentSong.notationStyle === 'roman');
+    btn.classList.toggle('active', active);
+  }
+
+  function setNotationStyle(style, markDirty=true){
+    if(!currentSong) return;
+    if(currentSong.notationStyle !== style) convertEditorNotation(style);
+    currentSong.notationStyle = style;
+    updateNotationStyleButton();
+    if(markDirty){
+      dirty = true; updateSaveStatus();
+      readFormIntoState('content', el('editor').value);
+    }
+    renderPreview();
+    renderParseStatus();
+    updateDynamicSectionButtons();
+  }
+
+  function toggleNotationStyle(){
+    if(!currentSong) return;
+    setNotationStyle(currentSong.notationStyle === 'roman' ? 'arabic' : 'roman');
+    toast(currentSong.notationStyle === 'roman' ? 'Roman numeral notation ON' : 'Roman numeral notation OFF');
+  }
+
+  function loadIntoForm(){
+    el('mTitle').value = currentSong.title || '';
+    el('mArtist').value = currentSong.artist || '';
+    el('mCCLI').value = currentSong.ccli || '';
+    el('mCopyright').value = currentSong.copyright || '';
+    el('mChurchCCLI').value = currentSong.churchCcli || '';
+    el('mCapo').value = currentSong.capo || '';
+    setCopyrightMode(currentSong.copyrightMode || '©', false);
+    // Guard: a song stored with key 'NN' can't be selected if NN Mode is
+    // currently OFF (that dropdown option won't exist) — fall back to C so
+    // the Key selector always lands on a real, selectable value.
+    const wantsKey = currentSong.key || 'C';
+    const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? 'C' : wantsKey;
+    el('mKey').value = usableKey;
+    el('mTags').value = (currentSong.tags || []).join(', ');
+    el('editor').value = currentSong.content || '';
+    setNotationStyle(currentSong.notationStyle || 'arabic', false);
+    setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
+    originalKey = usableKey;
+    liveKey = usableKey;
+    el('origKeyNote').textContent = '';
+    updateTransposeButtonsState();
+    renderPreview();
+    renderParseStatus();
+    updateDynamicSectionButtons();
+  }
+
+  function setTitleAlign(align, markDirty=true){
+    if(!currentSong) return;
+    currentSong.titleAlign = align;
+    document.querySelectorAll('#titleAlignControls .align-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.align === align);
+    });
+    if(markDirty){ dirty = true; updateSaveStatus(); }
+    renderPreview();
+  }
+
+  function readFormIntoState(field, value){
+    if(!currentSong) return;
+    currentSong[field] = value;
+    dirty = true;
+    updateSaveStatus();
+  }
+
+  function renderParseStatus(){
+    const lines = el('editor').value.split('\n').length;
+    const sections = ChordParser.parseSections(el('editor').value).length;
+    el('parseStatus').textContent = `${lines} lines · ${sections} sections`;
+  }
+
+  // Shared between the live preview and the print/PDF pipeline so they can
+  // never drift out of sync — both build their per-page header HTML from
+  // the exact same source.
+  function buildPageMetaParts(song){
+    const metaBits = [];
+    if(song.key) metaBits.push(`Key: ${song.key}`);
+    if(song.capo) metaBits.push(`Capo: ${song.capo} (chords shown as played)`);
+    const artistLineParts = [];
+    if(song.artist) artistLineParts.push('Authored By: ' + Renderer.escapeHtml(song.artist));
+    if(song.ccli) artistLineParts.push('CCLI Song #' + Renderer.escapeHtml(song.ccli));
+    const copyrightText = Renderer.buildCopyrightText(song);
+    const roadmap = Renderer.buildRoadmap(ChordParser.parse(song.content || ''));
+    return {metaBits, artistLineParts, copyrightText, roadmap};
+  }
+  function buildPageHeaderHtml(song, pageIndex, parts){
+    if(pageIndex !== 0){
+      return `<div class="cs-meta">${Renderer.escapeHtml(song.title||'')} (cont'd) — page ${pageIndex+1}</div>`;
+    }
+    const ta = song.titleAlign || DefaultAlignStore.get();
+    return `
+      <div class="cs-title" style="text-align:${ta};">${Renderer.escapeHtml(song.title||'Untitled')}</div>
+      <div class="cs-artist" style="text-align:${ta};">${parts.artistLineParts.join(' | ')}</div>
+      ${parts.copyrightText ? `<div class="cs-copyright" style="text-align:${ta};">${Renderer.escapeHtml(parts.copyrightText)}</div>` : ''}
+      ${song.churchCcli ? `<div class="cs-permission" style="text-align:${ta};">Used by Permission CCLI #: ${Renderer.escapeHtml(song.churchCcli)}</div>` : ''}
+      ${parts.roadmap ? `<div class="cs-roadmap" style="text-align:${ta};">${Renderer.escapeHtml(parts.roadmap)}</div>` : ''}
+      ${parts.metaBits.length ? `<div class="cs-meta">${parts.metaBits.map(Renderer.escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
+    `;
+  }
+
+  // Live preview: real A4-sized, real-margin pages built via the SAME
+  // pagination pipeline used for print/PDF (buildPrintPages), then visually
+  // scaled to fit the pane. This is a true miniature, not an approximation —
+  // if it fits/breaks a certain way here, it fits/breaks that way on paper.
+  function renderPreview(){
+    if(!currentSong) return;
+    const twoCol = el('toggle2col').checked;
+    const {song, pages} = buildPrintPages();
+    const parts = buildPageMetaParts(song);
+    const container = el('previewScroll');
+    container.innerHTML = pages.map((sections, i) => `
+      <div class="a4-page-wrap"><div class="a4-page${twoCol ? ' cols-2' : ''}">
+        ${buildPageHeaderHtml(song, i, parts)}
+        ${sections.join('')}
+      </div></div>
+    `).join('');
+    scaleA4Pages();
+  }
+
+  // Recomputes only the on-screen scale-to-fit factor — pagination itself is
+  // independent of viewport width (A4 is a fixed physical size), so a window
+  // resize never needs to re-paginate, only re-scale the already-built pages.
+  function scaleA4Pages(){
+    const container = el('previewScroll');
+    const firstPage = container.querySelector('.a4-page');
+    if(!firstPage) return;
+    const naturalWidth = firstPage.offsetWidth;
+    const naturalHeight = firstPage.offsetHeight;
+    if(!naturalWidth || !naturalHeight) return;
+    const available = container.clientWidth - 8;
+    const scale = Math.max(0.1, Math.min(1, available / naturalWidth));
+    container.querySelectorAll('.a4-page-wrap').forEach(wrap => {
+      const page = wrap.querySelector('.a4-page');
+      page.style.transform = `scale(${scale})`;
+      wrap.style.width = (naturalWidth * scale) + 'px';
+      wrap.style.height = (naturalHeight * scale) + 'px';
+    });
+  }
+
+  function updateSaveStatus(){
+    if(!currentSong){ el('saveStatus').textContent = 'No song loaded'; return; }
+    el('saveStatus').textContent = dirty ? 'Unsaved changes' : (currentSong.id ? 'Saved' : 'New (unsaved)');
+    el('saveStatus').style.color = dirty ? 'var(--accent)' : 'var(--text-faint)';
+  }
+
+  /* ---------------- Undo / Redo (editor content) ---------------- */
+  function pushUndo(prevValue){
+    undoStack.push(prevValue);
+    if(undoStack.length>100) undoStack.shift();
+    redoStack = [];
+  }
+  function onEditorInput(e){
+    dirty = true; updateSaveStatus();
+    readFormIntoState('content', el('editor').value);
+    renderPreview();
+    renderParseStatus();
+    updateDynamicSectionButtons();
+  }
+  function onEditorBeforeInputDebounced(){
+    clearTimeout(undoTimer);
+    const snapshot = el('editor')._lastValue;
+    undoTimer = setTimeout(()=>{
+      pushUndo(snapshot);
+      el('editor')._lastValue = el('editor').value;
+    }, 400);
+  }
+
+  /* ---------------- Library / persistence ---------------- */
+  async function refreshLibrary(){
+    songs = await DB.getAllSongs();
+    renderTagFilters();
+    renderSongList();
+  }
+
+  function renderTagFilters(){
+    const tagSet = new Set();
+    songs.forEach(s => (s.tags||[]).forEach(t => tagSet.add(t)));
+    const box = el('tagFilters');
+    box.innerHTML = '';
+    if(tagSet.size === 0){ box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    [...tagSet].sort().forEach(tag => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip' + (activeTagFilter===tag ? ' active' : '');
+      chip.textContent = tag;
+      chip.onclick = () => { activeTagFilter = activeTagFilter===tag ? null : tag; renderTagFilters(); renderSongList(); };
+      box.appendChild(chip);
+    });
+  }
+
+  function renderSongList(){
+    const q = el('searchBox').value.trim().toLowerCase();
+    const list = el('songList');
+    let filtered = songs.filter(s => {
+      if(activeTagFilter && !(s.tags||[]).includes(activeTagFilter)) return false;
+      if(!q) return true;
+      return (s.title||'').toLowerCase().includes(q) ||
+             (s.artist||'').toLowerCase().includes(q) ||
+             (s.content||'').toLowerCase().includes(q) ||
+             (s.tags||[]).some(t=>t.toLowerCase().includes(q));
+    });
+    if(filtered.length===0){
+      list.innerHTML = `<div class="sb-empty">No songs found. Click "＋ New" to start writing, or Import an existing chart.</div>`;
+      return;
+    }
+    list.innerHTML = '';
+    filtered.forEach(s => {
+      const item = document.createElement('div');
+      item.className = 'song-item' + (currentSong && currentSong.id===s.id ? ' active' : '');
+      item.innerHTML = `
+        <div class="si-title">${Renderer.escapeHtml(s.title || 'Untitled')}</div>
+        <div class="si-meta"><span>${Renderer.escapeHtml(s.artist||'')}</span>${s.key?`<span>· Key ${Renderer.escapeHtml(s.key)}</span>`:''}${s.ccli?`<span>· CCLI ${Renderer.escapeHtml(s.ccli)}</span>`:''}</div>
+        ${ (s.tags&&s.tags.length) ? `<div class="si-tags">${s.tags.map(t=>`<span class="si-tag">${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}
+      `;
+      item.onclick = () => selectSong(s.id);
+      list.appendChild(item);
+    });
+  }
+
+  function selectSong(id){
+    const s = songs.find(s=>s.id===id);
+    if(!s) return;
+    currentSong = JSON.parse(JSON.stringify(s));
+    undoStack = []; redoStack = [];
+    loadIntoForm();
+    dirty = false;
+    updateSaveStatus();
+    renderSongList();
+  }
+
+  async function saveCurrent(){
+    if(!currentSong) return;
+    currentSong.title = el('mTitle').value.trim() || 'Untitled';
+    currentSong.artist = el('mArtist').value.trim();
+    currentSong.ccli = el('mCCLI').value.trim();
+    currentSong.copyright = el('mCopyright').value.trim();
+    currentSong.copyrightMode = currentSong.copyrightMode || '©';
+    currentSong.notationStyle = currentSong.notationStyle || 'arabic';
+    currentSong.churchCcli = el('mChurchCCLI').value.trim();
+    currentSong.capo = el('mCapo').value;
+    currentSong.key = el('mKey').value;
+    currentSong.tags = el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+    currentSong.content = el('editor').value;
+    currentSong.titleAlign = currentSong.titleAlign || DefaultAlignStore.get();
+    currentSong.updatedAt = Date.now();
+    if(!currentSong.createdAt) currentSong.createdAt = Date.now();
+    currentSong.versions = currentSong.versions || [];
+    currentSong.versions.push({ts: Date.now(), content: currentSong.content, key: currentSong.key, note:'Autosave on save'});
+    if(currentSong.versions.length > 25) currentSong.versions = currentSong.versions.slice(-25);
+    const id = await DB.putSong(currentSong);
+    currentSong.id = id;
+    dirty = false;
+    updateSaveStatus();
+    await refreshLibrary();
+    toast('Song saved');
+  }
+
+  /* ---------------- Transposition ---------------- */
+  function transposeBySemitones(semis){
+    if(!currentSong) return;
+    const fromKey = liveKey || el('mKey').value;
+    if(fromKey === 'NN'){
+      toast('Nashville Numbers are key-relative — no transposition needed');
+      return;
+    }
+    const preferFlat = Transposer.FLAT_KEYS.has(fromKey);
+    const newContent = Transposer.transposeText(el('editor').value, semis, preferFlat);
+    el('editor').value = newContent;
+    const toKeyIdx = ((Transposer.SHARP_SCALE.indexOf(fromKey.replace('m','')) + semis) % 12 + 12) % 12;
+    const isMinor = fromKey.endsWith('m');
+    const scale = preferFlat ? Transposer.FLAT_SCALE : Transposer.SHARP_SCALE;
+    const newKey = scale[toKeyIdx] + (isMinor?'m':'');
+    if([...el('mKey').options].some(o=>o.value===newKey)) el('mKey').value = newKey;
+    liveKey = el('mKey').value;
+    updateCapoNote();
+    onEditorInput();
+  }
+
+  // Fires when the user picks a different key directly from the dropdown.
+  // For letter-chord charts this transposes the stored text (as before).
+  // For Nashville Number charts, numbers are already key-independent — no
+  // mutation happens; the Renderer just re-renders the same numbers as
+  // letter chords for the newly selected key.
+  function handleKeySelectChange(){
+    if(!currentSong) return;
+    const newKey = el('mKey').value;
+    if(newKey === liveKey){ updateCapoNote(); dirty=true; updateSaveStatus(); renderPreview(); return; }
+    if(liveKey === 'NN' || newKey === 'NN'){
+      liveKey = newKey;
+      updateCapoNote(); dirty=true; updateSaveStatus(); renderPreview();
+      return;
+    }
+    const preferFlat = Transposer.FLAT_KEYS.has(newKey);
+    const semis = Transposer.semitoneDelta(liveKey, newKey);
+    el('editor').value = Transposer.transposeText(el('editor').value, semis, preferFlat);
+    liveKey = newKey;
+    updateCapoNote();
+    onEditorInput();
+  }
+
+  function transposeToSelectedKey(){
+    if(!currentSong) return;
+    const semis = Transposer.semitoneDelta(originalKeyForCapo(), el('mKey').value);
+    // We only auto-transpose content when the user picks a new key directly;
+    // content is kept in sync by tracking the last-applied key.
+  }
+
+  function originalKeyForCapo(){ return originalKey || 'C'; }
+
+  function contentHasNumberChords(){
+    const sections = ChordParser.parse(el('editor').value);
+    for(const sec of sections){
+      for(const line of sec.lines){
+        const chords = line.type === 'chords-only' ? line.chords
+          : line.type === 'line' ? line.tokens.filter(t=>t.chord).map(t=>t.chord)
+          : [];
+        if(chords.some(c => NashvilleSystem.isNumberToken(c) || NashvilleSystem.isRomanToken(c))) return true;
+      }
+    }
+    return false;
+  }
+
+  function updateCapoNote(){
+    const note = el('origKeyNote');
+    const key = el('mKey').value;
+    if(key === 'NN'){
+      note.textContent = 'Numbers shown as typed — pick a Key to preview letter chords';
+    } else if(contentHasNumberChords()){
+      note.textContent = `Rendering Nashville Numbers in ${key}`;
+    } else if(originalKey && originalKey !== key){
+      note.textContent = `Transposed from ${originalKey}`;
+    } else {
+      note.textContent = '';
+    }
+    updateTransposeButtonsState();
+  }
+
+  function updateTransposeButtonsState(){
+    const isNN = el('mKey').value === 'NN';
+    el('btnTransUp').disabled = isNN;
+    el('btnTransDown').disabled = isNN;
+    el('btnTransUp').title = isNN ? 'Not applicable — Nashville Numbers are key-relative' : 'Transpose up';
+    el('btnTransDown').title = isNN ? 'Not applicable — Nashville Numbers are key-relative' : 'Transpose down';
+    // Capo shifts a physical chord SHAPE — meaningless for raw scale-degree
+    // numbers, which are already key-independent and never rendered as a shape.
+    el('mCapo').disabled = isNN;
+    el('mCapo').title = isNN ? 'Not applicable — Nashville Numbers have no physical shape to shift' : '';
+  }
+
+  /* ---------------- Structure tag insertion ---------------- */
+  function insertStructureTag(tag){
+    const ta = el('editor');
+    const pos = ta.selectionStart;
+    const before = ta.value.slice(0, pos);
+    const after = ta.value.slice(pos);
+    const needsNL = before.length && !before.endsWith('\n') ? '\n' : '';
+    // Cursor lands right after "Tag: " on the SAME line — not auto-advanced
+    // to the next line — so a lead-in chord typed immediately (or via the
+    // chord picker) lands on the header line itself, per the inline-chord
+    // header syntax. A trailing newline is only added when there's already
+    // other content sitting right after the cursor that needs separating
+    // from the new header; appending at the end (the common case) needs none,
+    // and pressing Enter afterward for lyrics is then just normal typing.
+    const headerPart = `${needsNL}${tag}: `;
+    const needsTrailingNL = after.length > 0 && !after.startsWith('\n');
+    const insertion = headerPart + (needsTrailingNL ? '\n' : '');
+    ta.value = before + insertion + after;
+    const newPos = (before + headerPart).length;
+    ta.focus();
+    ta.setSelectionRange(newPos, newPos);
+    onEditorInput();
+  }
+
+  // Scans the chart for every existing "Verse N" / "Chorus N" (etc.) section
+  // header and rebuilds a full row of buttons per family: one for EACH
+  // number already in use (so an earlier verse/chorus/etc. stays one click
+  // away to reuse for a reprise — clicking "Verse 1" again just inserts
+  // another "Verse 1:" header) plus one accent-styled button for the next
+  // new number. On a blank chart that's just a single "Verse 1" / "Chorus 1".
+  // Live-updates on every keystroke, so manually typing "Verse 3" makes the
+  // next-number button jump straight to "Verse 4" rather than lagging.
+  function findUsedSectionNumbers(content, family){
+    const re = new RegExp('^\\s*' + family + '\\s+(\\d+)\\s*:\\s*$', 'gim');
+    const found = new Set();
+    let m;
+    while((m = re.exec(content))) found.add(parseInt(m[1], 10));
+    return Array.from(found).sort((a,b) => a-b);
+  }
+  // shortPrefix defaults to the family's first letter (Verse->V, Chorus->C,
+  // Tag->T, Interlude->I) but Pre-Chorus overrides to "PC" to match the
+  // abbreviation already used elsewhere in the app (a bare "P" would be
+  // unhelpfully generic, and this keeps every mention of it consistent).
+  const DYNAMIC_SECTION_FAMILIES = [
+    {family:'Verse', groupId:'verseButtonGroup'},
+    {family:'Pre-Chorus', groupId:'prechorusButtonGroup', shortPrefix:'PC'},
+    {family:'Chorus', groupId:'chorusButtonGroup'},
+    {family:'Bridge', groupId:'bridgeButtonGroup'},
+    {family:'Tag', groupId:'tagButtonGroup'},
+    {family:'Interlude', groupId:'interludeButtonGroup'},
+  ];
+  function updateDynamicSectionButtons(){
+    const content = el('editor').value;
+    DYNAMIC_SECTION_FAMILIES.forEach(({family, groupId, shortPrefix}) => {
+      const prefix = shortPrefix || family.charAt(0);
+      const used = findUsedSectionNumbers(content, family);
+      const nextNum = (used.length ? Math.max(...used) : 0) + 1;
+      const numbers = used.concat([nextNum]);
+      el(groupId).innerHTML = numbers.map(n => {
+        const label = `${family} ${n}`;
+        // The first of each family stays spelled out in full — that's the
+        // one a new user reaches for and recognizes instantly. Every number
+        // after that switches to the compact V2/PC2/T2 form, since by then
+        // the pattern is established and the number is what matters.
+        const displayLabel = n === 1 ? family : (prefix + n);
+        return `<button type="button" data-tag="${label}" title="${label}"${n === nextNum ? ' class="next-num"' : ''}>${displayLabel}</button>`;
+      }).join('');
+    });
+  }
+
+  /* ---------------- Chord Picker Popup (double-click in editor) ---------------- */
+  const CP_QUALITIES = ['', 'm', '7', 'maj7', 'm7', 'sus2', 'sus4', 'dim', 'aug', 'add9'];
+  let cpState = null; // {insertIndex, accidental, quality, mode}
+
+  function cpBuildToken(mainRoot){
+    const {accidental, quality, mode} = cpState;
+    let base;
+    if(mode === 'NN'){
+      // NNS convention: accidental precedes the scale-degree number (b3, #4)
+      base = (accidental || '') + mainRoot + quality;
+    } else {
+      // Letter-chord convention: accidental follows the root (C#, Bb)
+      base = mainRoot + (accidental || '') + quality;
+    }
+    const bass = cpBuildBassToken();
+    let token = bass ? `${base}/${bass}` : base;
+    // All the internal staging/math above stays in plain arabic digits
+    // regardless of notation style — only the FINAL token gets converted to
+    // Roman numerals, right before it's inserted. Keeps the bass-relative
+    // degree arithmetic untouched and independent of display style.
+    if(mode === 'NN' && currentSong && currentSong.notationStyle === 'roman'){
+      token = NashvilleSystem.arabicToRoman(token);
+    }
+    return token;
+  }
+
+  // Bare Roman-numeral label for a scale-degree button — reflects whatever
+  // quality is CURRENTLY staged in the picker, so the button previews the
+  // case (upper/lower) it would actually produce. Display-only; the
+  // underlying degree value used for math/insertion is untouched.
+  function cpRomanLabel(degree, quality){
+    const ROMAN_UPPER = ['I','II','III','IV','V','VI','VII'];
+    const ROMAN_LOWER = ['i','ii','iii','iv','v','vi','vii'];
+    const d = parseInt(degree, 10);
+    if(/^(dim|\u00b0)/.test(quality || '')) return ROMAN_LOWER[d-1] + '\u00b0';
+    if(/^m(?!aj)/.test(quality || '')) return ROMAN_LOWER[d-1];
+    return ROMAN_UPPER[d-1];
+  }
+  function cpUsesRoman(){
+    return cpState.mode === 'NN' && !!(currentSong && currentSong.notationStyle === 'roman');
+  }
+
+  // The bass note in a slash chord (C/E, or 5/7 in Nashville numbers) is just
+  // a root — no quality, since a bass note isn't its own chord. Follows the
+  // same accidental-placement convention as the main chord for its mode.
+  // cpState.bassRoot is always stored as the STANDARD, absolute/parent-key-
+  // relative degree (or letter) — that's what actually gets inserted, so the
+  // chart stays in normal, portable NNS/letter notation regardless of how
+  // the picker happened to label the button the user clicked.
+  function cpBuildBassToken(){
+    if(!cpState.bassEnabled || !cpState.bassRoot) return '';
+    if(cpState.mode === 'NN') return (cpState.bassAccidental || '') + cpState.bassRoot;
+    return cpState.bassRoot + (cpState.bassAccidental || '');
+  }
+
+  // In NN mode, once a main chord degree is staged, the bass picker relabels
+  // 1-7 so "1" means "the chord's own root" instead of "the song's tonic" —
+  // e.g. picking chord degree 4 then bass label "3" gives the chord's own
+  // third in the bass, without the user having to do that math themselves.
+  // Only meaningful once a chord is chosen — returns null before that, since
+  // there's nothing yet to be relative to (the bass picker stays disabled
+  // in that state rather than showing numbers that don't mean anything yet).
+  // Returns [{label, degree}] where `degree` is the real, absolute value
+  // that actually gets stored/inserted; `label` is only what's shown.
+  function cpBassDegreeOptions(){
+    if(cpState.mode === 'NN'){
+      if(!cpState.mainRoot) return null;
+      const mainDegree = parseInt(cpState.mainRoot, 10);
+      return Array.from({length:7}, (_, i) => {
+        const degree = String(((mainDegree - 1 + i) % 7) + 1);
+        return {label: String(i + 1), degree};
+      });
+    }
+    return ['A','B','C','D','E','F','G'].map(r => ({label:r, degree:r}));
+  }
+
+  function cpRender(){
+    const popup = el('chordPopup');
+    const roots = cpState.mode === 'NN' ? ['1','2','3','4','5','6','7'] : ['A','B','C','D','E','F','G'];
+    const qualityLabel = (q) => q === '' ? 'maj' : q;
+    const bassOptions = cpBassDegreeOptions();
+    const useRoman = cpUsesRoman();
+    // In NN mode the bass picker can't do anything meaningful until a chord
+    // is chosen — that's the reference point its numbering is relative to.
+    // Disabling it (rather than allowing an "absolute" fallback) is what
+    // keeps the chord as the single authority, regardless of click order.
+    const bassReady = cpState.mode !== 'NN' || !!cpState.mainRoot;
+    popup.innerHTML = `
+      <div class="cp-preview" id="cpPreview"></div>
+      <div class="cp-label">Accidental</div>
+      <div class="cp-row cp-accidental">
+        <button data-acc="" class="${cpState.accidental===''?'selected':''}">♮</button>
+        <button data-acc="#" class="${cpState.accidental==='#'?'selected':''}">♯</button>
+        <button data-acc="b" class="${cpState.accidental==='b'?'selected':''}">♭</button>
+      </div>
+      <div class="cp-label">Quality</div>
+      <div class="cp-row cp-quality">
+        ${CP_QUALITIES.map(q => `<button data-q="${q}" class="${cpState.quality===q?'selected':''}">${qualityLabel(q)}</button>`).join('')}
+      </div>
+      <div class="cp-bass-toggle-row">
+        <label><input type="checkbox" id="cpBassToggle" ${cpState.bassEnabled ? 'checked' : ''}> Slash chord (add bass note) — e.g. C/E</label>
+      </div>
+      <div class="cp-label">${cpState.mode==='NN' ? (useRoman ? 'Roman Numeral' : 'Scale Degree') : 'Root'}${cpState.bassEnabled ? ' (pick this first)' : ''}</div>
+      <div class="cp-row cp-root">
+        ${roots.map(r => `<button data-root="${r}" class="${cpState.mainRoot===r?'selected':''}">${useRoman ? cpRomanLabel(r, cpState.quality) : r}</button>`).join('')}
+      </div>
+      ${cpState.bassEnabled ? `
+        <div class="cp-label">Bass Accidental</div>
+        <div class="cp-row cp-accidental cp-bass-accidental">
+          <button data-bassacc="" class="${cpState.bassAccidental===''?'selected':''}" ${bassReady?'':'disabled'}>♮</button>
+          <button data-bassacc="#" class="${cpState.bassAccidental==='#'?'selected':''}" ${bassReady?'':'disabled'}>♯</button>
+          <button data-bassacc="b" class="${cpState.bassAccidental==='b'?'selected':''}" ${bassReady?'':'disabled'}>♭</button>
+        </div>
+        <div class="cp-label">Bass Note${bassReady && cpState.mode==='NN' ? ' (relative to the chord above — 1 = its own root)' : ''}</div>
+        ${bassReady ? `
+          <div class="cp-row cp-root cp-bass-root">
+            ${bassOptions.map(({label, degree}) => `<button data-bassroot="${degree}" class="${cpState.bassRoot===degree?'selected':''}">${useRoman ? cpRomanLabel(label, '') : label}</button>`).join('')}
+          </div>
+        ` : `<div class="cp-bass-wait">Pick the scale degree above first</div>`}
+      ` : ''}
+      <div class="cp-custom">
+        <input id="cpCustom" placeholder="Custom, e.g. 5/7">
+        <button id="cpCustomInsert">Insert</button>
+      </div>
+    `;
+    cpUpdatePreview();
+    popup.querySelectorAll('[data-acc]').forEach(b => b.onclick = () => { cpState.accidental = b.dataset.acc; cpRender(); });
+    popup.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { cpState.quality = b.dataset.q; cpRender(); });
+    popup.querySelectorAll('[data-root]').forEach(b => b.onclick = () => {
+      if(cpState.bassEnabled){
+        cpState.mainRoot = b.dataset.root;
+        if(cpState.mode === 'NN'){
+          // Changing the chord invalidates any relative bass numbering
+          // already shown — re-stage from scratch so the bass picker
+          // relabels correctly around the newly chosen chord. (In practice
+          // this is a no-op here: NN's bass buttons don't exist until a
+          // chord is picked, so there's never a bass value to clear yet —
+          // kept explicit for clarity/safety if that ever changes.)
+          cpState.bassRoot = null;
+          cpRender();
+        } else if(cpState.bassRoot){
+          // Letter mode has no relabeling ambiguity (A-G are absolute
+          // either way), so bass-picked-first is valid — finalize now.
+          cpInsert(cpBuildToken(cpState.mainRoot));
+        } else {
+          cpRender();
+        }
+      } else {
+        cpInsert(cpBuildToken(b.dataset.root));
+      }
+    });
+    const bassToggle = popup.querySelector('#cpBassToggle');
+    if(bassToggle) bassToggle.onchange = () => {
+      cpState.bassEnabled = bassToggle.checked;
+      cpState.mainRoot = null;
+      cpState.bassRoot = null;
+      cpRender();
+    };
+    if(bassReady){
+      popup.querySelectorAll('[data-bassacc]').forEach(b => b.onclick = () => { cpState.bassAccidental = b.dataset.bassacc; cpRender(); });
+      popup.querySelectorAll('[data-bassroot]').forEach(b => b.onclick = () => {
+        cpState.bassRoot = b.dataset.bassroot;
+        if(cpState.mainRoot) cpInsert(cpBuildToken(cpState.mainRoot));
+        else cpRender(); // letter mode: bass picked first, stage and wait for the root
+      });
+    }
+    popup.querySelector('#cpCustomInsert').onclick = () => {
+      const val = popup.querySelector('#cpCustom').value.trim();
+      if(val) cpInsert(val);
+    };
+    popup.querySelector('#cpCustom').addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){ e.preventDefault(); const val = e.target.value.trim(); if(val) cpInsert(val); }
+    });
+  }
+
+  function cpUpdatePreview(){
+    const preview = el('chordPopup').querySelector('#cpPreview');
+    if(!preview) return;
+    const bits = [];
+    if(cpState.accidental) bits.push(cpState.accidental === '#' ? '♯' : '♭');
+    if(cpState.quality) bits.push(cpState.quality);
+    if(cpState.bassEnabled && cpState.mainRoot && !cpState.bassRoot){
+      const chordLabel = cpUsesRoman() ? cpRomanLabel(cpState.mainRoot, cpState.quality) : (cpState.mainRoot + cpState.quality);
+      preview.textContent = `Chord: ${chordLabel} — now pick a bass note`;
+      return;
+    }
+    const bass = cpBuildBassToken();
+    if(bass) bits.push('/ ' + bass);
+    preview.textContent = bits.length ? `${bits.join(' · ')} — pick a root to insert` : 'Pick a root to insert';
+  }
+
+  function cpInsert(token){
+    const ta = el('editor');
+    const idx = cpState.insertIndex;
+    const before = ta.value.slice(0, idx);
+    const after = ta.value.slice(idx);
+    // When redirected onto a header line (see onEditorDoubleClick), the
+    // insertion point may sit right against the colon with no separating
+    // space if the header was typed by hand rather than via an Insert
+    // button — add one so it doesn't read as "Intro:[G]".
+    const needsSpace = cpState.needsLeadingSpace && before.length && !/\s$/.test(before);
+    const insertion = `${needsSpace ? ' ' : ''}[${token}]`;
+    ta.value = before + insertion + after;
+    const newPos = (before + insertion).length;
+    onEditorInput();
+    ta.focus();
+    ta.setSelectionRange(newPos, newPos);
+    cpClose();
+  }
+
+  function cpClose(){
+    const popup = el('chordPopup');
+    popup.classList.add('hidden');
+    popup.innerHTML = '';
+    cpState = null;
+    document.removeEventListener('mousedown', cpOutsideClick, true);
+    document.removeEventListener('keydown', cpEscClose, true);
+  }
+
+  function cpOutsideClick(e){
+    const popup = el('chordPopup');
+    if(!popup.contains(e.target)) cpClose();
+  }
+  function cpEscClose(e){
+    if(e.key === 'Escape') cpClose();
+  }
+
+  function onEditorDoubleClick(e){
+    const ta = el('editor');
+    // Native double-click has already selected the word under the cursor;
+    // the chord normally gets inserted right before that word, matching
+    // [Chord]word markup. EXCEPT on a section header line ("Intro:" or
+    // "Intro: [G]") — there, double-clicking the label word itself would
+    // insert the chord BEFORE the label text ("[G]Intro:"), which is
+    // meaningless. On a header line the chord always belongs at the END of
+    // that line instead (appended after the colon, or after any chords
+    // already there), regardless of which word was actually double-clicked.
+    let insertIndex = ta.selectionStart;
+    const value = ta.value;
+    const lineStart = value.lastIndexOf('\n', insertIndex - 1) + 1;
+    let lineEnd = value.indexOf('\n', insertIndex);
+    if(lineEnd === -1) lineEnd = value.length;
+    const line = value.slice(lineStart, lineEnd);
+    const isHeaderLine = /^\s*[A-Za-z][A-Za-z0-9 \-\/]{0,30}:\s*(?:\[[^\]]+\]\s*)*$/.test(line);
+    if(isHeaderLine){
+      insertIndex = lineEnd;
+    }
+    cpState = {
+      insertIndex,
+      accidental: '',
+      quality: '',
+      mode: NNModeStore.isEnabled() ? 'NN' : 'letter',
+      needsLeadingSpace: isHeaderLine,
+      bassEnabled: false,
+      bassAccidental: '',
+      bassRoot: null,
+      mainRoot: null
+    };
+    const popup = el('chordPopup');
+    popup.classList.remove('hidden');
+    cpRender();
+    // Position near the click, then clamp to viewport so it never runs off-screen.
+    const margin = 8;
+    let left = e.clientX, top = e.clientY;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    requestAnimationFrame(() => {
+      const rect = popup.getBoundingClientRect();
+      if(rect.right > window.innerWidth - margin) left -= (rect.right - (window.innerWidth - margin));
+      if(rect.bottom > window.innerHeight - margin) top -= (rect.bottom - (window.innerHeight - margin));
+      if(left < margin) left = margin;
+      if(top < margin) top = margin;
+      popup.style.left = left + 'px';
+      popup.style.top = top + 'px';
+    });
+    setTimeout(() => {
+      document.addEventListener('mousedown', cpOutsideClick, true);
+      document.addEventListener('keydown', cpEscClose, true);
+    }, 0);
+  }
+
+  /* ---------------- Note Annotation Popup (right-click in editor) ---------------- */
+  // Inserts [*text] at the END of whichever line was right-clicked. Reuses the
+  // ChordParser's existing bracket syntax — a leading '*' inside [...] marks it
+  // as an editorial note rather than a chord (matches the ChordPro convention
+  // for annotations), so no parser changes were needed, only how it renders.
+  let npInsertIndex = null;
+
+  function onEditorContextMenu(e){
+    e.preventDefault();
+    const ta = el('editor');
+    // Right-click places the caret at the click position in effectively all
+    // browsers (same as a left click would), so selectionStart tells us
+    // exactly which character — and therefore which line — was clicked.
+    const clickPos = ta.selectionStart;
+    const value = ta.value;
+    let lineEnd = value.indexOf('\n', clickPos);
+    if(lineEnd === -1) lineEnd = value.length;
+    npInsertIndex = lineEnd;
+
+    const popup = el('notePopup');
+    popup.classList.remove('hidden');
+    popup.innerHTML = `
+      <div class="np-label">Insert note on this line</div>
+      <input id="npInput" placeholder="e.g. Repeat 2x, slower, hold...">
+      <div class="np-row">
+        <button id="npCancel" class="ghost">Cancel</button>
+        <button id="npInsert" class="primary">Insert</button>
+      </div>
+    `;
+    const margin = 8;
+    let left = e.clientX, top = e.clientY;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    requestAnimationFrame(() => {
+      const rect = popup.getBoundingClientRect();
+      if(rect.right > window.innerWidth - margin) left -= (rect.right - (window.innerWidth - margin));
+      if(rect.bottom > window.innerHeight - margin) top -= (rect.bottom - (window.innerHeight - margin));
+      if(left < margin) left = margin;
+      if(top < margin) top = margin;
+      popup.style.left = left + 'px';
+      popup.style.top = top + 'px';
+      popup.querySelector('#npInput').focus();
+    });
+
+    function commit(){
+      const val = popup.querySelector('#npInput').value.trim();
+      if(val) npInsert(val);
+      else npClose();
+    }
+    popup.querySelector('#npInsert').onclick = commit;
+    popup.querySelector('#npCancel').onclick = npClose;
+    popup.querySelector('#npInput').addEventListener('keydown', (ev) => {
+      if(ev.key === 'Enter'){ ev.preventDefault(); commit(); }
+      if(ev.key === 'Escape'){ ev.preventDefault(); npClose(); }
+    });
+
+    setTimeout(() => {
+      document.addEventListener('mousedown', npOutsideClick, true);
+    }, 0);
+  }
+
+  function npInsert(noteText){
+    const ta = el('editor');
+    const before = ta.value.slice(0, npInsertIndex);
+    const after = ta.value.slice(npInsertIndex);
+    const insertion = `[*${noteText}]`;
+    ta.value = before + insertion + after;
+    const newPos = (before + insertion).length;
+    onEditorInput();
+    ta.focus();
+    ta.setSelectionRange(newPos, newPos);
+    npClose();
+  }
+
+  function npClose(){
+    const popup = el('notePopup');
+    popup.classList.add('hidden');
+    popup.innerHTML = '';
+    document.removeEventListener('mousedown', npOutsideClick, true);
+  }
+
+  function npOutsideClick(e){
+    const popup = el('notePopup');
+    if(!popup.contains(e.target)) npClose();
+  }
+
+  /* ---------------- Import / Export ---------------- */
+  function handleImportFile(file){
+    const reader = new FileReader();
+    reader.onload = () => {
+      try{
+        const {type, song} = IO.detectAndParse(file.name, reader.result);
+        currentSong = {
+          title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
+          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: song.key||'C', capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
+          tags: song.tags||[], content: song.content||'', versions:[],
+          createdAt: Date.now(), updatedAt: Date.now()
+        };
+        undoStack=[]; redoStack=[];
+        loadIntoForm();
+        dirty = true;
+        updateSaveStatus();
+        toast(`Imported (${type})`);
+      }catch(err){
+        toast('Import failed: ' + err.message);
+        console.error(err);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function currentSongSnapshot(){
+    return {
+      title: el('mTitle').value, artist: el('mArtist').value, ccli: el('mCCLI').value,
+      copyright: el('mCopyright').value, copyrightMode: (currentSong && currentSong.copyrightMode) || '©', churchCcli: el('mChurchCCLI').value, key: el('mKey').value,
+      notationStyle: (currentSong && currentSong.notationStyle) || 'arabic',
+      capo: el('mCapo').value,
+      titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
+      tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      content: el('editor').value
+    };
+  }
+
+  function downloadBlob(filename, content, mime){
+    const blob = new Blob([content], {type: mime});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function exportCurrent(){
+    if(!currentSong) return;
+    const song = currentSongSnapshot();
+    const fmt = el('exportFormat').value;
+    const base = (song.title || 'song').replace(/[^\w\-]+/g,'_');
+    if(fmt === 'json'){
+      downloadBlob(`${base}.json`, JSON.stringify(song, null, 2), 'application/json');
+    } else if(fmt === 'txt'){
+      downloadBlob(`${base}.txt`, IO.toChordsOverLyricsText(song), 'text/plain');
+    } else if(fmt === 'chordpro'){
+      downloadBlob(`${base}.cho`, IO.toChordProText(song), 'text/plain');
+    }
+    toast('Exported ' + fmt.toUpperCase());
+  }
+
+  /* ---------------- Print / PDF (phrase-aware pagination) ---------------- */
+  function buildPrintPages(){
+    const song = currentSongSnapshot();
+    // Render into an offscreen full-width clone to measure section heights.
+    const measureHost = document.createElement('div');
+    measureHost.style.position='fixed'; measureHost.style.left='-9999px'; measureHost.style.top='0';
+    measureHost.style.width = '7.77in'; // A4 (8.27in) minus 0.25in margins each side
+    measureHost.className = '';
+    document.body.appendChild(measureHost);
+    const sheet = document.createElement('div');
+    measureHost.appendChild(sheet);
+    Renderer.renderChordSheet(sheet, song, {twoCol:false});
+    const PAGE_HEIGHT_PX = 11.19 * 96; // A4 (11.69in) minus 0.25in top+bottom margins, at 96dpi
+    const pages = Paginator.paginate(sheet, PAGE_HEIGHT_PX);
+    document.body.removeChild(measureHost);
+    return {song, pages};
+  }
+
+  function renderPrintArea(){
+    const {song, pages} = buildPrintPages();
+    const area = el('printArea');
+    const parts = buildPageMetaParts(song);
+    area.innerHTML = pages.map((sections, i) => `
+      <div class="cs-page">
+        ${buildPageHeaderHtml(song, i, parts)}
+        ${sections.join('')}
+      </div>
+    `).join('');
+    return {song, pages};
+  }
+
+  function doPrint(){
+    if(!currentSong){ toast('No song loaded'); return; }
+    renderPrintArea();
+    window.print();
+  }
+
+  async function doPDF(){
+    if(!currentSong){ toast('No song loaded'); return; }
+    if(typeof window.jspdf === 'undefined' || typeof window.html2canvas === 'undefined'){
+      toast('PDF libraries unavailable (offline / CDN blocked)');
+      return;
+    }
+    const {song, pages} = renderPrintArea();
+    const area = el('printArea');
+    area.classList.remove('hidden');
+    area.style.position='fixed'; area.style.left='-9999px'; area.style.background='#fff';
+    const pageEls = area.querySelectorAll('.cs-page');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({unit:'in', format:'a4'});
+    const MARGIN = 0.25, CONTENT_W = 8.27 - MARGIN*2, CONTENT_H = 11.69 - MARGIN*2;
+    for(let i=0;i<pageEls.length;i++){
+      const canvas = await window.html2canvas(pageEls[i], {scale:2, backgroundColor:'#ffffff'});
+      const imgData = canvas.toDataURL('image/png');
+      const imgH = canvas.height * CONTENT_W / canvas.width;
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, CONTENT_W, Math.min(imgH, CONTENT_H));
+    }
+    pdf.save(`${(song.title||'song').replace(/[^\w\-]+/g,'_')}.pdf`);
+    area.classList.add('hidden');
+    toast('PDF exported');
+  }
+
+  /* ---------------- Drawers: Settings / CCLI mock / ProPresenter mock / Versions ---------------- */
+  function openDrawer(title, bodyHtml, onMount){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'drawer-backdrop';
+    backdrop.innerHTML = `
+      <div class="drawer">
+        <div class="drawer-head"><h3>${title}</h3><button class="icon" id="drawerClose">✕</button></div>
+        <div class="drawer-body">${bodyHtml}</div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', (e) => { if(e.target === backdrop) backdrop.remove(); });
+    backdrop.querySelector('#drawerClose').onclick = () => backdrop.remove();
+    if(onMount) onMount(backdrop);
+    return backdrop;
+  }
+
+  function openSettings(){
+    const body = `
+      <h4>Display Preferences</h4>
+      <div class="form-row"><label><input type="checkbox" id="prefFlats" style="width:auto;"> Prefer flats when transposing ambiguous keys</label></div>
+      <div class="form-row"><label>Editor font size</label><input type="range" id="prefFontSize" min="11" max="20" value="14" style="width:100%;"></div>
+      <div class="form-row">
+        <label>Chord-to-lyric spacing <span id="chordGapValue"></span></label>
+        <input type="range" id="prefChordGap" min="${ChordSpacingStore.MIN_PX}" max="${ChordSpacingStore.MAX_PX}" value="${ChordSpacingStore.get()}" style="width:100%;">
+      </div>
+      <div class="form-row">
+        <label>Default alignment for new songs</label>
+        <div class="align-controls" id="settingsAlignControls">
+          <button type="button" class="align-btn" data-align="left" title="Left">⟸ Left</button>
+          <button type="button" class="align-btn" data-align="center" title="Center">≡ Center</button>
+          <button type="button" class="align-btn" data-align="right" title="Right">⟹ Right</button>
+        </div>
+      </div>
+      <div class="form-row"><button id="replayIntroBtn">Show "NN Mode is ON by default" intro again</button></div>
+      <h4>Data</h4>
+      <div class="form-row"><button id="exportAllBtn">Export entire library (JSON)</button></div>
+      <div class="form-row"><button id="wipeBtn" style="border-color:var(--danger); color:var(--danger);">Clear local database</button></div>
+      <h4>Local Backup Folder</h4>
+      <div class="form-row" id="folderStatus"><small>Checking folder access…</small></div>
+      <div class="form-row" style="display:flex; gap:6px;">
+        <button id="chooseFolderBtn">Choose folder…</button>
+        <button id="saveToFolderBtn">Save all songs to folder</button>
+        <button id="forgetFolderBtn" class="ghost">Forget</button>
+      </div>
+      <div class="mock-note">Saves the whole library into the chosen folder as one .json file per song — handy for large work sets (setlists, whole libraries). Requires Chrome or Edge; the folder handle is remembered and re-offered next time this page loads, but the browser will ask you to re-confirm access each session for security.</div>
+    `;
+    openDrawer('Settings', body, (drawer) => {
+      const fontSlider = drawer.querySelector('#prefFontSize');
+      fontSlider.oninput = () => { el('editor').style.fontSize = fontSlider.value + 'px'; };
+      const gapSlider = drawer.querySelector('#prefChordGap');
+      const gapValueLabel = drawer.querySelector('#chordGapValue');
+      const updateGapLabel = () => { gapValueLabel.textContent = `(${gapSlider.value}px)`; };
+      updateGapLabel();
+      gapSlider.oninput = () => {
+        const px = parseInt(gapSlider.value, 10);
+        ChordSpacingStore.set(px);
+        ChordSpacingStore.apply(px);
+        updateGapLabel();
+      };
+      const alignBtns = drawer.querySelectorAll('#settingsAlignControls .align-btn');
+      const currentDefault = DefaultAlignStore.get();
+      alignBtns.forEach(b => b.classList.toggle('active', b.dataset.align === currentDefault));
+      alignBtns.forEach(btn => {
+        btn.onclick = () => {
+          DefaultAlignStore.set(btn.dataset.align);
+          alignBtns.forEach(b => b.classList.toggle('active', b === btn));
+          toast(`New songs will default to ${btn.dataset.align} alignment`);
+        };
+      });
+      drawer.querySelector('#replayIntroBtn').onclick = () => {
+        drawer.remove();
+        maybeShowNNIntro(true);
+      };
+      drawer.querySelector('#exportAllBtn').onclick = async () => {
+        const all = await DB.getAllSongs();
+        downloadBlob('worship-chart-library.json', JSON.stringify(all, null, 2), 'application/json');
+        toast('Library exported');
+      };
+      drawer.querySelector('#wipeBtn').onclick = async () => {
+        if(confirm('This deletes ALL locally stored songs. Continue?')){
+          const all = await DB.getAllSongs();
+          for(const s of all) await DB.deleteSong(s.id);
+          await refreshLibrary();
+          newSong();
+          toast('Local database cleared');
+          drawer.remove();
+        }
+      };
+
+      // --- Local Backup Folder wiring ---
+      const folderStatusEl = drawer.querySelector('#folderStatus');
+      const chooseBtn = drawer.querySelector('#chooseFolderBtn');
+      const saveBtn = drawer.querySelector('#saveToFolderBtn');
+      const forgetBtn = drawer.querySelector('#forgetFolderBtn');
+
+      async function refreshFolderStatus(){
+        if(!FolderBackup.supported()){
+          folderStatusEl.innerHTML = `<small>Not supported in this browser (Chrome/Edge only). Use "Export entire library" above instead.</small>`;
+          chooseBtn.disabled = true; saveBtn.disabled = true; forgetBtn.disabled = true;
+          return;
+        }
+        const status = await FolderBackup.currentStatus();
+        if(status.state === 'none'){
+          folderStatusEl.innerHTML = `<small>No folder selected yet.</small>`;
+          saveBtn.disabled = true; forgetBtn.disabled = true;
+        } else if(status.state === 'granted'){
+          folderStatusEl.innerHTML = `<small>✅ Connected: <b>${Renderer.escapeHtml(status.name)}</b></small>`;
+          saveBtn.disabled = false; forgetBtn.disabled = false;
+        } else {
+          folderStatusEl.innerHTML = `<small>⚠️ Folder "<b>${Renderer.escapeHtml(status.name)}</b>" remembered, but needs re-confirmation this session. Click "Save all songs to folder" to reconnect.</small>`;
+          saveBtn.disabled = false; forgetBtn.disabled = false;
+        }
+      }
+
+      chooseBtn.onclick = async () => {
+        try{
+          await FolderBackup.chooseFolder();
+          toast('Backup folder selected');
+          await refreshFolderStatus();
+        }catch(e){
+          if(e.name !== 'AbortError') toast('Could not select folder: ' + e.message);
+        }
+      };
+      saveBtn.onclick = async () => {
+        try{
+          const all = await DB.getAllSongs();
+          if(all.length === 0){ toast('No songs to save yet'); return; }
+          const count = await FolderBackup.saveAllSongsToFolder(all);
+          toast(`Saved ${count} song(s) to folder`);
+          await refreshFolderStatus();
+        }catch(e){
+          toast('Save to folder failed: ' + e.message);
+        }
+      };
+      forgetBtn.onclick = async () => {
+        await FolderBackup.forget();
+        toast('Backup folder forgotten');
+        await refreshFolderStatus();
+      };
+      refreshFolderStatus();
+    });
+  }
+
+  function openCCLIMock(){
+    const body = `
+      <h4>CCLI SongSelect Lookup <span class="badge">mock</span></h4>
+      <div class="form-row"><label>Search by title or CCLI song number</label><input id="ccliQuery" placeholder="e.g. Amazing Grace, or 4638"></div>
+      <button id="ccliSearchBtn" class="primary">Search</button>
+      <div id="ccliResult"></div>
+      <div class="mock-note">
+        // [API-MOCK] This panel simulates a CCLI SongSelect metadata response.
+        Real CCLI SongSelect API access requires an authenticated partner integration
+        under CCLI's Terms of Service, so live lookups are not performed client-side.
+        // [FUTURE-PYTHON] A FastAPI endpoint (e.g. <code>/api/ccli/lookup</code>) would
+        proxy authenticated CCLI requests server-side and return normalized JSON here.
+      </div>
+    `;
+    openDrawer('API Hook: CCLI Metadata', body, (drawer) => {
+      drawer.querySelector('#ccliSearchBtn').onclick = () => {
+        const q = drawer.querySelector('#ccliQuery').value.trim();
+        if(!q){ return; }
+        const mockData = {
+          title: q.match(/^\d+$/) ? '(mock) Song Title for CCLI #' + q : q,
+          ccli: q.match(/^\d+$/) ? q : String(1000000 + Math.floor(Math.random()*8999999)),
+          author: 'Various Writers (mock)',
+          copyright: `© ${new Date().getFullYear()} Mock Publishing (CCLI License required for use)`
+        };
+        drawer.querySelector('#ccliResult').innerHTML = `
+          <div class="mock-result">
+            <div><b>Title:</b> ${Renderer.escapeHtml(mockData.title)}</div>
+            <div><b>CCLI #:</b> ${mockData.ccli}</div>
+            <div><b>Author(s):</b> ${mockData.author}</div>
+            <div><b>Copyright:</b> ${mockData.copyright}</div>
+            <div style="margin-top:8px;"><button id="applyCCLI">Apply to current song</button></div>
+          </div>`;
+        drawer.querySelector('#applyCCLI').onclick = () => {
+          el('mTitle').value = mockData.title;
+          el('mCCLI').value = mockData.ccli;
+          el('mCopyright').value = mockData.copyright;
+          onEditorInput();
+          toast('Mock metadata applied');
+          drawer.remove();
+        };
+      };
+    });
+  }
+
+  function openProPresenterMock(){
+    const body = `
+      <h4>ProPresenter Web API Sync <span class="badge">mock</span></h4>
+      <div class="form-row"><label>ProPresenter host (this network)</label><input id="ppHost" placeholder="e.g. 192.168.1.42:1025"></div>
+      <button id="ppConnectBtn" class="primary">Connect</button>
+      <div id="ppResult"></div>
+      <div class="mock-note">
+        // [API-MOCK] ProPresenter exposes a local network Web API (Stage Display / Remote / v1 REST+WS)
+        that this mock simulates for cueing/sync without requiring the app on the same LAN during dev.
+        // [FUTURE-PYTHON] A companion FastAPI service could bridge this browser app to ProPresenter's
+        REST API (e.g. <code>POST /v1/presentation/active/next</code>) since raw LAN sockets from a
+        static HTML page are limited by browser security; a local relay handles that.
+      </div>
+    `;
+    openDrawer('API Hook: ProPresenter Sync', body, (drawer) => {
+      drawer.querySelector('#ppConnectBtn').onclick = () => {
+        const host = drawer.querySelector('#ppHost').value.trim() || '(unspecified)';
+        drawer.querySelector('#ppResult').innerHTML = `
+          <div class="mock-result">
+            <div>✅ (mock) Connected to ProPresenter at <b>${Renderer.escapeHtml(host)}</b></div>
+            <div style="margin-top:6px;">Sections detected for cueing:</div>
+            <ul style="margin:6px 0 0 18px; padding:0;">
+              ${(currentSong ? ChordParser.parseSections(el('editor').value) : [])
+                .map(s => `<li>${Renderer.escapeHtml(s.label || '(untitled block)')}</li>`).join('') || '<li>(no sections parsed yet)</li>'}
+            </ul>
+            <div style="margin-top:8px;"><button id="ppPushBtn">Push cues (mock)</button></div>
+          </div>`;
+        drawer.querySelector('#ppPushBtn').onclick = () => { toast('(mock) Cues pushed to ProPresenter'); };
+      };
+    });
+  }
+
+  /* ---------------- Circle of Fifths (opens in its own window) ---------------- */
+  let circleWinRef = null;
+
+  function buildCircleOfFifthsHTML(){
+    // Self-contained document — this is a separate browser window, so it can't
+    // share the main app's CSS/JS scope. Colors are hardcoded to match the
+    // app's dark theme. Diatonic scales are hand-verified music theory (each
+    // major scale spelled with every letter A–G exactly once), not computed,
+    // to avoid enharmonic guessing (e.g. F# major correctly uses E#, not F).
+    //
+    // Layout is 3 concentric rings — major (inner), relative minor (middle),
+    // diminished vii° (outer) — modeled after a standard printed chord wheel.
+    // Key insight verified against a reference wheel: all three rings share
+    // the SAME 12 angular slots. Slot i holds major=ORDER[i], its own relative
+    // minor, and its own vii°. So for a selected tonic at slot i:
+    //   - major ring:  I=slot i,  IV=slot (i-1),  V=slot (i+1)
+    //   - minor ring:  vi=slot i, ii=slot (i-1),   iii=slot (i+1)
+    //     (because Dm/ii sits at F's slot, Em/iii sits at G's slot, etc.)
+    //   - dim ring:    vii°=slot i only
+    // So exactly 3 slots (i, i-1, i+1) light up, consistently, across all rings.
+    return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Circle of Fifths — Chart Builder</title>
+<style>
+  :root{ --bg:#14171c; --panel:#1b1f27; --border:#2e3440; --text:#e7e9ee; --text-dim:#9aa2b1; --text-faint:#5f6779; --tonic:#e8b45a; --sub:#e6935a; --dom:#68c98f; }
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; padding:10px 12px; text-align:center; overflow:hidden;}
+  h2{font-size:17px; margin:0 0 2px;}
+  p.sub{font-size:13px; color:var(--text-dim); margin:0 0 6px; line-height:1.4;}
+  svg{width:100%; max-width:644px; height:auto; overflow:visible; touch-action:none; display:block; margin:0 auto;}
+  #wheelGroup{transition:transform .7s cubic-bezier(.34,1.3,.64,1);}
+  #wheelGroup.dragging{transition:none;}
+  .lbl{font-weight:700; fill:var(--text); cursor:pointer; user-select:none; transition:transform .7s cubic-bezier(.34,1.3,.64,1), fill .25s;}
+  #wheelGroup.dragging .lbl{transition:fill .25s;}
+  .lbl.major{font-size:24px;}
+  .lbl.minor{font-size:19px; fill:var(--text-dim);}
+  .lbl.dim{font-size:16px; fill:var(--text-faint);}
+  .lbl.tonic{fill:var(--tonic);}
+  .lbl.dom{fill:var(--dom);}
+  .lbl.sub{fill:var(--sub);}
+  .numeral{font-size:13px; font-weight:800; fill:#000; opacity:0; pointer-events:none; transition:opacity .25s, transform .7s cubic-bezier(.34,1.3,.64,1);}
+  .numeral.show{opacity:1;}
+  .wedge{fill:rgba(255,255,255,.025); stroke:var(--border); stroke-width:1; cursor:pointer; transition:fill .3s;}
+  .wedge.tonic{fill:rgba(232,180,90,.34);}
+  .wedge.dom{fill:rgba(104,201,143,.28);}
+  .wedge.sub{fill:rgba(230,147,90,.28);}
+  .ring{fill:none; stroke:var(--border); stroke-width:1;}
+  #panel{margin-top:8px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:9px 12px; font-size:13px;}
+  #panel h3{margin:0 0 6px; font-size:16px;}
+  .chips{display:flex; flex-wrap:wrap; gap:5px; justify-content:center;}
+  .chip{background:var(--bg); border:1px solid var(--border); border-radius:7px; padding:5px 7px; font-size:13px; min-width:62px;}
+  .chip .num{color:var(--tonic); font-weight:700; display:block; font-size:12px;}
+  .chip .letter{display:block; margin-top:1px; font-weight:600;}
+  .chip .extra{display:block; margin-top:2px; font-size:10px; color:var(--text-dim); line-height:1.25;}
+  #pinTopBtn{position:absolute; top:8px; right:10px; font-size:11px; padding:5px 10px; border-radius:14px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;}
+  #pinTopBtn:hover{border-color:var(--tonic);}
+</style></head>
+<body>
+  <button type="button" id="pinTopBtn" style="display:none;">📌 Pin on Top</button>
+  <h2>Circle of Fifths</h2>
+  <p class="sub">Click any chord to change key.<br>Tap &amp; drag left ↔ right to rotate.</p>
+  <svg id="wheel" viewBox="0 0 728 728"></svg>
+  <div id="panel"><h3 id="panelTitle">Key of C major</h3><div class="chips" id="chips"></div></div>
+<script>
+  // "Pin on Top" only works if this popup was opened by a window that (a)
+  // still exists and (b) supports the Document Picture-in-Picture API
+  // (Chrome/Edge, HTTPS only) — hidden entirely otherwise rather than
+  // showing a button that would just fail when clicked.
+  (function(){
+    var btn = document.getElementById('pinTopBtn');
+    var supported = false;
+    try{ supported = !!(window.opener && !window.opener.closed && 'documentPictureInPicture' in window.opener); }catch(e){}
+    if(supported){
+      btn.style.display = '';
+      btn.onclick = function(){
+        window.opener.__wcbRequestCirclePiP();
+        window.close();
+      };
+    }
+  })();
+  var ORDER = ['C','G','D','A','E','B','F#','Db','Ab','Eb','Bb','F'];
+  var SCALES = {
+    'C':['C','D','E','F','G','A','B'], 'G':['G','A','B','C','D','E','F#'],
+    'D':['D','E','F#','G','A','B','C#'], 'A':['A','B','C#','D','E','F#','G#'],
+    'E':['E','F#','G#','A','B','C#','D#'], 'B':['B','C#','D#','E','F#','G#','A#'],
+    'F#':['F#','G#','A#','B','C#','D#','E#'], 'Db':['Db','Eb','F','Gb','Ab','Bb','C'],
+    'Ab':['Ab','Bb','C','Db','Eb','F','G'], 'Eb':['Eb','F','G','Ab','Bb','C','D'],
+    'Bb':['Bb','C','D','Eb','F','G','A'], 'F':['F','G','A','Bb','C','D','E']
+  };
+  var DEGREE_QUALITY = ['', 'm', 'm', '', '', 'm', '\u00b0'];
+  var DEGREE_ROMAN = ['I', 'ii', 'iii', 'IV', 'V', 'vi', 'vii\u00b0'];
+  var EXT = { 'I':'Maj7, Maj9, Maj11, Maj13', 'ii':'m7, m9, m11, m6', 'iii':'m7',
+              'IV':'Maj7, Maj9, Maj13 or 6', 'V':'7, 9, 11, sus4, 13', 'vi':'m7, m9, m11',
+              'vii\u00b0':'m7b5' };
+
+  var svgns = 'http://www.w3.org/2000/svg';
+  var svg = document.getElementById('wheel');
+  var cx = 364, cy = 364;
+  var rHole = 129, rMajorOuter = 221, rMinorOuter = 287, rDimOuter = 336;
+  var rMajorLbl = (rHole+rMajorOuter)/2, rMinorLbl = (rMajorOuter+rMinorOuter)/2, rDimLbl = (rMinorOuter+rDimOuter)/2;
+  // Numerals sit at the SAME angle as their chord letter, just pulled toward
+  // the center a bit — 40% of that ring's own half-band-width. Two points on
+  // the same radial ray stay on that ray under any wheel rotation, and since
+  // highlighted wedges always cluster near the top (the wheel spins the
+  // selected key to vertical), "smaller radius" reads as "underneath the
+  // chord" for every numeral that's actually ever shown.
+  // Pulled 75% of the way toward each ring's inner boundary (was 40%) — the
+  // chord fonts just got scaled up, so the old spacing was tight enough to
+  // overlap the bigger glyphs. This keeps clear of both the chord above and
+  // the ring's own inner edge below.
+  var rMajorNum = rMajorLbl - (rMajorOuter-rHole)/2*0.75;
+  var rMinorNum = rMinorLbl - (rMinorOuter-rMajorOuter)/2*0.75;
+  var rDimNum = rDimLbl - (rDimOuter-rMinorOuter)/2*0.75;
+  var selected = 0;
+  var currentRotation = 0; // accumulates so the wheel always spins the shortest visual path
+
+  function polar(r, angleDeg){
+    var rad = (angleDeg - 90) * Math.PI / 180; // 0deg = top, clockwise
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  }
+  function el(tag, attrs){
+    var e = document.createElementNS(svgns, tag);
+    for(var k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  }
+  function wedgePath(rIn, rOut, dividerAngle){
+    var a1 = dividerAngle - 30, a2 = dividerAngle;
+    var p1 = polar(rIn, a1), p2 = polar(rOut, a1), p3 = polar(rOut, a2), p4 = polar(rIn, a2);
+    return 'M '+p1[0]+' '+p1[1]+' L '+p2[0]+' '+p2[1]+' A '+rOut+' '+rOut+' 0 0 1 '+p3[0]+' '+p3[1]+' L '+p4[0]+' '+p4[1]+' A '+rIn+' '+rIn+' 0 0 0 '+p1[0]+' '+p1[1]+' Z';
+  }
+
+  // boundary rings sit OUTSIDE the rotating group — a circle looks identical rotated
+  [rDimOuter, rMinorOuter, rMajorOuter, rHole].forEach(function(r){
+    svg.appendChild(el('circle', {cx:cx, cy:cy, r:r, class:'ring'}));
+  });
+
+  var wheelGroup = el('g', {id:'wheelGroup'});
+  wheelGroup.style.transformOrigin = cx + 'px ' + cy + 'px';
+  svg.appendChild(wheelGroup);
+
+  var rotatingEls = []; // every element needing counter-rotation to stay upright
+  function addLabel(radius, angle, cls, text){
+    var p = polar(radius, angle);
+    var t = el('text', {x:p[0], y:p[1], class:cls, 'text-anchor':'middle', 'dominant-baseline':'middle'});
+    t.textContent = text;
+    t.style.transformOrigin = p[0] + 'px ' + p[1] + 'px';
+    wheelGroup.appendChild(t);
+    rotatingEls.push(t);
+    return t;
+  }
+  // Roman numeral as plain text underneath the chord — no background box.
+  function addNumeral(radius, angle){
+    return addLabel(radius, angle, 'numeral', '');
+  }
+
+  var wedgesMajor=[], wedgesMinor=[], wedgesDim=[];
+  var majorMain=[], minorMain=[], dimMain=[];
+  var majorNum=[], minorNum=[], dimNum=[];
+
+  for(var i=0;i<12;i++){
+    var angle = i*30, dividerAngle = angle + 15;
+    var majorKey = ORDER[i];
+    var minorKey = SCALES[majorKey][5] + 'm';
+    var dimKey = SCALES[majorKey][6] + '\u00b0';
+
+    wedgesMajor.push(el('path', {d: wedgePath(rHole, rMajorOuter, dividerAngle), class:'wedge'}));
+    wedgesMinor.push(el('path', {d: wedgePath(rMajorOuter, rMinorOuter, dividerAngle), class:'wedge'}));
+    wedgesDim.push(el('path', {d: wedgePath(rMinorOuter, rDimOuter, dividerAngle), class:'wedge'}));
+    wheelGroup.appendChild(wedgesMajor[i]);
+    wheelGroup.appendChild(wedgesMinor[i]);
+    wheelGroup.appendChild(wedgesDim[i]);
+
+    majorMain.push(addLabel(rMajorLbl, angle, 'lbl major', majorKey));
+    minorMain.push(addLabel(rMinorLbl, angle, 'lbl minor', minorKey));
+    dimMain.push(addLabel(rDimLbl, angle, 'lbl dim', dimKey));
+
+    majorNum.push(addNumeral(rMajorNum, angle));
+    minorNum.push(addNumeral(rMinorNum, angle));
+    dimNum.push(addNumeral(rDimNum, angle));
+  }
+
+  function clearRing(mainArr, numArr, cls){
+    for(var j=0;j<12;j++){
+      mainArr[j].setAttribute('class', cls);
+      numArr[j].setAttribute('class', 'numeral');
+      numArr[j].textContent = '';
+    }
+  }
+  function highlightSlot(idx, colorClass, numeral, mainArr, numArr, wedgeArr, baseCls){
+    mainArr[idx].setAttribute('class', baseCls + ' ' + colorClass);
+    wedgeArr[idx].setAttribute('class', 'wedge ' + colorClass);
+    numArr[idx].setAttribute('class', 'numeral show');
+    numArr[idx].textContent = numeral;
+  }
+
+  function selectKey(i){
+    i = ((i % 12) + 12) % 12;
+    selected = i;
+    var vIdx = (i+1)%12, ivIdx = (i+11)%12;
+
+    clearRing(majorMain, majorNum, 'lbl major');
+    clearRing(minorMain, minorNum, 'lbl minor');
+    clearRing(dimMain, dimNum, 'lbl dim');
+    for(var j=0;j<12;j++){
+      wedgesMajor[j].setAttribute('class','wedge'); wedgesMinor[j].setAttribute('class','wedge'); wedgesDim[j].setAttribute('class','wedge');
+    }
+
+    highlightSlot(i, 'tonic', 'I', majorMain, majorNum, wedgesMajor, 'lbl major');
+    highlightSlot(ivIdx, 'sub', 'IV', majorMain, majorNum, wedgesMajor, 'lbl major');
+    highlightSlot(vIdx, 'dom', 'V', majorMain, majorNum, wedgesMajor, 'lbl major');
+
+    highlightSlot(i, 'tonic', 'vi', minorMain, minorNum, wedgesMinor, 'lbl minor');
+    highlightSlot(ivIdx, 'sub', 'ii', minorMain, minorNum, wedgesMinor, 'lbl minor');
+    highlightSlot(vIdx, 'dom', 'iii', minorMain, minorNum, wedgesMinor, 'lbl minor');
+
+    highlightSlot(i, 'tonic', 'vii\u00b0', dimMain, dimNum, wedgesDim, 'lbl dim');
+
+    // Spin the wheel so the selected key rotates to vertical (top). Always
+    // takes the shortest path rather than snapping backward across 0/360.
+    var target = -(i*30);
+    var diff = ((target - currentRotation + 180) % 360 + 360) % 360 - 180;
+    currentRotation = currentRotation + diff;
+    applyRotation(currentRotation);
+
+    var key = ORDER[i];
+    var scale = SCALES[key];
+    document.getElementById('panelTitle').textContent = 'Key of ' + key + ' major (relative ' + scale[5] + 'm)';
+    var chipsHtml = '';
+    for(var d=0; d<7; d++){
+      var letter = scale[d] + DEGREE_QUALITY[d];
+      var roman = DEGREE_ROMAN[d];
+      chipsHtml += '<div class="chip"><span class="num">'+roman+'</span><span class="letter">'+letter+'</span><span class="extra">'+(EXT[roman]||'')+'</span></div>';
+    }
+    document.getElementById('chips').innerHTML = chipsHtml;
+  }
+
+  function applyRotation(deg){
+    wheelGroup.style.transform = 'rotate(' + deg + 'deg)';
+    var counter = 'rotate(' + (-deg) + 'deg)';
+    for(var k=0;k<rotatingEls.length;k++) rotatingEls[k].style.transform = counter;
+  }
+
+  // --- Unified pointer handling for both click-to-select and drag-to-rotate ---
+  // IMPORTANT: this deliberately does NOT use native 'click' listeners on the
+  // wedges/labels. Pointer capture (needed for smooth dragging) retargets the
+  // browser's synthesized 'click' event to the capturing element in real
+  // browsers, which silently breaks per-element click handlers. Instead every
+  // tap and every drag are resolved from raw pointer coordinates here.
+  var dragging = false, moved = false;
+  var startClientX = 0, startClientY = 0, startAngle = 0, startRotation = 0;
+
+  function pointerAngle(evt){
+    var pt = svg.createSVGPoint();
+    pt.x = evt.clientX; pt.y = evt.clientY;
+    var loc = pt.matrixTransform(svg.getScreenCTM().inverse());
+    return Math.atan2(loc.x - cx, -(loc.y - cy)) * 180 / Math.PI;
+  }
+  function angularDelta(a, b){ // shortest signed difference a-b, in [-180,180]
+    var d = (a - b) % 360;
+    if(d > 180) d -= 360;
+    if(d < -180) d += 360;
+    return d;
+  }
+
+  svg.addEventListener('pointerdown', function(evt){
+    dragging = true; moved = false;
+    startClientX = evt.clientX; startClientY = evt.clientY;
+    startAngle = pointerAngle(evt);
+    startRotation = currentRotation;
+    wheelGroup.classList.add('dragging');
+    svg.setPointerCapture(evt.pointerId);
+  });
+
+  svg.addEventListener('pointermove', function(evt){
+    if(!dragging) return;
+    var dx = evt.clientX - startClientX, dy = evt.clientY - startClientY;
+    if(!moved && (dx*dx + dy*dy) > 16) moved = true; // ~4px movement threshold before treating as a drag
+    if(moved){
+      var angleNow = pointerAngle(evt);
+      currentRotation = startRotation + angularDelta(angleNow, startAngle);
+      applyRotation(currentRotation);
+    }
+  });
+
+  function endDrag(evt){
+    if(!dragging) return;
+    dragging = false;
+    wheelGroup.classList.remove('dragging');
+    if(moved){
+      // Real drag: snap to whichever slot the wheel ended up nearest to.
+      var nearestIdx = Math.round(-currentRotation / 30);
+      selectKey(nearestIdx);
+    } else {
+      // Simple tap: figure out which slot is CURRENTLY displayed at the
+      // tapped screen angle (accounting for the wheel's current rotation).
+      var clickAngle = pointerAngle(evt);
+      var slotAngle = ((clickAngle - currentRotation) % 360 + 360) % 360;
+      var idx = Math.round(slotAngle / 30) % 12;
+      selectKey(idx);
+    }
+  }
+  svg.addEventListener('pointerup', endDrag);
+  svg.addEventListener('pointercancel', function(){ dragging = false; wheelGroup.classList.remove('dragging'); });
+
+  selectKey(0);
+<\/script>
+</body></html>`;
+  }
+
+  function openCircleOfFifths(){
+    if(circleWinRef && !circleWinRef.closed){ circleWinRef.focus(); return; }
+    const w = window.open('', 'wcbCircleOfFifths', 'width=700,height=980,resizable=yes,scrollbars=no,menubar=no,toolbar=no,location=no,status=no');
+    if(!w){ toast('Popup blocked — please allow popups for this site to use the Circle of Fifths'); return; }
+    circleWinRef = w;
+    w.document.write(buildCircleOfFifthsHTML());
+    w.document.close();
+    w.focus();
+  }
+
+  // Genuine OS-level "always on top" requires the Document Picture-in-Picture
+  // API, which the spec restricts to being REQUESTED from the top-level tab —
+  // a secondary popup window can't call it on itself. So the popup's "Pin on
+  // Top" button calls back into this function via window.opener, we open the
+  // real PiP window from here (the legitimate top-level context), then close
+  // the regular popup since the PiP window replaces it. Chrome/Edge + HTTPS
+  // only; exposed on window so the popup (a different document) can reach it.
+  async function requestCirclePiP(){
+    if(!('documentPictureInPicture' in window)){
+      toast('Pin on Top needs Chrome or Edge');
+      return;
+    }
+    try{
+      const pip = await documentPictureInPicture.requestWindow({width:520, height:760});
+      pip.document.write(buildCircleOfFifthsHTML());
+      pip.document.close();
+      if(circleWinRef && !circleWinRef.closed) circleWinRef.close();
+      circleWinRef = pip;
+      pip.addEventListener('pagehide', () => { if(circleWinRef === pip) circleWinRef = null; });
+    }catch(e){
+      toast('Could not pin on top: ' + e.message);
+    }
+  }
+  window.__wcbRequestCirclePiP = requestCirclePiP;
+
+  function openVersions(){
+    if(!currentSong || !currentSong.versions || currentSong.versions.length===0){
+      openDrawer('Version History', `<div class="mock-note">No saved versions yet for this song. Versions are captured each time you Save.</div>`);
+      return;
+    }
+    const rows = currentSong.versions.slice().reverse().map((v, i) => {
+      const idx = currentSong.versions.length - 1 - i;
+      return `<div class="version-row">
+        <div>${new Date(v.ts).toLocaleString()} <small>(key: ${v.key||'—'})</small></div>
+        <button data-restore="${idx}">Restore</button>
+      </div>`;
+    }).join('');
+    openDrawer('Version History', `<div id="versionRows">${rows}</div>`, (drawer) => {
+      drawer.querySelectorAll('[data-restore]').forEach(btn => {
+        btn.onclick = () => {
+          const v = currentSong.versions[Number(btn.dataset.restore)];
+          el('editor').value = v.content;
+          el('mKey').value = v.key || el('mKey').value;
+          onEditorInput();
+          toast('Version restored (unsaved — click Save to keep)');
+          drawer.remove();
+        };
+      });
+    });
+  }
+
+  /* ---------------- NN Mode toggle ---------------- */
+  function updateNNModeButton(){
+    const enabled = NNModeStore.isEnabled();
+    const btn = el('btnNNMode');
+    btn.textContent = enabled ? 'NN Mode: ON' : 'NN Mode: OFF';
+    btn.classList.toggle('on', enabled);
+    btn.classList.toggle('off', !enabled);
+  }
+
+  // The RN (Roman numeral) toggle only makes sense as a NN Mode sub-option —
+  // shows/hides it to match, and forces the current song back to arabic
+  // notation (converting any Roman tokens back) if NN Mode gets turned off,
+  // same pattern as the Key dropdown's NN option handling just below.
+  function syncRomanButtonForMode(){
+    const enabled = NNModeStore.isEnabled();
+    const btn = el('btnRomanNumerals');
+    btn.classList.toggle('hidden', !enabled);
+    if(!enabled && currentSong && currentSong.notationStyle === 'roman'){
+      setNotationStyle('arabic');
+    }
+  }
+
+  // Shows/hides the "Nashville Numbers (NN)" option in the Key dropdown to match
+  // the current mode. When mode is turned OFF, NN is no longer selectable —
+  // if the current song's key is NN, it's switched to a real key (C) so the
+  // Key selector immediately behaves like a conventional letter transposer.
+  function syncKeyDropdownForMode(){
+    const enabled = NNModeStore.isEnabled();
+    const select = el('mKey');
+    let nnOption = select.querySelector('option[value="NN"]');
+    if(enabled){
+      if(!nnOption){
+        nnOption = document.createElement('option');
+        nnOption.value = 'NN';
+        nnOption.textContent = 'Nashville #s (NN)';
+        select.insertBefore(nnOption, select.firstChild);
+      }
+    } else {
+      if(nnOption){
+        const wasNN = select.value === 'NN';
+        nnOption.remove();
+        if(wasNN && currentSong){
+          select.value = 'C';
+          liveKey = 'C';
+          currentSong.key = 'C';
+          originalKey = originalKey === 'NN' ? 'C' : originalKey;
+          updateCapoNote();
+          dirty = true; updateSaveStatus(); renderPreview();
+        }
+      }
+    }
+  }
+
+  function toggleNNMode(){
+    NNModeStore.setEnabled(!NNModeStore.isEnabled());
+    updateNNModeButton();
+    syncKeyDropdownForMode();
+    syncRomanButtonForMode();
+    toast(NNModeStore.isEnabled() ? 'Nashville Number mode ON' : 'Nashville Number mode OFF — Key now transposes letter chords directly');
+  }
+
+  /* ---------------- Intro popup ---------------- */
+  function maybeShowNNIntro(force=false){
+    if(!force && (!NNModeStore.isEnabled() || NNModeStore.introDismissed())) return;
+    const backdrop = el('nnIntroBackdrop');
+    backdrop.classList.remove('hidden');
+    function dismiss(){
+      NNModeStore.dismissIntro();
+      backdrop.classList.add('hidden');
+    }
+    el('nnIntroDismiss').onclick = dismiss;
+    backdrop.addEventListener('click', (e) => { if(e.target === backdrop) dismiss(); });
+  }
+
+  /* ---------------- Wiring ---------------- */
+  function wire(){
+    el('btnNew').onclick = () => { if(dirty && !confirm('Discard unsaved changes?')) return; newSong(); };
+    el('btnSave').onclick = saveCurrent;
+    el('btnImport').onclick = () => el('fileImport').click();
+    el('fileImport').onchange = (e) => { if(e.target.files[0]) handleImportFile(e.target.files[0]); e.target.value=''; };
+    el('btnExport').onclick = exportCurrent;
+    el('btnPrint').onclick = doPrint;
+    el('btnPDF').onclick = doPDF;
+    el('btnCCLI').onclick = openCCLIMock;
+    el('btnPP').onclick = openProPresenterMock;
+    el('btnCircle').onclick = openCircleOfFifths;
+    el('btnVersions').onclick = openVersions;
+    el('btnSettings').onclick = openSettings;
+    el('btnNNMode').onclick = toggleNNMode;
+    el('btnRomanNumerals').onclick = toggleNotationStyle;
+
+    ['mTitle','mArtist','mCCLI','mCopyright','mChurchCCLI','mTags'].forEach(id => {
+      el(id).addEventListener('input', () => { dirty=true; updateSaveStatus(); renderPreview(); });
+    });
+    el('mCapo').addEventListener('change', () => { dirty=true; updateSaveStatus(); renderPreview(); });
+    document.querySelectorAll('#titleAlignControls .align-btn').forEach(btn => {
+      btn.onclick = () => setTitleAlign(btn.dataset.align);
+    });
+    document.querySelectorAll('#copyrightModeControls button').forEach(btn => {
+      btn.onclick = () => setCopyrightMode(btn.dataset.mode);
+    });
+    el('mKey').addEventListener('change', handleKeySelectChange);
+
+    el('editor').addEventListener('input', onEditorInput);
+    el('editor').addEventListener('keydown', onEditorBeforeInputDebounced);
+    // Browsers select the whole word natively on the SECOND click of a
+    // double-click, before our own 'dblclick' handler ever runs — that's
+    // where the "jumps to word-start" behavior actually comes from, not
+    // anything in our own code. Suppressing it here (on the mousedown that
+    // triggers it) means the caret just stays wherever the first click of
+    // the pair landed, so the chord picker inserts at the literal click
+    // position instead of a word boundary.
+    el('editor').addEventListener('mousedown', (e) => {
+      if(e.detail > 1) e.preventDefault();
+    });
+    el('editor').addEventListener('dblclick', onEditorDoubleClick);
+    el('editor').addEventListener('contextmenu', onEditorContextMenu);
+    el('editor')._lastValue = '';
+
+    el('toggle2col').addEventListener('change', renderPreview);
+    el('searchBox').addEventListener('input', renderSongList);
+
+    // Pagination is independent of window size (A4 is a fixed physical
+    // dimension) — a resize only needs to re-scale the already-built pages,
+    // not rebuild them.
+    let resizeTimer;
+    window.addEventListener('resize', () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(scaleA4Pages, 120);
+    });
+
+    document.querySelectorAll('#structBar [data-tag]').forEach(btn => {
+      btn.onclick = () => insertStructureTag(btn.dataset.tag);
+    });
+    // Dynamic-family buttons (Verse/Pre-Chorus/Chorus/Tag/Interlude) rebuild
+    // on every keystroke (updateDynamicSectionButtons), so a per-button
+    // onclick would be lost each time — delegate on the stable group
+    // container instead, which survives the innerHTML rebuild.
+    DYNAMIC_SECTION_FAMILIES.forEach(({groupId}) => {
+      el(groupId).addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-tag]');
+        if(btn) insertStructureTag(btn.dataset.tag);
+      });
+    });
+
+    el('btnTransUp').onclick = () => transposeBySemitones(1);
+    el('btnTransDown').onclick = () => transposeBySemitones(-1);
+
+    el('btnUndo').onclick = () => {
+      if(undoStack.length===0) return;
+      redoStack.push(el('editor').value);
+      el('editor').value = undoStack.pop();
+      onEditorInput();
+    };
+    el('btnRedo').onclick = () => {
+      if(redoStack.length===0) return;
+      undoStack.push(el('editor').value);
+      el('editor').value = redoStack.pop();
+      onEditorInput();
+    };
+
+    document.addEventListener('keydown', (e) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if(mod && e.key.toLowerCase()==='s'){ e.preventDefault(); saveCurrent(); }
+      else if(mod && e.key.toLowerCase()==='n'){ e.preventDefault(); el('btnNew').click(); }
+      else if(mod && !e.shiftKey && e.key.toLowerCase()==='z'){ e.preventDefault(); el('btnUndo').click(); }
+      else if(mod && e.shiftKey && e.key.toLowerCase()==='z'){ e.preventDefault(); el('btnRedo').click(); }
+      else if(mod && e.key.toLowerCase()==='p'){ e.preventDefault(); doPrint(); }
+    });
+
+    window.addEventListener('beforeunload', (e) => {
+      if(dirty){ e.preventDefault(); e.returnValue=''; }
+    });
+  }
+
+  async function init(){
+    wire();
+    updateNNModeButton();
+    syncKeyDropdownForMode();
+    syncRomanButtonForMode();
+    ChordSpacingStore.apply(ChordSpacingStore.get());
+    await refreshLibrary();
+    if(songs.length){ selectSong(songs[0].id); }
+    else { newSong(); }
+    maybeShowNNIntro();
+  }
+
+  return { init };
+})();
+
+document.addEventListener('DOMContentLoaded', App.init);
+</script>
+
+<!-- Optional CDN libs for PDF export — loaded lazily/gracefully; app degrades if offline -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" onerror="console.warn('jsPDF CDN unavailable — PDF export disabled offline')"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" onerror="console.warn('html2canvas CDN unavailable — PDF export disabled offline')"></script>
+</body>
+</html>
