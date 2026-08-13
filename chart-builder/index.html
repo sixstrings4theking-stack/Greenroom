@@ -117,7 +117,10 @@ small{color:var(--text-faint);}
 /* Preferred-key picker (meta bar) — pure metadata, mirrors the chord-popup
    root/accidental button pattern (#chordPopup .cp-root / button.selected)
    rather than inventing new visual language. */
-.key-picker{display:flex; flex-direction:column; gap:4px;}
+/* Picker and chips split the row evenly — equal real estate for selecting
+   keys vs. seeing what's been selected. */
+.key-picker-row{display:flex; align-items:flex-start; gap:10px;}
+.key-picker{display:flex; flex-direction:column; gap:4px; flex:1 1 0;}
 .key-picker-letters{display:flex; gap:2px;}
 .key-letter-btn{flex:1; padding:3px 0; font-size:11px; line-height:1;}
 .key-letter-btn.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
@@ -128,12 +131,12 @@ small{color:var(--text-faint);}
 /* Added keys read as small, settled accent-tinted badges (vs. the neutral
    staging buttons above) so "committed" clearly reads differently from
    "still being built" — a plain grey pill looked like just another
-   unselected control. A faint top border separates "building" from
-   "built" now that both live in the same field. Chips sit in a fixed
-   7-column grid (one slot per letter) so the row's populated width is
-   consistent regardless of which/how many keys are added, rather than
-   reflowing based on each chip's text length. */
-.key-chips{display:grid; grid-template-columns:repeat(auto-fill, minmax(58px,1fr)); gap:4px; margin-top:5px; padding-top:5px; border-top:1px solid var(--border); min-height:18px;}
+   unselected control. A faint left border separates "building" from
+   "built" now that they sit side by side. Chips sit in an equal-width
+   wrapping grid so the row's populated width stays consistent regardless
+   of which/how many keys are added, rather than reflowing based on each
+   chip's text length. */
+.key-chips{display:grid; grid-template-columns:repeat(auto-fill, minmax(58px,1fr)); align-content:start; gap:4px; flex:1 1 0; min-width:110px; padding-left:10px; border-left:1px solid var(--border); min-height:18px;}
 .key-chip{font-size:10.5px; font-weight:600; padding:2px 4px 2px 6px; border-radius:4px; background:var(--accent-dim); color:var(--accent); display:flex; align-items:center; justify-content:center; gap:3px; overflow:hidden;}
 .key-chip span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .key-chip button{flex-shrink:0; background:none; border:none; color:var(--accent); opacity:.6; cursor:pointer; font-size:11px; line-height:1; padding:0;}
@@ -347,26 +350,29 @@ small{color:var(--text-faint);}
         </div>
         <div class="field" style="flex:2 1 240px;">
           <label>Preferred Key(s)</label>
-          <div class="key-picker" id="preferredKeyPicker">
-            <div class="key-picker-letters">
-              <button type="button" class="key-letter-btn" data-letter="A">A</button>
-              <button type="button" class="key-letter-btn" data-letter="B">B</button>
-              <button type="button" class="key-letter-btn" data-letter="C">C</button>
-              <button type="button" class="key-letter-btn" data-letter="D">D</button>
-              <button type="button" class="key-letter-btn" data-letter="E">E</button>
-              <button type="button" class="key-letter-btn" data-letter="F">F</button>
-              <button type="button" class="key-letter-btn" data-letter="G">G</button>
+          <div class="key-picker-row">
+            <div class="key-picker" id="preferredKeyPicker">
+              <div class="key-picker-letters">
+                <button type="button" class="key-letter-btn" data-letter="A">A</button>
+                <button type="button" class="key-letter-btn" data-letter="B">B</button>
+                <button type="button" class="key-letter-btn" data-letter="C">C</button>
+                <button type="button" class="key-letter-btn" data-letter="D">D</button>
+                <button type="button" class="key-letter-btn" data-letter="E">E</button>
+                <button type="button" class="key-letter-btn" data-letter="F">F</button>
+                <button type="button" class="key-letter-btn" data-letter="G">G</button>
+              </div>
+              <div class="key-picker-mods">
+                <button type="button" id="prefKeyMinor" class="key-mod-btn" title="Minor">m</button>
+                <button type="button" id="prefKeySharp" class="key-mod-btn" title="Sharp">♯</button>
+                <button type="button" id="prefKeyFlat" class="key-mod-btn" title="Flat">♭</button>
+                <button type="button" id="prefKeyAdd" class="key-mod-btn key-add-btn" title="Add this key to Preferred Key(s)">+ Add</button>
+              </div>
             </div>
-            <div class="key-picker-mods">
-              <button type="button" id="prefKeyMinor" class="key-mod-btn" title="Minor">m</button>
-              <button type="button" id="prefKeySharp" class="key-mod-btn" title="Sharp">♯</button>
-              <button type="button" id="prefKeyFlat" class="key-mod-btn" title="Flat">♭</button>
-              <button type="button" id="prefKeyAdd" class="key-mod-btn key-add-btn" title="Add this key to Preferred Key(s)">+ Add</button>
-            </div>
+            <div class="key-chips" id="preferredKeyChips"></div>
           </div>
-          <div class="key-chips" id="preferredKeyChips"></div>
+          <label style="margin-top:19px;">Tags (comma-sep)</label>
+          <input id="mTags" placeholder="fast, christmas, key-of-g">
         </div>
-        <div class="field" style="flex:1.8 1 210px;"><label>Tags (comma-sep)</label><input id="mTags" placeholder="fast, christmas, key-of-g"></div>
       </div>
       <div class="meta-row">
         <div class="field" style="flex:2 1 240px;">
