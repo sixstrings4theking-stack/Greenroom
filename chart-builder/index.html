@@ -872,9 +872,19 @@ const NashvilleSystem = (() => {
     return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${letterChordToNumber(chord, keyRoot)}]`);
   }
 
+  // Forward-direction, content-level counterpart to contentToNumbers: walks
+  // a whole chart's raw source text and rewrites every Nashville Number (or
+  // Roman numeral) token into letters relative to keyRoot, leaving any
+  // already-literal letter chords untouched (same as toLetterChord always
+  // has). Used to reflow the editor's displayed text when Key changes on a
+  // canonical-NN song — a display-only rewrite, never touches storage.
+  function contentToLetters(src, keyRoot, preferFlat){
+    return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${toLetterChord(chord, keyRoot, preferFlat)}]`);
+  }
+
   return {
     isNumberToken, isRomanToken, numberChordToLetter, arabicToRoman, romanToArabic, toLetterChord,
-    letterChordToNumber, contentToNumbers,
+    letterChordToNumber, contentToNumbers, contentToLetters,
   };
 })();
 
@@ -1475,13 +1485,16 @@ const App = (() => {
   }
 
   function newSong(){
-    const startKey = NNModeStore.isEnabled() ? 'NN' : 'C';
+    // New songs are always canonical Nashville Numbers now — `key` stays
+    // 'NN' permanently (see saveCurrent). NN Mode just controls what the Key
+    // selector defaults to showing for a fresh song: loadIntoForm already
+    // derives that (and originalKey/liveKey) from currentSong.key +
+    // NNModeStore the same way it does for every other song load, so there's
+    // nothing extra to set up here.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:startKey, preferredKey: startKey !== 'NN' ? startKey : null, capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKey: null, capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
       tags:[], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
-    originalKey = startKey;
-    liveKey = startKey;
     undoStack = []; redoStack = [];
     loadIntoForm();
     dirty = false;
@@ -1554,13 +1567,24 @@ const App = (() => {
     el('mCapo').value = currentSong.capo || '';
     setCopyrightMode(currentSong.copyrightMode || '©', false);
     // Guard: a song stored with key 'NN' can't be selected if NN Mode is
-    // currently OFF (that dropdown option won't exist) — fall back to C so
-    // the Key selector always lands on a real, selectable value.
+    // currently OFF (that dropdown option won't exist) — fall back to the
+    // song's remembered preferred key (or C) so the Key selector always
+    // lands on a real, selectable value.
     const wantsKey = currentSong.key || 'C';
-    const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? 'C' : wantsKey;
+    const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? (currentSong.preferredKey || 'C') : wantsKey;
     el('mKey').value = usableKey;
     el('mTags').value = (currentSong.tags || []).join(', ');
-    el('editor').value = currentSong.content || '';
+    // Canonical-NN storage but landing on a real key (either NN Mode is off,
+    // or the song was last displaying a letter key) — reflow into that
+    // key's letters. Otherwise the editor just shows content verbatim,
+    // exactly as before this song ever went through Nashville Number
+    // migration.
+    if(currentSong.key === 'NN' && usableKey !== 'NN'){
+      const preferFlat = Transposer.FLAT_KEYS.has(usableKey);
+      el('editor').value = NashvilleSystem.contentToLetters(currentSong.content || '', usableKey.replace(/m$/, ''), preferFlat);
+    } else {
+      el('editor').value = currentSong.content || '';
+    }
     setNotationStyle(currentSong.notationStyle || 'arabic', false);
     setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
     originalKey = usableKey;
@@ -1588,6 +1612,23 @@ const App = (() => {
     currentSong[field] = value;
     dirty = true;
     updateSaveStatus();
+  }
+
+  // Once a song's canonical storage is Nashville Numbers (currentSong.key
+  // === 'NN'), the editor textarea may currently be showing a reflowed
+  // letters-in-`liveKey` VIEW of that content (see handleKeySelectChange) —
+  // not the literal thing that should be persisted. This resolves whatever
+  // the editor currently shows down to what actually belongs in
+  // currentSong.content, converting back to numbers if needed. For legacy
+  // (not-yet-converted) letter-key songs this is just a passthrough — their
+  // content field always stores literally what's typed, unchanged from
+  // pre-migration behavior.
+  function resolveCanonicalContent(){
+    const raw = el('editor').value;
+    if(currentSong && currentSong.key === 'NN' && liveKey && liveKey !== 'NN'){
+      return NashvilleSystem.contentToNumbers(raw, liveKey.replace(/m$/, ''));
+    }
+    return raw;
   }
 
   function renderParseStatus(){
@@ -1678,7 +1719,7 @@ const App = (() => {
   }
   function onEditorInput(e){
     dirty = true; updateSaveStatus();
-    readFormIntoState('content', el('editor').value);
+    readFormIntoState('content', resolveCanonicalContent());
     renderPreview();
     renderParseStatus();
     updateDynamicSectionButtons();
@@ -1781,14 +1822,20 @@ const App = (() => {
     currentSong.notationStyle = currentSong.notationStyle || 'arabic';
     currentSong.churchCcli = el('mChurchCCLI').value.trim();
     currentSong.capo = el('mCapo').value;
-    currentSong.key = el('mKey').value;
+    // Once a song's canonical storage is Nashville Numbers, `key` stays 'NN'
+    // permanently — the dropdown is purely a display choice from here on
+    // and must never flip the storage format back to a letter key just
+    // because that's what's currently shown. Legacy (not-yet-converted)
+    // songs keep the original pre-migration behavior, where the dropdown
+    // value IS the storage key.
+    if(currentSong.key !== 'NN') currentSong.key = el('mKey').value;
     // Only overwrite the remembered performance key when the dropdown is
     // showing a real key. Saving while viewing raw Nashville Numbers isn't a
     // statement that the song has no preferred key — leave whatever was
     // already remembered alone in that case.
-    if(currentSong.key !== 'NN') currentSong.preferredKey = currentSong.key;
+    if(el('mKey').value !== 'NN') currentSong.preferredKey = el('mKey').value;
     currentSong.tags = el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean);
-    currentSong.content = el('editor').value;
+    currentSong.content = resolveCanonicalContent();
     currentSong.titleAlign = currentSong.titleAlign || DefaultAlignStore.get();
     currentSong.updatedAt = Date.now();
     if(!currentSong.createdAt) currentSong.createdAt = Date.now();
@@ -1825,14 +1872,37 @@ const App = (() => {
   }
 
   // Fires when the user picks a different key directly from the dropdown.
-  // For letter-chord charts this transposes the stored text (as before).
-  // For Nashville Number charts, numbers are already key-independent — no
-  // mutation happens; the Renderer just re-renders the same numbers as
-  // letter chords for the newly selected key.
+  //
+  // Canonical-NN songs (currentSong.key === 'NN'): Key is a pure display
+  // choice. The editor's shown text gets reflowed into the new key (letters,
+  // or back to raw numbers) — never currentSong.content directly; that's
+  // kept in sync on the next edit/save via resolveCanonicalContent().
+  //
+  // Legacy (not-yet-converted) letter-key charts: unchanged pre-migration
+  // behavior — picking a key transposes the stored text directly, and NN is
+  // still just a raw-numbers passthrough with no reflow either way.
   function handleKeySelectChange(){
     if(!currentSong) return;
     const newKey = el('mKey').value;
     if(newKey === liveKey){ updateCapoNote(); dirty=true; updateSaveStatus(); renderPreview(); return; }
+
+    if(currentSong.key === 'NN'){
+      if(newKey === 'NN'){
+        el('editor').value = NashvilleSystem.contentToNumbers(el('editor').value, liveKey.replace(/m$/, ''));
+      } else if(liveKey === 'NN'){
+        const preferFlat = Transposer.FLAT_KEYS.has(newKey);
+        el('editor').value = NashvilleSystem.contentToLetters(el('editor').value, newKey.replace(/m$/, ''), preferFlat);
+      } else {
+        const preferFlat = Transposer.FLAT_KEYS.has(newKey);
+        const semis = Transposer.semitoneDelta(liveKey, newKey);
+        el('editor').value = Transposer.transposeText(el('editor').value, semis, preferFlat);
+      }
+      liveKey = newKey;
+      updateCapoNote();
+      onEditorInput();
+      return;
+    }
+
     if(liveKey === 'NN' || newKey === 'NN'){
       liveKey = newKey;
       updateCapoNote(); dirty=true; updateSaveStatus(); renderPreview();
@@ -1875,6 +1945,11 @@ const App = (() => {
       note.textContent = 'Numbers shown as typed — pick a Key to preview letter chords';
     } else if(contentHasNumberChords()){
       note.textContent = `Rendering Nashville Numbers in ${key}`;
+    } else if(currentSong && currentSong.key === 'NN'){
+      // Canonical-NN song showing a reflowed letter-key view — nothing was
+      // literally transposed (there's no baseline letter key to compare
+      // against), so the transpose note below doesn't apply here.
+      note.textContent = '';
     } else if(originalKey && originalKey !== key){
       note.textContent = `Transposed from ${originalKey}`;
     } else {
@@ -2251,7 +2326,11 @@ const App = (() => {
       insertIndex,
       accidental: '',
       quality: '',
-      mode: NNModeStore.isEnabled() ? 'NN' : 'letter',
+      // Match whatever the editor is CURRENTLY displaying, not the global NN
+      // Mode toggle — for a canonical-NN song reflowed to show letters (see
+      // handleKeySelectChange), the toggle can be ON while the box is full
+      // of letters; inserting a raw number token there would look broken.
+      mode: (liveKey && liveKey !== 'NN') ? 'letter' : 'NN',
       needsLeadingSpace: isHeaderLine,
       bassEnabled: false,
       bassAccidental: '',
@@ -2392,11 +2471,31 @@ const App = (() => {
       try{
         const text = await readFileAsText(file);
         const {song} = IO.detectAndParse(file.name, text);
-        const importedKey = song.key||'C';
+        // ChordPro/OpenSong/plain-text parsers leave key:'' when no key tag
+        // is present in the file — a real, explicit tonic we can safely
+        // convert against, vs. genuinely unstated. JSON re-imports carry
+        // whatever this app already saved (a real key, 'NN', or unset).
+        const statedKey = song.key || null;
+        let importedKey, importedContent, importedPreferredKey;
+        if(statedKey && statedKey !== 'NN'){
+          // Known tonic — auto-convert to canonical Nashville Numbers, no
+          // guessing involved (a stated key is a fact, not a detection).
+          importedContent = NashvilleSystem.contentToNumbers(song.content||'', statedKey.replace(/m$/,''));
+          importedKey = 'NN';
+          importedPreferredKey = statedKey;
+        } else {
+          // No stated key, or already NN (JSON round-trip) — leave as-is.
+          // An unstated key lands as a legacy letter-key song, same as any
+          // pre-Phase-2 library song, convertible later via "Convert to
+          // Nashville Numbers" rather than guessed at now.
+          importedKey = statedKey || 'C';
+          importedContent = song.content || '';
+          importedPreferredKey = song.preferredKey != null ? song.preferredKey : (importedKey !== 'NN' ? importedKey : null);
+        }
         const toSave = {
           title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKey: song.preferredKey != null ? song.preferredKey : (importedKey !== 'NN' ? importedKey : null), capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
-          tags: song.tags||[], content: song.content||'',
+          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKey: importedPreferredKey, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
+          tags: song.tags||[], content: importedContent,
           versions: song.versions||[],
           createdAt: Date.now(), updatedAt: Date.now()
         };
@@ -3160,10 +3259,21 @@ const App = (() => {
         const wasNN = select.value === 'NN';
         nnOption.remove();
         if(wasNN && currentSong){
-          select.value = 'C';
-          liveKey = 'C';
-          currentSong.key = 'C';
-          originalKey = originalKey === 'NN' ? 'C' : originalKey;
+          // For a canonical-NN song, storage format must stay 'NN' — only
+          // reflow what's displayed, don't relabel currentSong.key (that
+          // would silently un-mark it as canonical even though its content
+          // is still literally numeric). Falls back through the song's
+          // remembered preferred key before a hardcoded default.
+          const fallbackKey = currentSong.preferredKey || 'C';
+          select.value = fallbackKey;
+          if(currentSong.key === 'NN'){
+            const preferFlat = Transposer.FLAT_KEYS.has(fallbackKey);
+            el('editor').value = NashvilleSystem.contentToLetters(el('editor').value, fallbackKey.replace(/m$/, ''), preferFlat);
+          } else {
+            currentSong.key = fallbackKey;
+          }
+          liveKey = fallbackKey;
+          originalKey = originalKey === 'NN' ? fallbackKey : originalKey;
           updateCapoNote();
           dirty = true; updateSaveStatus(); renderPreview();
         }
