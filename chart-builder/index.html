@@ -122,10 +122,13 @@ small{color:var(--text-faint);}
 .key-picker-row{display:flex; align-items:flex-start; gap:10px;}
 .key-picker{display:flex; flex-direction:column; gap:4px; flex:1 1 0;}
 .key-picker-letters{display:flex; gap:2px;}
-.key-letter-btn{flex:1; padding:3px 0; font-size:11px; line-height:1;}
+/* Height matches the Title text box (31px) exactly, rather than padding
+   that only approximates it, so the two rows read as the same control
+   size. */
+.key-letter-btn{flex:1; height:31px; padding:0; display:flex; align-items:center; justify-content:center; font-size:12px; line-height:1;}
 .key-letter-btn.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
 .key-picker-mods{display:flex; gap:3px;}
-.key-mod-btn{flex:1; padding:3px 0; font-size:11px; line-height:1;}
+.key-mod-btn{flex:1; padding:3px 0; font-size:12px; line-height:1;}
 .key-mod-btn.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
 .key-add-btn{flex:1.4; font-weight:600;}
 /* Added keys read as small, settled accent-tinted badges (vs. the neutral
@@ -165,7 +168,11 @@ small{color:var(--text-faint);}
 #splitPane{flex:1; display:flex; min-height:0;}
 #editorPane, #previewPane{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
 #editorPane{border-right:1px solid var(--border-soft);}
-.pane-head{display:flex; justify-content:space-between; align-items:center; padding:6px 12px; background:var(--bg-panel-2); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); flex-shrink:0;}
+/* Fixed min-height keeps the Editor and Live Preview banners the same
+   height even though the Editor's longer hint text wraps to two lines and
+   Live Preview's doesn't — otherwise the two pane-heads sit at different
+   heights side by side. */
+.pane-head{display:flex; justify-content:space-between; align-items:center; padding:6px 12px; min-height:42px; background:var(--bg-panel-2); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); flex-shrink:0;}
 .pane-head .hint{text-transform:none; letter-spacing:0; font-size:11px;}
 #editor{
   flex:1; resize:none; border:none; border-radius:0; background:var(--bg); color:var(--text);
@@ -370,7 +377,7 @@ small{color:var(--text-faint);}
             </div>
             <div class="key-chips" id="preferredKeyChips"></div>
           </div>
-          <label style="margin-top:19px;">Tags (comma-sep)</label>
+          <label style="margin-top:6px;">Tags (comma-sep)</label>
           <input id="mTags" placeholder="fast, christmas, key-of-g">
         </div>
       </div>
