@@ -282,6 +282,12 @@ small{color:var(--text-faint);}
 #chordPopup .cp-bass-toggle-row input{width:auto;}
 #chordPopup .cp-bass-accidental, #chordPopup .cp-bass-root{background:rgba(127,200,255,.06); border-radius:6px; padding:4px;}
 #chordPopup .cp-bass-wait{font-size:11px; color:var(--text-faint); font-style:italic; padding:8px 4px; text-align:center; background:rgba(127,200,255,.06); border-radius:6px; margin-bottom:8px;}
+/* Editing an already-inserted chord (see onEditorDoubleClick) adds these —
+   nudges the chord's position one character forward/back in the lyric line
+   without closing the popup, for when it landed on the wrong spot. Arrows
+   only, no label text, to stay out of the way of the chord controls below. */
+#chordPopup .cp-move-row{display:flex; justify-content:center; gap:18px; margin-bottom:8px;}
+#chordPopup .cp-move-row button{flex:0 0 auto; padding:3px 16px; font-size:13px; line-height:1;}
 #toast.show{opacity:1;}
 
 /* Note-annotation insertion popup (right-click in editor) */
@@ -970,9 +976,56 @@ const NashvilleSystem = (() => {
     return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${toLetterChord(chord, keyRoot, preferFlat)}]`);
   }
 
+  // Reverse of cpBuildToken (the chord-picker's own token assembler) — breaks
+  // an existing token (arabic NN, Roman numeral, or letter chord — whichever
+  // it's actually written in) back into the picker's building blocks, so
+  // double-clicking an already-inserted chord can reopen the picker
+  // pre-loaded with that chord instead of starting from a blank slate. Mode
+  // is read from the token itself, not the editor's current display mode —
+  // a token keeps editing in whatever notation it's actually written in.
+  // Returns null when the token doesn't parse as a recognizable chord (a
+  // literal annotation like "N.C." or freeform text); the caller falls back
+  // to just letting the raw text be edited via the popup's custom field.
+  function parseChordToken(token){
+    if(!token) return null;
+    const mainRaw = token.split('/')[0];
+    let mode, arabicToken;
+    if(isRomanToken(mainRaw)){ mode = 'NN'; arabicToken = romanToArabic(token); }
+    else if(isNumberToken(mainRaw)){ mode = 'NN'; arabicToken = token; }
+    else { mode = 'letter'; arabicToken = token; }
+    const parts = arabicToken.split('/');
+    if(mode === 'NN'){
+      const m = parts[0].match(TOKEN_RE);
+      if(!m) return null;
+      const accidental = normalizeAccidental(m[1]);
+      const mainRoot = m[2];
+      const quality = normalizeQuality(m[3]);
+      let bassAccidental = '', bassRoot = null;
+      if(parts[1]){
+        const bm = parts[1].match(TOKEN_RE);
+        if(bm){ bassAccidental = normalizeAccidental(bm[1]); bassRoot = bm[2]; }
+      }
+      return { mode, accidental, mainRoot, quality, bassEnabled: !!bassRoot, bassAccidental, bassRoot };
+    }
+    const m = parts[0].match(CHORD_ROOT_RE);
+    if(!m) return null;
+    const rootMatch = m[1].match(/^([A-G])(#|b)?$/);
+    if(!rootMatch) return null;
+    const mainRoot = rootMatch[1];
+    const accidental = rootMatch[2] || '';
+    const quality = m[2];
+    let bassAccidental = '', bassRoot = null;
+    if(parts[1]){
+      const bm = parts[1].match(CHORD_ROOT_RE);
+      const bRootMatch = bm && bm[1].match(/^([A-G])(#|b)?$/);
+      if(bRootMatch){ bassRoot = bRootMatch[1]; bassAccidental = bRootMatch[2] || ''; }
+    }
+    return { mode, accidental, mainRoot, quality, bassEnabled: !!bassRoot, bassAccidental, bassRoot };
+  }
+
   return {
     isNumberToken, isRomanToken, numberChordToLetter, arabicToRoman, romanToArabic, toLetterChord,
-    letterChordToNumber, contentToNumbers, contentToLetters,
+    letterChordToNumber, contentToNumbers, contentToLetters, parseChordToken,
   };
 })();
 
@@ -2341,6 +2394,12 @@ const App = (() => {
     // keeps the chord as the single authority, regardless of click order.
     const bassReady = cpState.mode !== 'NN' || !!cpState.mainRoot;
     popup.innerHTML = `
+      ${cpState.editRange ? `
+        <div class="cp-move-row">
+          <button type="button" id="cpMoveBack" title="Move this chord back one character" ${chordTokenMoveTarget(-1) ? '' : 'disabled'}>◀</button>
+          <button type="button" id="cpMoveFwd" title="Move this chord forward one character" ${chordTokenMoveTarget(1) ? '' : 'disabled'}>▶</button>
+        </div>
+      ` : ''}
       <div class="cp-preview" id="cpPreview"></div>
       <div class="cp-label">Accidental</div>
       <div class="cp-row cp-accidental">
@@ -2374,11 +2433,17 @@ const App = (() => {
         ` : `<div class="cp-bass-wait">Pick the scale degree above first</div>`}
       ` : ''}
       <div class="cp-custom">
-        <input id="cpCustom" placeholder="Custom, e.g. 5/7">
+        <input id="cpCustom" placeholder="Custom, e.g. 5/7" value="${cpState.editRange ? Renderer.escapeHtml(cpState.rawText || '') : ''}">
         <button id="cpCustomInsert">Insert</button>
       </div>
     `;
     cpUpdatePreview();
+    if(cpState.editRange){
+      const backBtn = popup.querySelector('#cpMoveBack');
+      const fwdBtn = popup.querySelector('#cpMoveFwd');
+      if(backBtn) backBtn.onclick = () => moveChordToken(-1);
+      if(fwdBtn) fwdBtn.onclick = () => moveChordToken(1);
+    }
     popup.querySelectorAll('[data-acc]').forEach(b => b.onclick = () => { cpState.accidental = b.dataset.acc; cpRender(); });
     popup.querySelectorAll('[data-q]').forEach(b => b.onclick = () => { cpState.quality = b.dataset.q; cpRender(); });
     popup.querySelectorAll('[data-root]').forEach(b => b.onclick = () => {
@@ -2446,17 +2511,29 @@ const App = (() => {
 
   function cpInsert(token){
     const ta = el('editor');
-    const idx = cpState.insertIndex;
-    const before = ta.value.slice(0, idx);
-    const after = ta.value.slice(idx);
-    // When redirected onto a header line (see onEditorDoubleClick), the
-    // insertion point may sit right against the colon with no separating
-    // space if the header was typed by hand rather than via an Insert
-    // button — add one so it doesn't read as "Intro:[G]".
-    const needsSpace = cpState.needsLeadingSpace && before.length && !/\s$/.test(before);
-    const insertion = `${needsSpace ? ' ' : ''}[${token}]`;
-    ta.value = before + insertion + after;
-    const newPos = (before + insertion).length;
+    let newPos;
+    if(cpState.editRange){
+      // Editing an already-inserted chord — replace it in place rather than
+      // inserting a second one alongside it.
+      const {start, end} = cpState.editRange;
+      const before = ta.value.slice(0, start);
+      const after = ta.value.slice(end);
+      const insertion = `[${token}]`;
+      ta.value = before + insertion + after;
+      newPos = (before + insertion).length;
+    } else {
+      const idx = cpState.insertIndex;
+      const before = ta.value.slice(0, idx);
+      const after = ta.value.slice(idx);
+      // When redirected onto a header line (see onEditorDoubleClick), the
+      // insertion point may sit right against the colon with no separating
+      // space if the header was typed by hand rather than via an Insert
+      // button — add one so it doesn't read as "Intro:[G]".
+      const needsSpace = cpState.needsLeadingSpace && before.length && !/\s$/.test(before);
+      const insertion = `${needsSpace ? ' ' : ''}[${token}]`;
+      ta.value = before + insertion + after;
+      newPos = (before + insertion).length;
+    }
     onEditorInput();
     ta.focus();
     ta.setSelectionRange(newPos, newPos);
@@ -2480,8 +2557,154 @@ const App = (() => {
     if(e.key === 'Escape') cpClose();
   }
 
+  // Positions the popup near a viewport point, then clamps it so it never
+  // runs off-screen. Shared by both the fresh-insert (click coordinates) and
+  // edit/move (computed caret coordinates) open paths.
+  function positionChordPopupAt(clientX, clientY){
+    const popup = el('chordPopup');
+    const margin = 8;
+    let left = clientX, top = clientY;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    requestAnimationFrame(() => {
+      const rect = popup.getBoundingClientRect();
+      if(rect.right > window.innerWidth - margin) left -= (rect.right - (window.innerWidth - margin));
+      if(rect.bottom > window.innerHeight - margin) top -= (rect.bottom - (window.innerHeight - margin));
+      if(left < margin) left = margin;
+      if(top < margin) top = margin;
+      popup.style.left = left + 'px';
+      popup.style.top = top + 'px';
+    });
+  }
+
+  // Pixel position of a character offset inside a <textarea> — textareas
+  // have no native API for this, so this mirrors the standard technique: an
+  // offscreen div copies the textarea's text-affecting styles, gets the same
+  // text up to `pos`, and a marker span's position within that div (plus the
+  // textarea's own on-screen offset and scroll) gives the caret's viewport
+  // coordinates. Used to re-anchor the chord popup after Forward/Back moves
+  // the chord to a new spot, since there's no click event to position from.
+  function editorCaretRect(ta, pos){
+    const style = getComputedStyle(ta);
+    const mirror = document.createElement('div');
+    ['boxSizing','width','fontFamily','fontSize','fontWeight','fontStyle','letterSpacing',
+     'lineHeight','textTransform','textIndent','paddingTop','paddingRight','paddingBottom',
+     'paddingLeft','borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth']
+      .forEach(p => mirror.style[p] = style[p]);
+    mirror.style.position = 'absolute';
+    mirror.style.visibility = 'hidden';
+    mirror.style.whiteSpace = 'pre-wrap';
+    mirror.style.wordWrap = 'break-word';
+    mirror.style.top = '0';
+    mirror.style.left = '-9999px';
+    mirror.style.height = 'auto';
+    document.body.appendChild(mirror);
+    mirror.textContent = ta.value.slice(0, pos);
+    const marker = document.createElement('span');
+    marker.textContent = ta.value.slice(pos) || '.';
+    mirror.appendChild(marker);
+    const mirrorRect = mirror.getBoundingClientRect();
+    const markerRect = marker.getBoundingClientRect();
+    document.body.removeChild(mirror);
+    const taRect = ta.getBoundingClientRect();
+    return {
+      left: taRect.left - ta.scrollLeft + (markerRect.left - mirrorRect.left),
+      top: taRect.top - ta.scrollTop + (markerRect.top - mirrorRect.top),
+      lineHeight: parseFloat(style.lineHeight) || 16
+    };
+  }
+
+  // Finds the [Chord] token (if any) that a click position sits inside —
+  // used by double-click to tell "editing an existing chord" apart from
+  // "inserting a new one." Note annotations ([*text], see the right-click
+  // popup below) aren't chords and don't count.
+  function findChordTokenAt(value, pos){
+    ChordParser.CHORD_TOKEN.lastIndex = 0;
+    let m;
+    while((m = ChordParser.CHORD_TOKEN.exec(value))){
+      const start = m.index, end = start + m[0].length;
+      if(pos >= start && pos <= end && !m[1].startsWith('*')){
+        return { start, end, chord: m[1] };
+      }
+    }
+    return null;
+  }
+
+  // Where Forward (1) / Back (-1) would land the currently-edited chord
+  // token — or null if it's already at the start/end of the line, since a
+  // chord doesn't cross line breaks. Moves one character at a time so a
+  // poorly-placed chord can be nudged onto the exact syllable it belongs on.
+  function chordTokenMoveTarget(direction){
+    if(!cpState || !cpState.editRange) return null;
+    const ta = el('editor');
+    const value = ta.value;
+    const {start, end} = cpState.editRange;
+    const lineStart = value.lastIndexOf('\n', start - 1) + 1;
+    let lineEnd = value.indexOf('\n', end);
+    if(lineEnd === -1) lineEnd = value.length;
+    const line = value.slice(lineStart, lineEnd);
+    const relStart = start - lineStart, relEnd = end - lineStart;
+    const withoutToken = line.slice(0, relStart) + line.slice(relEnd);
+    const newRelPos = relStart + direction;
+    if(newRelPos < 0 || newRelPos > withoutToken.length) return null;
+    return { lineStart, lineEnd, withoutToken, newRelPos };
+  }
+
+  function moveChordToken(direction){
+    const target = chordTokenMoveTarget(direction);
+    if(!target) return;
+    const ta = el('editor');
+    const tokenText = ta.value.slice(cpState.editRange.start, cpState.editRange.end);
+    const { lineStart, lineEnd, withoutToken, newRelPos } = target;
+    const newLine = withoutToken.slice(0, newRelPos) + tokenText + withoutToken.slice(newRelPos);
+    ta.value = ta.value.slice(0, lineStart) + newLine + ta.value.slice(lineEnd);
+    const newStart = lineStart + newRelPos;
+    const newEnd = newStart + tokenText.length;
+    cpState.editRange = { start: newStart, end: newEnd };
+    onEditorInput();
+    ta.focus();
+    ta.setSelectionRange(newStart, newEnd);
+    cpRender();
+    const caret = editorCaretRect(ta, newStart);
+    positionChordPopupAt(caret.left, caret.top + caret.lineHeight + 4);
+  }
+
+  function openChordPopupForEdit(tokenMatch, e){
+    const parsed = NashvilleSystem.parseChordToken(tokenMatch.chord);
+    cpState = {
+      insertIndex: tokenMatch.end,
+      editRange: { start: tokenMatch.start, end: tokenMatch.end },
+      rawText: tokenMatch.chord,
+      accidental: parsed ? parsed.accidental : '',
+      quality: parsed ? parsed.quality : '',
+      // A token keeps editing in whatever notation it's actually written
+      // in, not necessarily what the editor currently displays (see
+      // parseChordToken).
+      mode: parsed ? parsed.mode : ((liveKey && liveKey !== 'NN') ? 'letter' : 'NN'),
+      needsLeadingSpace: false,
+      bassEnabled: parsed ? parsed.bassEnabled : false,
+      bassAccidental: parsed ? parsed.bassAccidental : '',
+      bassRoot: parsed ? parsed.bassRoot : null,
+      mainRoot: parsed ? parsed.mainRoot : null
+    };
+    const popup = el('chordPopup');
+    popup.classList.remove('hidden');
+    cpRender();
+    positionChordPopupAt(e.clientX, e.clientY);
+    setTimeout(() => {
+      document.addEventListener('mousedown', cpOutsideClick, true);
+      document.addEventListener('keydown', cpEscClose, true);
+    }, 0);
+  }
+
   function onEditorDoubleClick(e){
     const ta = el('editor');
+    const clickPos = ta.selectionStart;
+    const existing = findChordTokenAt(ta.value, clickPos);
+    if(existing){
+      openChordPopupForEdit(existing, e);
+      return;
+    }
     // Native double-click has already selected the word under the cursor;
     // the chord normally gets inserted right before that word, matching
     // [Chord]word markup. EXCEPT on a section header line ("Intro:" or
@@ -2490,7 +2713,7 @@ const App = (() => {
     // meaningless. On a header line the chord always belongs at the END of
     // that line instead (appended after the colon, or after any chords
     // already there), regardless of which word was actually double-clicked.
-    let insertIndex = ta.selectionStart;
+    let insertIndex = clickPos;
     const value = ta.value;
     const lineStart = value.lastIndexOf('\n', insertIndex - 1) + 1;
     let lineEnd = value.indexOf('\n', insertIndex);
@@ -2502,6 +2725,7 @@ const App = (() => {
     }
     cpState = {
       insertIndex,
+      editRange: null,
       accidental: '',
       quality: '',
       // Match whatever the editor is CURRENTLY displaying, not the global NN
@@ -2518,20 +2742,7 @@ const App = (() => {
     const popup = el('chordPopup');
     popup.classList.remove('hidden');
     cpRender();
-    // Position near the click, then clamp to viewport so it never runs off-screen.
-    const margin = 8;
-    let left = e.clientX, top = e.clientY;
-    popup.style.left = left + 'px';
-    popup.style.top = top + 'px';
-    requestAnimationFrame(() => {
-      const rect = popup.getBoundingClientRect();
-      if(rect.right > window.innerWidth - margin) left -= (rect.right - (window.innerWidth - margin));
-      if(rect.bottom > window.innerHeight - margin) top -= (rect.bottom - (window.innerHeight - margin));
-      if(left < margin) left = margin;
-      if(top < margin) top = margin;
-      popup.style.left = left + 'px';
-      popup.style.top = top + 'px';
-    });
+    positionChordPopupAt(e.clientX, e.clientY);
     setTimeout(() => {
       document.addEventListener('mousedown', cpOutsideClick, true);
       document.addEventListener('keydown', cpEscClose, true);
