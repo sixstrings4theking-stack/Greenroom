@@ -99,6 +99,21 @@ small{color:var(--text-faint);}
   display:flex; flex-direction:column; gap:10px;
   padding:10px 12px; background:var(--bg-panel-2); border-bottom:1px solid var(--border-soft); flex-shrink:0;
 }
+/* Collapse toggle for smaller screens / a chord-focused workflow — hides
+   everything but Title (so you still know what you're editing) while
+   charting. A thin full-width handle sitting between the metadata bar and
+   Insert Section, rather than a button inside the collapsible content
+   itself, so it stays put (doesn't jump position) whichever state it's in. */
+#btnToggleMeta{
+  display:flex; justify-content:center; align-items:center; gap:6px;
+  width:100%; padding:2px 0; margin:0; border:none; border-radius:0;
+  background:var(--bg-panel); flex-shrink:0;
+}
+#btnToggleMeta:hover{background:var(--bg-input);}
+#btnToggleMeta span{font-size:8px; line-height:1; color:var(--text-faint); transition:transform .15s ease;}
+#btnToggleMeta:hover span{color:var(--text-dim);}
+#btnToggleMeta.collapsed span{transform:rotate(180deg);}
+#metaBar.collapsed .meta-collapsible{display:none;}
 .meta-row{display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 14px;}
 #metaBar .field{flex:1 1 120px; min-width:110px;}
 #metaBar .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:3px;}
@@ -347,15 +362,17 @@ small{color:var(--text-faint);}
         <div class="field" style="flex:1.6 1 220px;">
           <label>Title</label>
           <input id="mTitle" placeholder="Song Title">
-          <div class="align-controls" id="titleAlignControls">
+          <div class="align-controls meta-collapsible" id="titleAlignControls">
             <button type="button" class="icon align-btn" data-align="left" title="Align left">⟸</button>
             <button type="button" class="icon align-btn" data-align="center" title="Align center">≡</button>
             <button type="button" class="icon align-btn" data-align="right" title="Align right">⟹</button>
           </div>
-          <label style="margin-top:6px;">Artist</label>
-          <input id="mArtist" placeholder="Artist / Author">
+          <div class="meta-collapsible" style="margin-top:6px;">
+            <label>Artist</label>
+            <input id="mArtist" placeholder="Artist / Author">
+          </div>
         </div>
-        <div class="field" style="flex:2 1 240px;">
+        <div class="field meta-collapsible" style="flex:2 1 240px;">
           <label>Preferred Key(s)</label>
           <div class="key-picker-row">
             <div class="key-picker" id="preferredKeyPicker">
@@ -381,7 +398,7 @@ small{color:var(--text-faint);}
           <input id="mTags" placeholder="fast, christmas, key-of-g">
         </div>
       </div>
-      <div class="meta-row">
+      <div class="meta-row meta-collapsible">
         <div class="field" style="flex:2 1 240px;">
           <label>Copyright</label>
           <div class="copyright-input-row">
@@ -397,6 +414,7 @@ small{color:var(--text-faint);}
         <div class="field"><label>Church CCLI #</label><input id="mChurchCCLI" placeholder="License # (optional)"></div>
       </div>
     </div>
+    <button type="button" id="btnToggleMeta" title="Hide song metadata (Title stays visible)"><span>▲</span><span>▲</span><span>▲</span></button>
 
     <div id="structBar">
       <span class="lbl">Insert Section:</span>
@@ -573,6 +591,18 @@ const FontScaleStore = (() => {
   function set(pct){ localStorage.setItem(KEY, String(pct)); }
   function apply(pct){ document.documentElement.style.setProperty('--chart-font-scale', pct / 100); }
   return { get, set, apply, MIN_PCT, MAX_PCT, DEFAULT_PCT };
+})();
+
+// Persisted collapse state for the metadata bar — lets a chord-focused
+// workflow on a smaller screen hide everything but Title (Artist,
+// Preferred Key(s), Tags, Copyright, CCLI) to give the Editor/Live Preview
+// split more room. Manual toggle only; remembered across reloads like the
+// other display preferences above.
+const MetaBarCollapseStore = (() => {
+  const KEY = 'wcb_metabar_collapsed';
+  function get(){ return localStorage.getItem(KEY) === 'true'; }
+  function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
+  return { get, set };
 })();
 
 /* ---------------------------------------------------------------------------
@@ -3477,6 +3507,17 @@ const App = (() => {
     toast(NNModeStore.isEnabled() ? 'Nashville Number mode ON' : 'Nashville Number mode OFF — Key now transposes letter chords directly');
   }
 
+  function applyMetaBarCollapse(collapsed){
+    el('metaBar').classList.toggle('collapsed', collapsed);
+    el('btnToggleMeta').classList.toggle('collapsed', collapsed);
+    el('btnToggleMeta').title = collapsed ? 'Show song metadata (Artist, Preferred Key(s), Tags, Copyright, CCLI)' : 'Hide song metadata (Title stays visible)';
+  }
+  function toggleMetaBarCollapse(){
+    const collapsed = !MetaBarCollapseStore.get();
+    MetaBarCollapseStore.set(collapsed);
+    applyMetaBarCollapse(collapsed);
+  }
+
   /* ---------------- Intro popup ---------------- */
   function maybeShowNNIntro(force=false){
     if(!force && (!NNModeStore.isEnabled() || NNModeStore.introDismissed())) return;
@@ -3538,6 +3579,7 @@ const App = (() => {
     el('btnVersions').onclick = openVersions;
     el('btnSettings').onclick = openSettings;
     el('btnNNMode').onclick = toggleNNMode;
+    el('btnToggleMeta').onclick = toggleMetaBarCollapse;
     el('btnRomanNumerals').onclick = toggleNotationStyle;
 
     ['mTitle','mArtist','mCCLI','mCopyright','mChurchCCLI','mTags'].forEach(id => {
@@ -3653,6 +3695,7 @@ const App = (() => {
     syncRomanButtonForMode();
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
+    applyMetaBarCollapse(MetaBarCollapseStore.get());
     await refreshLibrary();
     if(songs.length){ selectSong(songs[0].id); }
     else { newSong(); }
