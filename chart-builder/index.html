@@ -134,7 +134,10 @@ small{color:var(--text-faint);}
    rather than inventing new visual language. */
 /* Picker and chips split the row evenly — equal real estate for selecting
    keys vs. seeing what's been selected. */
-.key-picker-row{display:flex; align-items:flex-start; gap:10px;}
+/* align-items:stretch (not flex-start) so the divider between the picker
+   and the chips runs the full row height instead of stopping wherever the
+   shorter of the two columns happens to end. */
+.key-picker-row{display:flex; align-items:stretch; gap:10px;}
 .key-picker{display:flex; flex-direction:column; gap:4px; flex:1 1 0;}
 .key-picker-letters{display:flex; gap:2px;}
 /* Height matches the Title text box (31px) exactly, rather than padding
@@ -439,7 +442,6 @@ small{color:var(--text-faint);}
           </select>
           <button id="btnTransUp" class="icon" title="Transpose up">+</button>
           <small id="origKeyNote"></small>
-          <button type="button" id="btnConvertToNN" class="ghost hidden" title="Rewrite this chart's stored chords as Nashville Numbers relative to the current Display Key. The current Display Key becomes the song's remembered preferred key; Display Key then becomes a pure display choice, same as it already is for NN charts.">→ Convert to NN</button>
         </div>
         <button type="button" id="btnRomanNumerals" class="hidden" title="Display and enter chords as Roman numerals (I, ii, IV...) instead of Nashville Numbers">RN</button>
         <div class="capo-control">
@@ -1801,7 +1803,6 @@ const App = (() => {
     liveKey = usableKey;
     el('origKeyNote').textContent = '';
     updateTransposeButtonsState();
-    updateConvertToNNButton();
     stagedKey = {letter:null, accidental:'', minor:false};
     renderPreferredKeyPicker();
     renderPreferredKeyChips();
@@ -2154,7 +2155,7 @@ const App = (() => {
     const note = el('origKeyNote');
     const key = el('mDisplayKey').value;
     if(key === 'NN'){
-      note.textContent = 'Numbers shown as typed — pick a Key to preview letter chords';
+      note.textContent = '';
     } else if(contentHasNumberChords()){
       note.textContent = `Rendering Nashville Numbers in ${key}`;
     } else if(currentSong && currentSong.key === 'NN'){
@@ -2168,45 +2169,6 @@ const App = (() => {
       note.textContent = '';
     }
     updateTransposeButtonsState();
-    updateConvertToNNButton();
-  }
-
-  // Only offer the conversion when there's a real letter key selected —
-  // NN charts have nothing left to convert. Content that happens to already
-  // contain number tokens under a letter Key (an unusual mixed state) still
-  // converts safely: letterChordToNumber passes any token it doesn't
-  // recognize as a letter chord straight through unchanged.
-  function updateConvertToNNButton(){
-    const btn = el('btnConvertToNN');
-    if(!btn) return;
-    btn.classList.toggle('hidden', !currentSong || el('mDisplayKey').value === 'NN');
-  }
-
-  // Rewrites the current chart's stored chords from the selected letter key
-  // into canonical Nashville Numbers, and adds that letter key to the song's
-  // preferredKeys so "where we like to sing this" survives the conversion
-  // (see withPreferredKeysFallback) without clobbering any other keys
-  // already remembered. Explicit and user-triggered — pushes an undo entry
-  // first, so Ctrl+Z reverts it like any other edit.
-  function convertCurrentSongToNN(){
-    if(!currentSong) return;
-    const fromKey = el('mDisplayKey').value;
-    if(!fromKey || fromKey === 'NN') return;
-    pushUndo(el('editor').value);
-    const tonic = fromKey.replace(/m$/, '');
-    el('editor').value = NashvilleSystem.contentToNumbers(el('editor').value, tonic);
-    currentSong.preferredKeys = currentSong.preferredKeys || [];
-    if(!currentSong.preferredKeys.includes(fromKey)) currentSong.preferredKeys.push(fromKey);
-    currentSong.key = 'NN';
-    originalKey = 'NN';
-    liveKey = 'NN';
-    el('mDisplayKey').value = 'NN';
-    updateCapoNote();
-    onEditorInput();
-    renderPreview();
-    renderPreferredKeyPicker();
-    renderPreferredKeyChips();
-    toast(`Converted to Nashville Numbers — remembered as key ${fromKey}`);
   }
 
   function updateTransposeButtonsState(){
@@ -3646,7 +3608,6 @@ const App = (() => {
 
     el('btnTransUp').onclick = () => transposeBySemitones(1);
     el('btnTransDown').onclick = () => transposeBySemitones(-1);
-    el('btnConvertToNN').onclick = convertCurrentSongToNN;
 
     document.querySelectorAll('#preferredKeyPicker .key-letter-btn').forEach(btn => {
       btn.onclick = () => keyPickerLetterClick(btn.dataset.letter);
