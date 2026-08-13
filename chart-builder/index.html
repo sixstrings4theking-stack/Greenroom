@@ -100,7 +100,6 @@ small{color:var(--text-faint);}
   padding:10px 12px; background:var(--bg-panel-2); border-bottom:1px solid var(--border-soft); flex-shrink:0;
 }
 .meta-row{display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 14px;}
-#metaBar .field.transpose-field #origKeyNote{display:block; text-align:center; font-size:11px; color:var(--text-faint); margin-top:2px; min-height:14px;}
 #metaBar .field{flex:1 1 120px; min-width:110px;}
 #metaBar .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:3px;}
 #metaBar input, #metaBar select{width:100%;}
@@ -115,9 +114,16 @@ small{color:var(--text-faint);}
 #copyrightModeControls button{padding:4px 8px; font-size:11px; line-height:1;}
 #copyrightModeControls button.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
 #copyrightModeControls .copyright-symbol-btn{font-size:19px; font-weight:700; padding:2px 9px;}
-#metaBar .field.transpose-field{display:flex; flex-direction:column;}
-.transpose-controls{display:flex; align-items:center; gap:4px;}
-.transpose-controls button{padding:5px 9px;}
+/* Preferred-key picker (meta bar) — pure metadata, mirrors the chord-popup
+   root/accidental button pattern (#chordPopup .cp-root / button.selected)
+   rather than inventing new visual language. */
+.key-picker{display:flex; flex-direction:column; gap:5px;}
+.key-picker-letters{display:flex; gap:3px;}
+.key-letter-btn{flex:1; padding:5px 0; font-size:12px; line-height:1;}
+.key-letter-btn.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+.key-picker-mods{display:flex; gap:4px;}
+.key-mod-btn{flex:1; padding:4px 0; font-size:12px; line-height:1;}
+.key-mod-btn.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
 
 /* Structure toolbar */
 #structBar{
@@ -129,7 +135,10 @@ small{color:var(--text-faint);}
 .dynamic-group{display:inline-flex; gap:4px; margin-right:6px;}
 .dynamic-group button.next-num{border-color:var(--accent-dim); color:var(--accent);}
 .dynamic-group button.next-num:hover{border-color:var(--accent);}
-.right-controls{display:flex; align-items:center; gap:8px; margin-left:auto; flex-shrink:0;}
+.right-controls{display:flex; align-items:center; gap:8px; margin-left:auto; flex-shrink:0; flex-wrap:wrap;}
+.display-key-control{display:flex; align-items:center; gap:4px; flex-shrink:0;}
+.display-key-control select{padding:5px 8px; font-size:12px; width:auto;}
+.display-key-control #origKeyNote{font-size:11px; color:var(--text-faint); white-space:nowrap; margin:0 2px;}
 .capo-control{display:flex; align-items:center; gap:6px; flex-shrink:0;}
 #btnRomanNumerals{font-size:12px; padding:5px 10px; border-radius:14px;}
 #btnRomanNumerals.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
@@ -321,21 +330,24 @@ small{color:var(--text-faint);}
           </div>
         </div>
         <div class="field" style="flex:1.3 1 150px;"><label>Artist</label><input id="mArtist" placeholder="Artist / Author"></div>
-        <div class="field transpose-field">
-          <label>Key</label>
-          <div class="transpose-controls">
-            <button id="btnTransDown" class="icon" title="Transpose down">−</button>
-            <select id="mKey">
-              <option value="NN">Nashville #s (NN)</option>
-              <option>C</option><option>C#</option><option>Db</option><option>D</option><option>Eb</option>
-              <option>E</option><option>F</option><option>F#</option><option>Gb</option><option>G</option>
-              <option>Ab</option><option>A</option><option>Bb</option><option>B</option>
-              <option>Am</option><option>Bm</option><option>Cm</option><option>Dm</option><option>Em</option><option>Fm</option><option>Gm</option>
-            </select>
-            <button id="btnTransUp" class="icon" title="Transpose up">+</button>
+        <div class="field">
+          <label>Key <small style="text-transform:none; letter-spacing:0; color:var(--text-faint);">(remembered — for rendering, use Display Key)</small></label>
+          <div class="key-picker" id="preferredKeyPicker">
+            <div class="key-picker-letters">
+              <button type="button" class="key-letter-btn" data-letter="A">A</button>
+              <button type="button" class="key-letter-btn" data-letter="B">B</button>
+              <button type="button" class="key-letter-btn" data-letter="C">C</button>
+              <button type="button" class="key-letter-btn" data-letter="D">D</button>
+              <button type="button" class="key-letter-btn" data-letter="E">E</button>
+              <button type="button" class="key-letter-btn" data-letter="F">F</button>
+              <button type="button" class="key-letter-btn" data-letter="G">G</button>
+            </div>
+            <div class="key-picker-mods">
+              <button type="button" id="prefKeyMinor" class="key-mod-btn" title="Minor">m</button>
+              <button type="button" id="prefKeySharp" class="key-mod-btn" title="Sharp">♯</button>
+              <button type="button" id="prefKeyFlat" class="key-mod-btn" title="Flat">♭</button>
+            </div>
           </div>
-          <small id="origKeyNote"></small>
-          <button type="button" id="btnConvertToNN" class="ghost hidden" title="Rewrite this chart's stored chords as Nashville Numbers relative to the current Key. The current Key becomes the song's remembered preferred key; Key then becomes a pure display choice, same as it already is for NN charts." style="font-size:10px; padding:3px 6px; margin-top:4px;">→ Convert to Nashville Numbers</button>
         </div>
         <div class="field" style="flex:1.4 1 170px;"><label>Tags (comma-sep)</label><input id="mTags" placeholder="fast, christmas, key-of-g"></div>
       </div>
@@ -367,6 +379,20 @@ small{color:var(--text-faint);}
       <span id="interludeButtonGroup" class="dynamic-group"></span>
       <button data-tag="Outro">Outro</button>
       <div class="right-controls">
+        <div class="display-key-control">
+          <label class="lbl" style="margin:0;">Display Key:</label>
+          <button id="btnTransDown" class="icon" title="Transpose down">−</button>
+          <select id="mDisplayKey">
+            <option value="NN">Nashville #s (NN)</option>
+            <option>C</option><option>C#</option><option>Db</option><option>D</option><option>Eb</option>
+            <option>E</option><option>F</option><option>F#</option><option>Gb</option><option>G</option>
+            <option>Ab</option><option>A</option><option>Bb</option><option>B</option>
+            <option>Am</option><option>Bm</option><option>Cm</option><option>Dm</option><option>Em</option><option>Fm</option><option>Gm</option>
+          </select>
+          <button id="btnTransUp" class="icon" title="Transpose up">+</button>
+          <small id="origKeyNote"></small>
+          <button type="button" id="btnConvertToNN" class="ghost hidden" title="Rewrite this chart's stored chords as Nashville Numbers relative to the current Display Key. The current Display Key becomes the song's remembered preferred key; Display Key then becomes a pure display choice, same as it already is for NN charts.">→ Convert to NN</button>
+        </div>
         <button type="button" id="btnRomanNumerals" class="hidden" title="Display and enter chords as Roman numerals (I, ii, IV...) instead of Nashville Numbers">RN</button>
         <div class="capo-control">
           <label class="lbl" style="margin:0;">Capo:</label>
@@ -1484,6 +1510,79 @@ const App = (() => {
     return {...song, preferredKey: (song.key && song.key !== 'NN') ? song.key : null};
   }
 
+  /* ---------------------------------------------------------------------------
+     PREFERRED-KEY PICKER (meta bar) — a pure metadata editor for
+     currentSong.preferredKey. Never touches content, liveKey, or the
+     editor/preview; that's Display Key's job (see handleKeySelectChange).
+  --------------------------------------------------------------------------- */
+  const KEY_LETTERS = ['A','B','C','D','E','F','G'];
+  // No meaningful accidental spelling here — mirrors the piano's missing
+  // black keys between B-C and E-F (B#/E# just rename C/F; Cb/Fb just
+  // rename B/E), so these combinations are disabled rather than offered.
+  const SHARP_DISABLED_LETTERS = new Set(['B','E']);
+  const FLAT_DISABLED_LETTERS = new Set(['C','F']);
+
+  function parsePreferredKey(str){
+    if(!str) return {letter:null, accidental:'', minor:false};
+    const m = str.match(/^([A-G])(#|b)?(m)?$/);
+    if(!m) return {letter:null, accidental:'', minor:false};
+    return {letter:m[1], accidental:m[2]||'', minor:!!m[3]};
+  }
+  function buildPreferredKey({letter, accidental, minor}){
+    if(!letter) return null;
+    return letter + accidental + (minor ? 'm' : '');
+  }
+
+  function renderPreferredKeyPicker(){
+    const state = parsePreferredKey(currentSong ? currentSong.preferredKey : null);
+    document.querySelectorAll('#preferredKeyPicker .key-letter-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.letter === state.letter);
+    });
+    const sharpBtn = el('prefKeySharp'), flatBtn = el('prefKeyFlat'), minorBtn = el('prefKeyMinor');
+    sharpBtn.disabled = !!(state.letter && SHARP_DISABLED_LETTERS.has(state.letter));
+    flatBtn.disabled = !!(state.letter && FLAT_DISABLED_LETTERS.has(state.letter));
+    sharpBtn.classList.toggle('selected', state.accidental === '#');
+    flatBtn.classList.toggle('selected', state.accidental === 'b');
+    minorBtn.classList.toggle('selected', state.minor);
+  }
+
+  function setPreferredKeyFromPicker(next){
+    if(!currentSong) return;
+    currentSong.preferredKey = buildPreferredKey(next);
+    dirty = true; updateSaveStatus();
+    renderPreferredKeyPicker();
+  }
+
+  // Clicking the already-active letter clears the whole picker back to "no
+  // preferred key" — same toggle-off convention as the tag filter chips.
+  function keyPickerLetterClick(letter){
+    if(!currentSong) return;
+    const state = parsePreferredKey(currentSong.preferredKey);
+    if(state.letter === letter){
+      setPreferredKeyFromPicker({letter:null, accidental:'', minor:false});
+      return;
+    }
+    let accidental = state.accidental;
+    if(accidental === '#' && SHARP_DISABLED_LETTERS.has(letter)) accidental = '';
+    if(accidental === 'b' && FLAT_DISABLED_LETTERS.has(letter)) accidental = '';
+    setPreferredKeyFromPicker({letter, accidental, minor: state.minor});
+  }
+  function keyPickerMinorClick(){
+    if(!currentSong) return;
+    const state = parsePreferredKey(currentSong.preferredKey);
+    if(!state.letter) return; // nothing to toggle without a root letter picked
+    setPreferredKeyFromPicker({letter:state.letter, accidental:state.accidental, minor:!state.minor});
+  }
+  function keyPickerAccidentalClick(accidental){
+    if(!currentSong) return;
+    const state = parsePreferredKey(currentSong.preferredKey);
+    if(!state.letter) return;
+    if(accidental === '#' && SHARP_DISABLED_LETTERS.has(state.letter)) return;
+    if(accidental === 'b' && FLAT_DISABLED_LETTERS.has(state.letter)) return;
+    const nextAccidental = state.accidental === accidental ? '' : accidental; // toggle off if already active
+    setPreferredKeyFromPicker({letter:state.letter, accidental:nextAccidental, minor:state.minor});
+  }
+
   function newSong(){
     // New songs are always canonical Nashville Numbers now — `key` stays
     // 'NN' permanently (see saveCurrent). NN Mode just controls what the Key
@@ -1572,7 +1671,7 @@ const App = (() => {
     // lands on a real, selectable value.
     const wantsKey = currentSong.key || 'C';
     const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? (currentSong.preferredKey || 'C') : wantsKey;
-    el('mKey').value = usableKey;
+    el('mDisplayKey').value = usableKey;
     el('mTags').value = (currentSong.tags || []).join(', ');
     // Canonical-NN storage but landing on a real key (either NN Mode is off,
     // or the song was last displaying a letter key) — reflow into that
@@ -1592,6 +1691,7 @@ const App = (() => {
     el('origKeyNote').textContent = '';
     updateTransposeButtonsState();
     updateConvertToNNButton();
+    renderPreferredKeyPicker();
     renderPreview();
     renderParseStatus();
     updateDynamicSectionButtons();
@@ -1828,12 +1928,11 @@ const App = (() => {
     // because that's what's currently shown. Legacy (not-yet-converted)
     // songs keep the original pre-migration behavior, where the dropdown
     // value IS the storage key.
-    if(currentSong.key !== 'NN') currentSong.key = el('mKey').value;
-    // Only overwrite the remembered performance key when the dropdown is
-    // showing a real key. Saving while viewing raw Nashville Numbers isn't a
-    // statement that the song has no preferred key — leave whatever was
-    // already remembered alone in that case.
-    if(el('mKey').value !== 'NN') currentSong.preferredKey = el('mKey').value;
+    if(currentSong.key !== 'NN') currentSong.key = el('mDisplayKey').value;
+    // preferredKey is no longer derived from Display Key on save — the
+    // meta-bar picker (see keyPickerLetterClick etc.) is the one explicit
+    // place that sets it now, so a manual pick there survives regardless of
+    // whatever key happens to be showing when Save is hit.
     currentSong.tags = el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean);
     currentSong.content = resolveCanonicalContent();
     currentSong.titleAlign = currentSong.titleAlign || DefaultAlignStore.get();
@@ -1853,7 +1952,7 @@ const App = (() => {
   /* ---------------- Transposition ---------------- */
   function transposeBySemitones(semis){
     if(!currentSong) return;
-    const fromKey = liveKey || el('mKey').value;
+    const fromKey = liveKey || el('mDisplayKey').value;
     if(fromKey === 'NN'){
       toast('Nashville Numbers are key-relative — no transposition needed');
       return;
@@ -1865,8 +1964,8 @@ const App = (() => {
     const isMinor = fromKey.endsWith('m');
     const scale = preferFlat ? Transposer.FLAT_SCALE : Transposer.SHARP_SCALE;
     const newKey = scale[toKeyIdx] + (isMinor?'m':'');
-    if([...el('mKey').options].some(o=>o.value===newKey)) el('mKey').value = newKey;
-    liveKey = el('mKey').value;
+    if([...el('mDisplayKey').options].some(o=>o.value===newKey)) el('mDisplayKey').value = newKey;
+    liveKey = el('mDisplayKey').value;
     updateCapoNote();
     onEditorInput();
   }
@@ -1883,7 +1982,7 @@ const App = (() => {
   // still just a raw-numbers passthrough with no reflow either way.
   function handleKeySelectChange(){
     if(!currentSong) return;
-    const newKey = el('mKey').value;
+    const newKey = el('mDisplayKey').value;
     if(newKey === liveKey){ updateCapoNote(); dirty=true; updateSaveStatus(); renderPreview(); return; }
 
     if(currentSong.key === 'NN'){
@@ -1918,7 +2017,7 @@ const App = (() => {
 
   function transposeToSelectedKey(){
     if(!currentSong) return;
-    const semis = Transposer.semitoneDelta(originalKeyForCapo(), el('mKey').value);
+    const semis = Transposer.semitoneDelta(originalKeyForCapo(), el('mDisplayKey').value);
     // We only auto-transpose content when the user picks a new key directly;
     // content is kept in sync by tracking the last-applied key.
   }
@@ -1940,7 +2039,7 @@ const App = (() => {
 
   function updateCapoNote(){
     const note = el('origKeyNote');
-    const key = el('mKey').value;
+    const key = el('mDisplayKey').value;
     if(key === 'NN'){
       note.textContent = 'Numbers shown as typed — pick a Key to preview letter chords';
     } else if(contentHasNumberChords()){
@@ -1967,7 +2066,7 @@ const App = (() => {
   function updateConvertToNNButton(){
     const btn = el('btnConvertToNN');
     if(!btn) return;
-    btn.classList.toggle('hidden', !currentSong || el('mKey').value === 'NN');
+    btn.classList.toggle('hidden', !currentSong || el('mDisplayKey').value === 'NN');
   }
 
   // Rewrites the current chart's stored chords from the selected letter key
@@ -1977,7 +2076,7 @@ const App = (() => {
   // pushes an undo entry first, so Ctrl+Z reverts it like any other edit.
   function convertCurrentSongToNN(){
     if(!currentSong) return;
-    const fromKey = el('mKey').value;
+    const fromKey = el('mDisplayKey').value;
     if(!fromKey || fromKey === 'NN') return;
     pushUndo(el('editor').value);
     const tonic = fromKey.replace(/m$/, '');
@@ -1986,15 +2085,16 @@ const App = (() => {
     currentSong.key = 'NN';
     originalKey = 'NN';
     liveKey = 'NN';
-    el('mKey').value = 'NN';
+    el('mDisplayKey').value = 'NN';
     updateCapoNote();
     onEditorInput();
     renderPreview();
+    renderPreferredKeyPicker();
     toast(`Converted to Nashville Numbers — remembered as key ${fromKey}`);
   }
 
   function updateTransposeButtonsState(){
-    const isNN = el('mKey').value === 'NN';
+    const isNN = el('mDisplayKey').value === 'NN';
     el('btnTransUp').disabled = isNN;
     el('btnTransDown').disabled = isNN;
     el('btnTransUp').title = isNN ? 'Not applicable — Nashville Numbers are key-relative' : 'Transpose up';
@@ -2524,7 +2624,7 @@ const App = (() => {
   function currentSongSnapshot(){
     return {
       title: el('mTitle').value, artist: el('mArtist').value, ccli: el('mCCLI').value,
-      copyright: el('mCopyright').value, copyrightMode: (currentSong && currentSong.copyrightMode) || '©', churchCcli: el('mChurchCCLI').value, key: el('mKey').value,
+      copyright: el('mCopyright').value, copyrightMode: (currentSong && currentSong.copyrightMode) || '©', churchCcli: el('mChurchCCLI').value, key: el('mDisplayKey').value,
       notationStyle: (currentSong && currentSong.notationStyle) || 'arabic',
       capo: el('mCapo').value,
       titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
@@ -3208,7 +3308,7 @@ const App = (() => {
         btn.onclick = () => {
           const v = currentSong.versions[Number(btn.dataset.restore)];
           el('editor').value = v.content;
-          el('mKey').value = v.key || el('mKey').value;
+          el('mDisplayKey').value = v.key || el('mDisplayKey').value;
           onEditorInput();
           toast('Version restored (unsaved — click Save to keep)');
           drawer.remove();
@@ -3245,7 +3345,7 @@ const App = (() => {
   // Key selector immediately behaves like a conventional letter transposer.
   function syncKeyDropdownForMode(){
     const enabled = NNModeStore.isEnabled();
-    const select = el('mKey');
+    const select = el('mDisplayKey');
     let nnOption = select.querySelector('option[value="NN"]');
     if(enabled){
       if(!nnOption){
@@ -3362,7 +3462,7 @@ const App = (() => {
     document.querySelectorAll('#copyrightModeControls button').forEach(btn => {
       btn.onclick = () => setCopyrightMode(btn.dataset.mode);
     });
-    el('mKey').addEventListener('change', handleKeySelectChange);
+    el('mDisplayKey').addEventListener('change', handleKeySelectChange);
 
     el('editor').addEventListener('input', onEditorInput);
     el('editor').addEventListener('keydown', onEditorBeforeInputDebounced);
@@ -3417,6 +3517,13 @@ const App = (() => {
     el('btnTransUp').onclick = () => transposeBySemitones(1);
     el('btnTransDown').onclick = () => transposeBySemitones(-1);
     el('btnConvertToNN').onclick = convertCurrentSongToNN;
+
+    document.querySelectorAll('#preferredKeyPicker .key-letter-btn').forEach(btn => {
+      btn.onclick = () => keyPickerLetterClick(btn.dataset.letter);
+    });
+    el('prefKeyMinor').onclick = keyPickerMinorClick;
+    el('prefKeySharp').onclick = () => keyPickerAccidentalClick('#');
+    el('prefKeyFlat').onclick = () => keyPickerAccidentalClick('b');
 
     el('btnUndo').onclick = () => {
       if(undoStack.length===0) return;
