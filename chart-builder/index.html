@@ -17,6 +17,7 @@
   --radius:8px; --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
   --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
   --chord-lyric-gap:2px;
+  --chart-font-scale:1;
 }
 *{box-sizing:border-box;}
 html,body{height:100%;}
@@ -158,24 +159,39 @@ small{color:var(--text-faint);}
   overflow:hidden; transform-origin:top left;
 }
 .a4-page.cols-2{column-count:2; column-gap:32px;}
+/* Print/PDF output (.cs-page, built by renderPrintArea/doPDF) previously had
+   no width of its own outside @media print. Since it's captured by
+   html2canvas while sitting inside a position:fixed #printArea with no width,
+   it shrank to fit its longest pre-formatted line instead of the real A4
+   content width — a different, narrower box than what Paginator measured
+   sections against (7.77in = A4 8.27in minus the 0.25in side margins) and
+   what the live preview renders at. That mismatch is what made PDF/print
+   output scale and paginate differently from the live preview. Matching the
+   same 7.77in content width here keeps every stage consistent.  */
+.cs-page{width:7.77in; background:#fff; box-sizing:border-box;}
 /* NOTE: title/artist/meta were previously scoped to #chordSheet only, which
    meant the actual print/PDF output (rendered into .cs-page, a different
    container) never received this styling at all. Made global so preview and
    print are visually identical, not just proportionally similar. */
-.cs-title{font-size:20px; font-weight:700; margin:0 0 2px;}
+/* Title/artist/copyright/permission/roadmap/meta are fixed-overhead header
+   lines (from the metadata fields, not the editor body) — they intentionally
+   do NOT scale with --chart-font-scale. Scaling them would eat into the
+   chart area the scale is meant to grow: usable space for the actual
+   editor-typed content below. */
+.cs-title{font-size:20px; font-weight:700; margin:0 0 2px; color:#111;}
 .cs-artist{font-size:8pt; color:#555; margin:0 0 2px;}
 .cs-meta{font-size:10.5px; color:#888; display:flex; gap:14px; border-top:1px solid #ddd; padding-top:4px; margin-bottom:10px; flex-wrap:wrap;}
 .cs-copyright{font-size:8pt; color:#666; margin:0 0 3px;}
 .cs-permission{font-size:8pt; color:#666; margin:0 0 3px;}
 .cs-roadmap{font-size:14pt; font-weight:700; letter-spacing:.4px; color:#7a5ce8; margin-bottom:10px;}
 .cs-section{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
-.cs-section-label{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#a06a1e; margin-bottom:3px;}
-.cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:12px;}
+.cs-section-label{font-size:calc(11px * var(--chart-font-scale)); font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#a06a1e; margin-bottom:3px;}
+.cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:calc(12px * var(--chart-font-scale));}
 .cs-line{display:flex; flex-direction:column; white-space:pre;}
-.chord-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:13.5px; line-height:1.1; white-space:pre; margin-bottom:var(--chord-lyric-gap);}
-.lyric-row{font-family:var(--mono); font-size:13.5px; line-height:1.5; white-space:pre; color:#111;}
-.chordonly-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:13px; margin:2px 0;}
-.comment-row{font-family:var(--sans); font-style:italic; color:#888; font-size:12px; margin:2px 0;}
+.chord-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.1; white-space:pre; margin-bottom:var(--chord-lyric-gap);}
+.lyric-row{font-family:var(--mono); font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.5; white-space:pre; color:#111;}
+.chordonly-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:calc(13px * var(--chart-font-scale)); margin:2px 0;}
+.comment-row{font-family:var(--sans); font-style:italic; color:#888; font-size:calc(12px * var(--chart-font-scale)); margin:2px 0;}
 .chord-note{font-family:var(--mono); font-weight:800; color:#c0392b; font-style:normal;}
 
 /* Panels (settings / api mocks) shown as overlay drawer */
@@ -227,9 +243,17 @@ small{color:var(--text-faint);}
 /* PRINT — A4, fixed 0.25in margins */
 @page{ size: A4; margin: 0.25in; }
 @media print{
+  /* visibility:hidden alone leaves #topbar/#app's full-viewport flex layout
+     (body is height:100vh) occupying space even though invisible — Chrome's
+     print engine then auto-shrinks the whole oversized page to fit one
+     sheet, taking the correctly-sized .cs-page down with it. display:none
+     removes that layout footprint entirely so print scales against just
+     the actual chart content. */
   body *{visibility:hidden;}
   #printArea, #printArea *{visibility:visible;}
-  #printArea{position:absolute; top:0; left:0; width:100%;}
+  #topbar, #app{display:none !important;}
+  body{height:auto; overflow:visible;}
+  #printArea{position:absolute; top:0; left:0; width:7.77in;}
   .cs-page{page-break-after:always; padding:0;}
   .cs-page:last-child{page-break-after:auto;}
 }
@@ -248,7 +272,9 @@ small{color:var(--text-faint);}
   </div>
   <div class="tb-group">
     <button id="btnImport">Import</button>
-    <input type="file" id="fileImport" accept=".json,.txt,.chordpro,.cho,.pro,.xml" class="hidden">
+    <input type="file" id="fileImport" accept=".json,.txt,.chordpro,.cho,.pro,.xml" multiple class="hidden">
+    <button id="btnImportFolder" title="Import every chart file in a folder">Import Folder</button>
+    <input type="file" id="folderImport" webkitdirectory directory multiple class="hidden">
     <select id="exportFormat">
       <option value="json">JSON (.json)</option>
       <option value="txt">Chords-over-Lyrics (.txt)</option>
@@ -309,6 +335,7 @@ small{color:var(--text-faint);}
             <button id="btnTransUp" class="icon" title="Transpose up">+</button>
           </div>
           <small id="origKeyNote"></small>
+          <button type="button" id="btnConvertToNN" class="ghost hidden" title="Rewrite this chart's stored chords as Nashville Numbers relative to the current Key. The current Key becomes the song's remembered preferred key; Key then becomes a pure display choice, same as it already is for NN charts." style="font-size:10px; padding:3px 6px; margin-top:4px;">→ Convert to Nashville Numbers</button>
         </div>
         <div class="field" style="flex:1.4 1 170px;"><label>Tags (comma-sep)</label><input id="mTags" placeholder="fast, christmas, key-of-g"></div>
       </div>
@@ -375,9 +402,17 @@ Was [6m]blind but [5]now I [1]see"></textarea>
       <div id="previewPane">
         <div class="pane-head">
           <span>Live Preview</span>
-          <label style="display:flex; align-items:center; gap:5px; font-size:11px; text-transform:none;">
-            <input type="checkbox" id="toggle2col" style="width:auto;"> 2-column layout
-          </label>
+          <div style="display:flex; align-items:center; gap:14px;">
+            <div style="display:flex; align-items:center; gap:4px; text-transform:none;">
+              <button type="button" id="fontScaleDown" class="icon" title="Smaller chart text" style="padding:2px 7px; font-size:11px;">A−</button>
+              <span id="fontScaleValue" style="font-size:11px; min-width:34px; text-align:center;"></span>
+              <button type="button" id="fontScaleUp" class="icon" title="Larger chart text" style="padding:2px 7px; font-size:13px;">A+</button>
+              <button type="button" id="fontScaleReset" class="ghost" title="Reset chart text size to 100%" style="padding:2px 6px; font-size:10px;">Reset</button>
+            </div>
+            <label style="display:flex; align-items:center; gap:5px; font-size:11px; text-transform:none;">
+              <input type="checkbox" id="toggle2col" style="width:auto;"> 2-column layout
+            </label>
+          </div>
         </div>
         <div id="previewScroll"></div>
       </div>
@@ -463,6 +498,25 @@ const ChordSpacingStore = (() => {
   function set(px){ localStorage.setItem(KEY, String(px)); }
   function apply(px){ document.documentElement.style.setProperty('--chord-lyric-gap', px + 'px'); }
   return { get, set, apply, MIN_PX, MAX_PX, DEFAULT_PX };
+})();
+
+// Persisted chart text-size preference (title, chords, lyrics, roadmap —
+// every chord-sheet font-size is expressed as calc(base * this)), applied
+// via the same single-CSS-custom-property pattern as ChordSpacingStore so it
+// reaches the live preview, the offscreen pagination measurement pass, and
+// print/PDF identically — a chart that fits at a given scale in preview
+// fits the same way on paper, and pagination is measured post-scaling.
+const FontScaleStore = (() => {
+  const KEY = 'wcb_chart_font_scale';
+  const DEFAULT_PCT = 100;
+  const MIN_PCT = 70, MAX_PCT = 160;
+  function get(){
+    const val = parseInt(localStorage.getItem(KEY), 10);
+    return (!isNaN(val) && val >= MIN_PCT && val <= MAX_PCT) ? val : DEFAULT_PCT;
+  }
+  function set(pct){ localStorage.setItem(KEY, String(pct)); }
+  function apply(pct){ document.documentElement.style.setProperty('--chart-font-scale', pct / 100); }
+  return { get, set, apply, MIN_PCT, MAX_PCT, DEFAULT_PCT };
 })();
 
 /* ---------------------------------------------------------------------------
@@ -759,7 +813,69 @@ const NashvilleSystem = (() => {
     return token;
   }
 
-  return { isNumberToken, isRomanToken, numberChordToLetter, arabicToRoman, romanToArabic, toLetterChord };
+  /* -------------------------------------------------------------------------
+     REVERSE CONVERSION — letter chords back to Nashville Numbers, relative
+     to a stated tonic. Mirrors degreeToLetterRoot/numberChordToLetter in the
+     other direction, for migrating existing letter-key charts to canonical
+     NN storage (see "Convert to Nashville Numbers").
+  ------------------------------------------------------------------------- */
+  // Same root-vs-quality split Transposer's transposeChord uses internally
+  // (that regex isn't exported, so this mirrors it rather than importing it).
+  const CHORD_ROOT_RE = /^([A-G](?:#|b)?)(.*)$/;
+
+  // Maps a semitone distance from the tonic (0-11) to a scale degree +
+  // accidental. The 6 diatonic in-between semitones are spelled with
+  // whichever accidental is conventional for the borrowed/chromatic chords
+  // this style of chart actually uses — b3, b6, b7 (borrowed from the
+  // parallel minor) and #4 (the raised fourth) are the common ones; b2 covers
+  // the rarer Neapolitan-type case. This is the direct inverse of the
+  // (accidental, degree) -> semitone math in degreeToLetterRoot above.
+  const SEMITONE_TO_DEGREE = [
+    {accidental:'',  degree:1}, {accidental:'b', degree:2}, {accidental:'',  degree:2},
+    {accidental:'b', degree:3}, {accidental:'',  degree:3}, {accidental:'',  degree:4},
+    {accidental:'#', degree:4}, {accidental:'',  degree:5}, {accidental:'b', degree:6},
+    {accidental:'',  degree:6}, {accidental:'b', degree:7}, {accidental:'',  degree:7},
+  ];
+
+  function letterRootToDegree(root, keyRoot){
+    const keyIdx = Transposer.noteIndex(keyRoot);
+    const rootIdx = Transposer.noteIndex(root);
+    if(keyIdx === undefined || rootIdx === undefined) return null;
+    const semis = ((rootIdx - keyIdx) % 12 + 12) % 12;
+    return SEMITONE_TO_DEGREE[semis];
+  }
+
+  // Converts one full letter chord symbol (e.g. "Em7", "D/F#") into its NNS
+  // token relative to keyRoot. Roots that aren't a recognizable pitch (e.g.
+  // "N.C." annotations, or note-annotation tokens starting with "*") don't
+  // match CHORD_ROOT_RE and pass through unchanged — same graceful
+  // degradation the forward converter uses for tokens it doesn't recognize.
+  function letterChordToNumber(symbol, keyRoot){
+    const parts = symbol.split('/');
+    const converted = parts.map(part => {
+      const m = part.match(CHORD_ROOT_RE);
+      if(!m) return part;
+      const [, root, quality] = m;
+      const d = letterRootToDegree(root, keyRoot);
+      if(!d) return part;
+      return d.accidental + d.degree + quality;
+    });
+    return converted.join('/');
+  }
+
+  // Walks a whole chart's raw source text and rewrites every chord token
+  // from letters to Nashville Numbers relative to keyRoot — the
+  // reverse-direction counterpart to Transposer.transposeText, used by the
+  // "Convert to Nashville Numbers" action and, for files with a known key,
+  // at import time.
+  function contentToNumbers(src, keyRoot){
+    return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${letterChordToNumber(chord, keyRoot)}]`);
+  }
+
+  return {
+    isNumberToken, isRomanToken, numberChordToLetter, arabicToRoman, romanToArabic, toLetterChord,
+    letterChordToNumber, contentToNumbers,
+  };
 })();
 
 /* ---------------------------------------------------------------------------
@@ -1330,7 +1446,7 @@ const App = (() => {
   let originalKey = null; // key of the song as stored (untransposed baseline)
   let liveKey = null; // key the editor content is CURRENTLY written in (source of truth for transposition)
   let dirty = false;
-  let activeTagFilter = null;
+  let activeTagFilters = new Set(); // library filter: song must have at least one selected tag
   let undoStack = [], redoStack = [];
   let undoTimer = null;
 
@@ -1344,10 +1460,24 @@ const App = (() => {
     toast._t = setTimeout(()=>t.classList.remove('show'), 1800);
   }
 
+  // `song.key` is currently overloaded: it means BOTH "what format is content
+  // stored in" (a real key, or 'NN' for Nashville Numbers) AND, historically,
+  // "what key does this song display in." `preferredKey` splits the second
+  // meaning out as its own remembered-metadata field, independent of
+  // storage format — so an NN song doesn't lose track of "the key we
+  // actually sing this in," and so it doesn't disappear from anything that
+  // reads a real key just because its content happens to be numeric. This is
+  // a read-time fallback only (derives a value when one hasn't been saved
+  // yet) — it never writes anything on its own.
+  function withPreferredKeyFallback(song){
+    if(song.preferredKey != null) return song;
+    return {...song, preferredKey: (song.key && song.key !== 'NN') ? song.key : null};
+  }
+
   function newSong(){
     const startKey = NNModeStore.isEnabled() ? 'NN' : 'C';
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:startKey, capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:startKey, preferredKey: startKey !== 'NN' ? startKey : null, capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
       tags:[], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     originalKey = startKey;
@@ -1437,6 +1567,7 @@ const App = (() => {
     liveKey = usableKey;
     el('origKeyNote').textContent = '';
     updateTransposeButtonsState();
+    updateConvertToNNButton();
     renderPreview();
     renderParseStatus();
     updateDynamicSectionButtons();
@@ -1563,11 +1694,15 @@ const App = (() => {
 
   /* ---------------- Library / persistence ---------------- */
   async function refreshLibrary(){
-    songs = await DB.getAllSongs();
+    songs = (await DB.getAllSongs()).map(withPreferredKeyFallback);
     renderTagFilters();
     renderSongList();
   }
 
+  // Tags are multi-select: song matches if it has ANY selected tag (OR).
+  // A "Clear" chip appears alongside the tags, but only once a selection
+  // exists, so multiple active tags can be reset in one click instead of
+  // toggling each one off individually.
   function renderTagFilters(){
     const tagSet = new Set();
     songs.forEach(s => (s.tags||[]).forEach(t => tagSet.add(t)));
@@ -1577,18 +1712,30 @@ const App = (() => {
     box.classList.remove('hidden');
     [...tagSet].sort().forEach(tag => {
       const chip = document.createElement('span');
-      chip.className = 'tag-chip' + (activeTagFilter===tag ? ' active' : '');
+      chip.className = 'tag-chip' + (activeTagFilters.has(tag) ? ' active' : '');
       chip.textContent = tag;
-      chip.onclick = () => { activeTagFilter = activeTagFilter===tag ? null : tag; renderTagFilters(); renderSongList(); };
+      chip.onclick = () => {
+        if(activeTagFilters.has(tag)) activeTagFilters.delete(tag); else activeTagFilters.add(tag);
+        renderTagFilters(); renderSongList();
+      };
       box.appendChild(chip);
     });
+    if(activeTagFilters.size){
+      const clearChip = document.createElement('span');
+      clearChip.className = 'tag-chip';
+      clearChip.style.color = 'var(--danger)';
+      clearChip.style.borderColor = 'var(--danger)';
+      clearChip.textContent = '✕ Clear';
+      clearChip.onclick = () => { activeTagFilters.clear(); renderTagFilters(); renderSongList(); };
+      box.appendChild(clearChip);
+    }
   }
 
   function renderSongList(){
     const q = el('searchBox').value.trim().toLowerCase();
     const list = el('songList');
     let filtered = songs.filter(s => {
-      if(activeTagFilter && !(s.tags||[]).includes(activeTagFilter)) return false;
+      if(activeTagFilters.size && !(s.tags||[]).some(t => activeTagFilters.has(t))) return false;
       if(!q) return true;
       return (s.title||'').toLowerCase().includes(q) ||
              (s.artist||'').toLowerCase().includes(q) ||
@@ -1605,7 +1752,7 @@ const App = (() => {
       item.className = 'song-item' + (currentSong && currentSong.id===s.id ? ' active' : '');
       item.innerHTML = `
         <div class="si-title">${Renderer.escapeHtml(s.title || 'Untitled')}</div>
-        <div class="si-meta"><span>${Renderer.escapeHtml(s.artist||'')}</span>${s.key?`<span>· Key ${Renderer.escapeHtml(s.key)}</span>`:''}${s.ccli?`<span>· CCLI ${Renderer.escapeHtml(s.ccli)}</span>`:''}</div>
+        <div class="si-meta"><span>${Renderer.escapeHtml(s.artist||'')}</span>${s.preferredKey?`<span>· Key ${Renderer.escapeHtml(s.preferredKey)}</span>`:''}${s.ccli?`<span>· CCLI ${Renderer.escapeHtml(s.ccli)}</span>`:''}</div>
         ${ (s.tags&&s.tags.length) ? `<div class="si-tags">${s.tags.map(t=>`<span class="si-tag">${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}
       `;
       item.onclick = () => selectSong(s.id);
@@ -1635,6 +1782,11 @@ const App = (() => {
     currentSong.churchCcli = el('mChurchCCLI').value.trim();
     currentSong.capo = el('mCapo').value;
     currentSong.key = el('mKey').value;
+    // Only overwrite the remembered performance key when the dropdown is
+    // showing a real key. Saving while viewing raw Nashville Numbers isn't a
+    // statement that the song has no preferred key — leave whatever was
+    // already remembered alone in that case.
+    if(currentSong.key !== 'NN') currentSong.preferredKey = currentSong.key;
     currentSong.tags = el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean);
     currentSong.content = el('editor').value;
     currentSong.titleAlign = currentSong.titleAlign || DefaultAlignStore.get();
@@ -1729,6 +1881,41 @@ const App = (() => {
       note.textContent = '';
     }
     updateTransposeButtonsState();
+    updateConvertToNNButton();
+  }
+
+  // Only offer the conversion when there's a real letter key selected —
+  // NN charts have nothing left to convert. Content that happens to already
+  // contain number tokens under a letter Key (an unusual mixed state) still
+  // converts safely: letterChordToNumber passes any token it doesn't
+  // recognize as a letter chord straight through unchanged.
+  function updateConvertToNNButton(){
+    const btn = el('btnConvertToNN');
+    if(!btn) return;
+    btn.classList.toggle('hidden', !currentSong || el('mKey').value === 'NN');
+  }
+
+  // Rewrites the current chart's stored chords from the selected letter key
+  // into canonical Nashville Numbers, and remembers that letter key as the
+  // song's preferredKey so "where we like to sing this" survives the
+  // conversion (see withPreferredKeyFallback). Explicit and user-triggered —
+  // pushes an undo entry first, so Ctrl+Z reverts it like any other edit.
+  function convertCurrentSongToNN(){
+    if(!currentSong) return;
+    const fromKey = el('mKey').value;
+    if(!fromKey || fromKey === 'NN') return;
+    pushUndo(el('editor').value);
+    const tonic = fromKey.replace(/m$/, '');
+    el('editor').value = NashvilleSystem.contentToNumbers(el('editor').value, tonic);
+    currentSong.preferredKey = fromKey;
+    currentSong.key = 'NN';
+    originalKey = 'NN';
+    liveKey = 'NN';
+    el('mKey').value = 'NN';
+    updateCapoNote();
+    onEditorInput();
+    renderPreview();
+    toast(`Converted to Nashville Numbers — remembered as key ${fromKey}`);
   }
 
   function updateTransposeButtonsState(){
@@ -2181,28 +2368,58 @@ const App = (() => {
   }
 
   /* ---------------- Import / Export ---------------- */
-  function handleImportFile(file){
-    const reader = new FileReader();
-    reader.onload = () => {
+  function readFileAsText(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result);
+      reader.onerror = () => reject(reader.error);
+      reader.readAsText(file);
+    });
+  }
+
+  // Imports one or more chart files straight into the library: each parses
+  // to a song and is saved via DB.putSong immediately, so multi-file
+  // selections import a whole catalog in one go and every song shows up in
+  // the sidebar right away (previously import only staged a single song into
+  // the editor as an unsaved draft, so nothing appeared until a manual Save —
+  // and only one file could be picked at all).
+  async function handleImportFiles(fileList){
+    const files = Array.from(fileList);
+    let imported = 0;
+    const failures = [];
+    let lastSong = null;
+    for(const file of files){
       try{
-        const {type, song} = IO.detectAndParse(file.name, reader.result);
-        currentSong = {
+        const text = await readFileAsText(file);
+        const {song} = IO.detectAndParse(file.name, text);
+        const importedKey = song.key||'C';
+        const toSave = {
           title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: song.key||'C', capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
-          tags: song.tags||[], content: song.content||'', versions:[],
+          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKey: song.preferredKey != null ? song.preferredKey : (importedKey !== 'NN' ? importedKey : null), capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
+          tags: song.tags||[], content: song.content||'',
+          versions: song.versions||[],
           createdAt: Date.now(), updatedAt: Date.now()
         };
-        undoStack=[]; redoStack=[];
-        loadIntoForm();
-        dirty = true;
-        updateSaveStatus();
-        toast(`Imported (${type})`);
+        const id = await DB.putSong(toSave);
+        toSave.id = id;
+        lastSong = toSave;
+        imported++;
       }catch(err){
-        toast('Import failed: ' + err.message);
-        console.error(err);
+        failures.push(file.name);
+        console.error('Import failed for ' + file.name, err);
       }
-    };
-    reader.readAsText(file);
+    }
+    await refreshLibrary();
+    if(lastSong){
+      currentSong = JSON.parse(JSON.stringify(lastSong));
+      undoStack=[]; redoStack=[];
+      loadIntoForm();
+      dirty = false;
+      updateSaveStatus();
+    }
+    if(imported && !failures.length) toast(`Imported ${imported} song${imported===1?'':'s'}`);
+    else if(imported && failures.length) toast(`Imported ${imported}, failed: ${failures.join(', ')}`);
+    else toast('Import failed: ' + failures.join(', '));
   }
 
   function currentSongSnapshot(){
@@ -2275,7 +2492,10 @@ const App = (() => {
   function doPrint(){
     if(!currentSong){ toast('No song loaded'); return; }
     renderPrintArea();
+    const area = el('printArea');
+    area.classList.remove('hidden');
     window.print();
+    area.classList.add('hidden');
   }
 
   async function doPDF(){
@@ -2330,6 +2550,10 @@ const App = (() => {
         <input type="range" id="prefChordGap" min="${ChordSpacingStore.MIN_PX}" max="${ChordSpacingStore.MAX_PX}" value="${ChordSpacingStore.get()}" style="width:100%;">
       </div>
       <div class="form-row">
+        <label>Chart text size <span id="settingsFontScaleValue"></span></label>
+        <input type="range" id="prefFontScale" min="${FontScaleStore.MIN_PCT}" max="${FontScaleStore.MAX_PCT}" step="10" value="${FontScaleStore.get()}" style="width:100%;">
+      </div>
+      <div class="form-row">
         <label>Default alignment for new songs</label>
         <div class="align-controls" id="settingsAlignControls">
           <button type="button" class="align-btn" data-align="left" title="Left">⟸ Left</button>
@@ -2363,6 +2587,8 @@ const App = (() => {
         ChordSpacingStore.apply(px);
         updateGapLabel();
       };
+      updateFontScaleLabel();
+      drawer.querySelector('#prefFontScale').oninput = (e) => setFontScale(parseInt(e.target.value, 10));
       const alignBtns = drawer.querySelectorAll('#settingsAlignControls .align-btn');
       const currentDefault = DefaultAlignStore.get();
       alignBtns.forEach(b => b.classList.toggle('active', b.dataset.align === currentDefault));
@@ -2966,12 +3192,45 @@ const App = (() => {
     backdrop.addEventListener('click', (e) => { if(e.target === backdrop) dismiss(); });
   }
 
+  // Chart text-size control — shared between the Live Preview pane-head
+  // stepper and the Settings drawer slider so either one stays in sync with
+  // FontScaleStore no matter which UI last changed it. Re-renders the
+  // preview on every change since pagination is measured post-scaling and
+  // can shift page breaks.
+  function updateFontScaleLabel(){
+    const pct = FontScaleStore.get();
+    const paneLabel = el('fontScaleValue');
+    if(paneLabel) paneLabel.textContent = pct + '%';
+    const settingsLabel = document.getElementById('settingsFontScaleValue');
+    if(settingsLabel) settingsLabel.textContent = `(${pct}%)`;
+    const settingsSlider = document.getElementById('prefFontScale');
+    if(settingsSlider) settingsSlider.value = pct;
+  }
+  function setFontScale(pct){
+    const clamped = Math.max(FontScaleStore.MIN_PCT, Math.min(FontScaleStore.MAX_PCT, pct));
+    FontScaleStore.set(clamped);
+    FontScaleStore.apply(clamped);
+    updateFontScaleLabel();
+    renderPreview();
+  }
+  function bumpFontScale(delta){ setFontScale(FontScaleStore.get() + delta); }
+
   /* ---------------- Wiring ---------------- */
   function wire(){
     el('btnNew').onclick = () => { if(dirty && !confirm('Discard unsaved changes?')) return; newSong(); };
     el('btnSave').onclick = saveCurrent;
     el('btnImport').onclick = () => el('fileImport').click();
-    el('fileImport').onchange = (e) => { if(e.target.files[0]) handleImportFile(e.target.files[0]); e.target.value=''; };
+    el('fileImport').onchange = (e) => { if(e.target.files.length) handleImportFiles(e.target.files); e.target.value=''; };
+    el('btnImportFolder').onclick = () => el('folderImport').click();
+    el('folderImport').onchange = (e) => {
+      // webkitdirectory has no accept filtering, so a folder scan can include
+      // unrelated files (.DS_Store, images, etc.) — only hand chart-shaped
+      // extensions to the importer instead of surfacing them as failures.
+      const supported = Array.from(e.target.files).filter(f => /\.(json|txt|chordpro|cho|pro|xml)$/i.test(f.name));
+      if(supported.length) handleImportFiles(supported);
+      else toast('No supported chart files (.json/.txt/.chordpro/.cho/.pro/.xml) found in that folder');
+      e.target.value='';
+    };
     el('btnExport').onclick = exportCurrent;
     el('btnPrint').onclick = doPrint;
     el('btnPDF').onclick = doPDF;
@@ -3012,6 +3271,14 @@ const App = (() => {
     el('editor')._lastValue = '';
 
     el('toggle2col').addEventListener('change', renderPreview);
+
+    // Chart text-size stepper (pane-head) — see setFontScale/bumpFontScale above.
+    const FONT_SCALE_STEP = 10;
+    updateFontScaleLabel();
+    el('fontScaleDown').addEventListener('click', () => bumpFontScale(-FONT_SCALE_STEP));
+    el('fontScaleUp').addEventListener('click', () => bumpFontScale(FONT_SCALE_STEP));
+    el('fontScaleReset').addEventListener('click', () => setFontScale(FontScaleStore.DEFAULT_PCT));
+
     el('searchBox').addEventListener('input', renderSongList);
 
     // Pagination is independent of window size (A4 is a fixed physical
@@ -3039,6 +3306,7 @@ const App = (() => {
 
     el('btnTransUp').onclick = () => transposeBySemitones(1);
     el('btnTransDown').onclick = () => transposeBySemitones(-1);
+    el('btnConvertToNN').onclick = convertCurrentSongToNN;
 
     el('btnUndo').onclick = () => {
       if(undoStack.length===0) return;
@@ -3073,6 +3341,7 @@ const App = (() => {
     syncKeyDropdownForMode();
     syncRomanButtonForMode();
     ChordSpacingStore.apply(ChordSpacingStore.get());
+    FontScaleStore.apply(FontScaleStore.get());
     await refreshLibrary();
     if(songs.length){ selectSong(songs[0].id); }
     else { newSong(); }
