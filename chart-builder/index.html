@@ -117,13 +117,27 @@ small{color:var(--text-faint);}
 /* Preferred-key picker (meta bar) — pure metadata, mirrors the chord-popup
    root/accidental button pattern (#chordPopup .cp-root / button.selected)
    rather than inventing new visual language. */
-.key-picker{display:flex; flex-direction:column; gap:5px;}
-.key-picker-letters{display:flex; gap:3px;}
-.key-letter-btn{flex:1; padding:5px 0; font-size:12px; line-height:1;}
+.key-picker{display:flex; flex-direction:column; gap:4px;}
+.key-picker-letters{display:flex; gap:2px;}
+.key-letter-btn{flex:1; padding:3px 0; font-size:11px; line-height:1;}
 .key-letter-btn.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
-.key-picker-mods{display:flex; gap:4px;}
-.key-mod-btn{flex:1; padding:4px 0; font-size:12px; line-height:1;}
+.key-picker-mods{display:flex; gap:3px;}
+.key-mod-btn{flex:1; padding:3px 0; font-size:11px; line-height:1;}
 .key-mod-btn.selected{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+.key-add-btn{flex:1.4; font-weight:600;}
+/* Added keys read as small, settled accent-tinted badges (vs. the neutral
+   staging buttons above) so "committed" clearly reads differently from
+   "still being built" — a plain grey pill looked like just another
+   unselected control. A faint top border separates "building" from
+   "built" now that both live in the same field. Chips sit in a fixed
+   7-column grid (one slot per letter) so the row's populated width is
+   consistent regardless of which/how many keys are added, rather than
+   reflowing based on each chip's text length. */
+.key-chips{display:grid; grid-template-columns:repeat(auto-fill, minmax(58px,1fr)); gap:4px; margin-top:5px; padding-top:5px; border-top:1px solid var(--border); min-height:18px;}
+.key-chip{font-size:10.5px; font-weight:600; padding:2px 4px 2px 6px; border-radius:4px; background:var(--accent-dim); color:var(--accent); display:flex; align-items:center; justify-content:center; gap:3px; overflow:hidden;}
+.key-chip span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.key-chip button{flex-shrink:0; background:none; border:none; color:var(--accent); opacity:.6; cursor:pointer; font-size:11px; line-height:1; padding:0;}
+.key-chip button:hover{opacity:1; color:var(--danger);}
 
 /* Structure toolbar */
 #structBar{
@@ -320,7 +334,7 @@ small{color:var(--text-faint);}
   <div id="main">
     <div id="metaBar">
       <div class="meta-row">
-        <div class="field" style="flex:2 1 240px;">
+        <div class="field" style="flex:1.6 1 220px;">
           <label>Title</label>
           <input id="mTitle" placeholder="Song Title">
           <div class="align-controls" id="titleAlignControls">
@@ -328,10 +342,11 @@ small{color:var(--text-faint);}
             <button type="button" class="icon align-btn" data-align="center" title="Align center">≡</button>
             <button type="button" class="icon align-btn" data-align="right" title="Align right">⟹</button>
           </div>
+          <label style="margin-top:6px;">Artist</label>
+          <input id="mArtist" placeholder="Artist / Author">
         </div>
-        <div class="field" style="flex:1.3 1 150px;"><label>Artist</label><input id="mArtist" placeholder="Artist / Author"></div>
-        <div class="field">
-          <label>Key <small style="text-transform:none; letter-spacing:0; color:var(--text-faint);">(remembered — for rendering, use Display Key)</small></label>
+        <div class="field" style="flex:2 1 240px;">
+          <label>Preferred Key(s)</label>
           <div class="key-picker" id="preferredKeyPicker">
             <div class="key-picker-letters">
               <button type="button" class="key-letter-btn" data-letter="A">A</button>
@@ -346,10 +361,12 @@ small{color:var(--text-faint);}
               <button type="button" id="prefKeyMinor" class="key-mod-btn" title="Minor">m</button>
               <button type="button" id="prefKeySharp" class="key-mod-btn" title="Sharp">♯</button>
               <button type="button" id="prefKeyFlat" class="key-mod-btn" title="Flat">♭</button>
+              <button type="button" id="prefKeyAdd" class="key-mod-btn key-add-btn" title="Add this key to Preferred Key(s)">+ Add</button>
             </div>
           </div>
+          <div class="key-chips" id="preferredKeyChips"></div>
         </div>
-        <div class="field" style="flex:1.4 1 170px;"><label>Tags (comma-sep)</label><input id="mTags" placeholder="fast, christmas, key-of-g"></div>
+        <div class="field" style="flex:1.8 1 210px;"><label>Tags (comma-sep)</label><input id="mTags" placeholder="fast, christmas, key-of-g"></div>
       </div>
       <div class="meta-row">
         <div class="field" style="flex:2 1 240px;">
@@ -1498,22 +1515,35 @@ const App = (() => {
 
   // `song.key` is currently overloaded: it means BOTH "what format is content
   // stored in" (a real key, or 'NN' for Nashville Numbers) AND, historically,
-  // "what key does this song display in." `preferredKey` splits the second
+  // "what key does this song display in." `preferredKeys` splits the second
   // meaning out as its own remembered-metadata field, independent of
-  // storage format — so an NN song doesn't lose track of "the key we
+  // storage format — so an NN song doesn't lose track of "the keys we
   // actually sing this in," and so it doesn't disappear from anything that
   // reads a real key just because its content happens to be numeric. This is
   // a read-time fallback only (derives a value when one hasn't been saved
-  // yet) — it never writes anything on its own.
-  function withPreferredKeyFallback(song){
-    if(song.preferredKey != null) return song;
-    return {...song, preferredKey: (song.key && song.key !== 'NN') ? song.key : null};
+  // yet) — it never writes anything on its own. Songs may remember more than
+  // one key (e.g. different vocalists prefer different keys for the same
+  // chart); older saves may still carry the singular `preferredKey` from
+  // before multi-select, which folds into a one-element array here.
+  function withPreferredKeysFallback(song){
+    if(Array.isArray(song.preferredKeys)) return song;
+    if(song.preferredKey != null) return {...song, preferredKeys:[song.preferredKey]};
+    const legacy = (song.key && song.key !== 'NN') ? song.key : null;
+    return {...song, preferredKeys: legacy ? [legacy] : []};
   }
 
   /* ---------------------------------------------------------------------------
      PREFERRED-KEY PICKER (meta bar) — a pure metadata editor for
-     currentSong.preferredKey. Never touches content, liveKey, or the
-     editor/preview; that's Display Key's job (see handleKeySelectChange).
+     currentSong.preferredKeys (an array — a song can remember more than one
+     key, e.g. different vocalists preferring different keys for the same
+     chart). Never touches content, liveKey, or the editor/preview; that's
+     Display Key's job (see handleKeySelectChange).
+
+     The letter/modifier buttons build one STAGED key (local UI state, not
+     yet saved anywhere); "+ Add" commits the staged key into
+     currentSong.preferredKeys as a removable chip and resets staging so the
+     next key can be built. This mirrors the app's existing tag-chip pattern
+     rather than inventing a new multi-select interaction.
   --------------------------------------------------------------------------- */
   const KEY_LETTERS = ['A','B','C','D','E','F','G'];
   // No meaningful accidental spelling here — mirrors the piano's missing
@@ -1522,65 +1552,103 @@ const App = (() => {
   const SHARP_DISABLED_LETTERS = new Set(['B','E']);
   const FLAT_DISABLED_LETTERS = new Set(['C','F']);
 
-  function parsePreferredKey(str){
-    if(!str) return {letter:null, accidental:'', minor:false};
-    const m = str.match(/^([A-G])(#|b)?(m)?$/);
-    if(!m) return {letter:null, accidental:'', minor:false};
-    return {letter:m[1], accidental:m[2]||'', minor:!!m[3]};
-  }
+  let stagedKey = {letter:null, accidental:'', minor:false};
+
   function buildPreferredKey({letter, accidental, minor}){
     if(!letter) return null;
     return letter + accidental + (minor ? 'm' : '');
   }
 
-  function renderPreferredKeyPicker(){
-    const state = parsePreferredKey(currentSong ? currentSong.preferredKey : null);
-    document.querySelectorAll('#preferredKeyPicker .key-letter-btn').forEach(btn => {
-      btn.classList.toggle('selected', btn.dataset.letter === state.letter);
-    });
-    const sharpBtn = el('prefKeySharp'), flatBtn = el('prefKeyFlat'), minorBtn = el('prefKeyMinor');
-    sharpBtn.disabled = !!(state.letter && SHARP_DISABLED_LETTERS.has(state.letter));
-    flatBtn.disabled = !!(state.letter && FLAT_DISABLED_LETTERS.has(state.letter));
-    sharpBtn.classList.toggle('selected', state.accidental === '#');
-    flatBtn.classList.toggle('selected', state.accidental === 'b');
-    minorBtn.classList.toggle('selected', state.minor);
+  // Once the first Preferred Key is added it sets the major/minor "mode" for
+  // the whole group — mixing major and minor preferred keys on one song
+  // isn't a meaningful distinction here, so later choices are locked to
+  // match. Derived live from currentSong.preferredKeys (not a separate flag)
+  // so removing every chip automatically resets the lock.
+  function preferredKeysMode(){
+    const keys = (currentSong && currentSong.preferredKeys) || [];
+    if(!keys.length) return null;
+    return keys[0].endsWith('m') ? 'minor' : 'major';
   }
 
-  function setPreferredKeyFromPicker(next){
-    if(!currentSong) return;
-    currentSong.preferredKey = buildPreferredKey(next);
-    dirty = true; updateSaveStatus();
+  function renderPreferredKeyPicker(){
+    document.querySelectorAll('#preferredKeyPicker .key-letter-btn').forEach(btn => {
+      btn.classList.toggle('selected', btn.dataset.letter === stagedKey.letter);
+    });
+    const sharpBtn = el('prefKeySharp'), flatBtn = el('prefKeyFlat'), minorBtn = el('prefKeyMinor');
+    sharpBtn.disabled = !!(stagedKey.letter && SHARP_DISABLED_LETTERS.has(stagedKey.letter));
+    flatBtn.disabled = !!(stagedKey.letter && FLAT_DISABLED_LETTERS.has(stagedKey.letter));
+    sharpBtn.classList.toggle('selected', stagedKey.accidental === '#');
+    flatBtn.classList.toggle('selected', stagedKey.accidental === 'b');
+    const mode = preferredKeysMode();
+    minorBtn.disabled = (mode === 'major' || mode === 'minor'); // greyed out whenever locked, in either direction
+    minorBtn.classList.toggle('selected', stagedKey.minor);
+  }
+
+  // Stored keys stay compact ("Bm", "F#", "Ebm"); chips just relabel them as
+  // "B min" / "F# maj" for readability — the stored value is untouched.
+  function formatPreferredKeyLabel(k){
+    const minor = k.endsWith('m');
+    const root = minor ? k.slice(0, -1) : k;
+    return `${root} ${minor ? 'min' : 'maj'}`;
+  }
+
+  function renderPreferredKeyChips(){
+    const box = el('preferredKeyChips');
+    const keys = (currentSong && currentSong.preferredKeys) || [];
+    box.innerHTML = keys.map(k => `
+      <span class="key-chip" data-key="${Renderer.escapeHtml(k)}"><span>${Renderer.escapeHtml(formatPreferredKeyLabel(k))}</span><button type="button" title="Remove">✕</button></span>
+    `).join('');
+  }
+
+  // Clicking the already-staged letter clears staging back to empty — same
+  // toggle-off convention as the tag filter chips.
+  function keyPickerLetterClick(letter){
+    const mode = preferredKeysMode();
+    if(stagedKey.letter === letter){
+      stagedKey = {letter:null, accidental:'', minor: mode === 'minor'};
+      renderPreferredKeyPicker();
+      return;
+    }
+    let accidental = stagedKey.accidental;
+    if(accidental === '#' && SHARP_DISABLED_LETTERS.has(letter)) accidental = '';
+    if(accidental === 'b' && FLAT_DISABLED_LETTERS.has(letter)) accidental = '';
+    const minor = mode === 'minor' ? true : (mode === 'major' ? false : stagedKey.minor);
+    stagedKey = {letter, accidental, minor};
+    renderPreferredKeyPicker();
+  }
+  function keyPickerMinorClick(){
+    if(!stagedKey.letter) return; // nothing to toggle without a root letter picked
+    const mode = preferredKeysMode();
+    if(mode === 'major' || mode === 'minor') return; // locked to the established mode
+    stagedKey = {...stagedKey, minor: !stagedKey.minor};
+    renderPreferredKeyPicker();
+  }
+  function keyPickerAccidentalClick(accidental){
+    if(!stagedKey.letter) return;
+    if(accidental === '#' && SHARP_DISABLED_LETTERS.has(stagedKey.letter)) return;
+    if(accidental === 'b' && FLAT_DISABLED_LETTERS.has(stagedKey.letter)) return;
+    const nextAccidental = stagedKey.accidental === accidental ? '' : accidental; // toggle off if already active
+    stagedKey = {...stagedKey, accidental: nextAccidental};
     renderPreferredKeyPicker();
   }
 
-  // Clicking the already-active letter clears the whole picker back to "no
-  // preferred key" — same toggle-off convention as the tag filter chips.
-  function keyPickerLetterClick(letter){
-    if(!currentSong) return;
-    const state = parsePreferredKey(currentSong.preferredKey);
-    if(state.letter === letter){
-      setPreferredKeyFromPicker({letter:null, accidental:'', minor:false});
-      return;
-    }
-    let accidental = state.accidental;
-    if(accidental === '#' && SHARP_DISABLED_LETTERS.has(letter)) accidental = '';
-    if(accidental === 'b' && FLAT_DISABLED_LETTERS.has(letter)) accidental = '';
-    setPreferredKeyFromPicker({letter, accidental, minor: state.minor});
+  function keyPickerAddClick(){
+    if(!currentSong || !stagedKey.letter) return;
+    const built = buildPreferredKey(stagedKey);
+    currentSong.preferredKeys = currentSong.preferredKeys || [];
+    if(!currentSong.preferredKeys.includes(built)) currentSong.preferredKeys.push(built);
+    stagedKey = {letter:null, accidental:'', minor: preferredKeysMode() === 'minor'};
+    dirty = true; updateSaveStatus();
+    renderPreferredKeyPicker();
+    renderPreferredKeyChips();
   }
-  function keyPickerMinorClick(){
+
+  function keyPickerRemoveChip(key){
     if(!currentSong) return;
-    const state = parsePreferredKey(currentSong.preferredKey);
-    if(!state.letter) return; // nothing to toggle without a root letter picked
-    setPreferredKeyFromPicker({letter:state.letter, accidental:state.accidental, minor:!state.minor});
-  }
-  function keyPickerAccidentalClick(accidental){
-    if(!currentSong) return;
-    const state = parsePreferredKey(currentSong.preferredKey);
-    if(!state.letter) return;
-    if(accidental === '#' && SHARP_DISABLED_LETTERS.has(state.letter)) return;
-    if(accidental === 'b' && FLAT_DISABLED_LETTERS.has(state.letter)) return;
-    const nextAccidental = state.accidental === accidental ? '' : accidental; // toggle off if already active
-    setPreferredKeyFromPicker({letter:state.letter, accidental:nextAccidental, minor:state.minor});
+    currentSong.preferredKeys = (currentSong.preferredKeys || []).filter(k => k !== key);
+    dirty = true; updateSaveStatus();
+    renderPreferredKeyPicker();
+    renderPreferredKeyChips();
   }
 
   function newSong(){
@@ -1591,7 +1659,7 @@ const App = (() => {
     // NNModeStore the same way it does for every other song load, so there's
     // nothing extra to set up here.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKey: null, capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
       tags:[], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
@@ -1667,10 +1735,10 @@ const App = (() => {
     setCopyrightMode(currentSong.copyrightMode || '©', false);
     // Guard: a song stored with key 'NN' can't be selected if NN Mode is
     // currently OFF (that dropdown option won't exist) — fall back to the
-    // song's remembered preferred key (or C) so the Key selector always
-    // lands on a real, selectable value.
+    // song's first remembered preferred key (or C) so the Key selector
+    // always lands on a real, selectable value.
     const wantsKey = currentSong.key || 'C';
-    const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? (currentSong.preferredKey || 'C') : wantsKey;
+    const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? ((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C') : wantsKey;
     el('mDisplayKey').value = usableKey;
     el('mTags').value = (currentSong.tags || []).join(', ');
     // Canonical-NN storage but landing on a real key (either NN Mode is off,
@@ -1691,7 +1759,9 @@ const App = (() => {
     el('origKeyNote').textContent = '';
     updateTransposeButtonsState();
     updateConvertToNNButton();
+    stagedKey = {letter:null, accidental:'', minor:false};
     renderPreferredKeyPicker();
+    renderPreferredKeyChips();
     renderPreview();
     renderParseStatus();
     updateDynamicSectionButtons();
@@ -1835,7 +1905,7 @@ const App = (() => {
 
   /* ---------------- Library / persistence ---------------- */
   async function refreshLibrary(){
-    songs = (await DB.getAllSongs()).map(withPreferredKeyFallback);
+    songs = (await DB.getAllSongs()).map(withPreferredKeysFallback);
     renderTagFilters();
     renderSongList();
   }
@@ -1893,7 +1963,7 @@ const App = (() => {
       item.className = 'song-item' + (currentSong && currentSong.id===s.id ? ' active' : '');
       item.innerHTML = `
         <div class="si-title">${Renderer.escapeHtml(s.title || 'Untitled')}</div>
-        <div class="si-meta"><span>${Renderer.escapeHtml(s.artist||'')}</span>${s.preferredKey?`<span>· Key ${Renderer.escapeHtml(s.preferredKey)}</span>`:''}${s.ccli?`<span>· CCLI ${Renderer.escapeHtml(s.ccli)}</span>`:''}</div>
+        <div class="si-meta"><span>${Renderer.escapeHtml(s.artist||'')}</span>${(s.preferredKeys&&s.preferredKeys.length)?`<span>· Key${s.preferredKeys.length>1?'s':''} ${Renderer.escapeHtml(s.preferredKeys.join(', '))}</span>`:''}${s.ccli?`<span>· CCLI ${Renderer.escapeHtml(s.ccli)}</span>`:''}</div>
         ${ (s.tags&&s.tags.length) ? `<div class="si-tags">${s.tags.map(t=>`<span class="si-tag">${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}
       `;
       item.onclick = () => selectSong(s.id);
@@ -2070,10 +2140,11 @@ const App = (() => {
   }
 
   // Rewrites the current chart's stored chords from the selected letter key
-  // into canonical Nashville Numbers, and remembers that letter key as the
-  // song's preferredKey so "where we like to sing this" survives the
-  // conversion (see withPreferredKeyFallback). Explicit and user-triggered —
-  // pushes an undo entry first, so Ctrl+Z reverts it like any other edit.
+  // into canonical Nashville Numbers, and adds that letter key to the song's
+  // preferredKeys so "where we like to sing this" survives the conversion
+  // (see withPreferredKeysFallback) without clobbering any other keys
+  // already remembered. Explicit and user-triggered — pushes an undo entry
+  // first, so Ctrl+Z reverts it like any other edit.
   function convertCurrentSongToNN(){
     if(!currentSong) return;
     const fromKey = el('mDisplayKey').value;
@@ -2081,7 +2152,8 @@ const App = (() => {
     pushUndo(el('editor').value);
     const tonic = fromKey.replace(/m$/, '');
     el('editor').value = NashvilleSystem.contentToNumbers(el('editor').value, tonic);
-    currentSong.preferredKey = fromKey;
+    currentSong.preferredKeys = currentSong.preferredKeys || [];
+    if(!currentSong.preferredKeys.includes(fromKey)) currentSong.preferredKeys.push(fromKey);
     currentSong.key = 'NN';
     originalKey = 'NN';
     liveKey = 'NN';
@@ -2090,6 +2162,7 @@ const App = (() => {
     onEditorInput();
     renderPreview();
     renderPreferredKeyPicker();
+    renderPreferredKeyChips();
     toast(`Converted to Nashville Numbers — remembered as key ${fromKey}`);
   }
 
@@ -2576,13 +2649,13 @@ const App = (() => {
         // convert against, vs. genuinely unstated. JSON re-imports carry
         // whatever this app already saved (a real key, 'NN', or unset).
         const statedKey = song.key || null;
-        let importedKey, importedContent, importedPreferredKey;
+        let importedKey, importedContent, importedPreferredKeys;
         if(statedKey && statedKey !== 'NN'){
           // Known tonic — auto-convert to canonical Nashville Numbers, no
           // guessing involved (a stated key is a fact, not a detection).
           importedContent = NashvilleSystem.contentToNumbers(song.content||'', statedKey.replace(/m$/,''));
           importedKey = 'NN';
-          importedPreferredKey = statedKey;
+          importedPreferredKeys = [statedKey];
         } else {
           // No stated key, or already NN (JSON round-trip) — leave as-is.
           // An unstated key lands as a legacy letter-key song, same as any
@@ -2590,11 +2663,13 @@ const App = (() => {
           // Nashville Numbers" rather than guessed at now.
           importedKey = statedKey || 'C';
           importedContent = song.content || '';
-          importedPreferredKey = song.preferredKey != null ? song.preferredKey : (importedKey !== 'NN' ? importedKey : null);
+          if(Array.isArray(song.preferredKeys)) importedPreferredKeys = song.preferredKeys;
+          else if(song.preferredKey != null) importedPreferredKeys = [song.preferredKey];
+          else importedPreferredKeys = importedKey !== 'NN' ? [importedKey] : [];
         }
         const toSave = {
           title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKey: importedPreferredKey, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
+          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
           tags: song.tags||[], content: importedContent,
           versions: song.versions||[],
           createdAt: Date.now(), updatedAt: Date.now()
@@ -3364,7 +3439,7 @@ const App = (() => {
           // would silently un-mark it as canonical even though its content
           // is still literally numeric). Falls back through the song's
           // remembered preferred key before a hardcoded default.
-          const fallbackKey = currentSong.preferredKey || 'C';
+          const fallbackKey = (currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C';
           select.value = fallbackKey;
           if(currentSong.key === 'NN'){
             const preferFlat = Transposer.FLAT_KEYS.has(fallbackKey);
@@ -3524,6 +3599,12 @@ const App = (() => {
     el('prefKeyMinor').onclick = keyPickerMinorClick;
     el('prefKeySharp').onclick = () => keyPickerAccidentalClick('#');
     el('prefKeyFlat').onclick = () => keyPickerAccidentalClick('b');
+    el('prefKeyAdd').onclick = keyPickerAddClick;
+    el('preferredKeyChips').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if(!btn) return;
+      keyPickerRemoveChip(btn.closest('.key-chip').dataset.key);
+    });
 
     el('btnUndo').onclick = () => {
       if(undoStack.length===0) return;
