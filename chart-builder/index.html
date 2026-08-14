@@ -163,10 +163,12 @@ small{color:var(--text-faint);}
 .key-chip button{flex-shrink:0; background:none; border:none; color:var(--accent); opacity:.6; cursor:pointer; font-size:11px; line-height:1; padding:0;}
 .key-chip button:hover{opacity:1; color:var(--danger);}
 
-/* Structure toolbar */
+/* Structure toolbar — wraps to additional rows as more section buttons
+   accumulate (a long song can have many Verse/Chorus/Tag buttons) rather
+   than scrolling horizontally, so every button stays visible at once. */
 #structBar{
-  display:flex; gap:6px; padding:6px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border-soft);
-  flex-shrink:0; overflow-x:auto; align-items:center;
+  display:flex; flex-wrap:wrap; gap:6px; padding:6px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border-soft);
+  flex-shrink:0; align-items:center;
 }
 #structBar .lbl{font-size:11px; color:var(--text-faint); margin-right:4px; white-space:nowrap;}
 #structBar button{font-size:12px; padding:5px 9px; white-space:nowrap;}
