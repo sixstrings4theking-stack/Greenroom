@@ -496,16 +496,27 @@ small{color:var(--text-faint);}
     <div id="splitPane">
       <div id="editorPane">
         <div class="pane-head">
-          <span>Editor — <code>[1]word</code> Nashville Number or <code>[C]word</code> letter chord markup</span>
+          <span>Editor</span>
           <span class="hint" id="parseStatus">0 lines</span>
         </div>
-        <textarea id="editor" spellcheck="false" placeholder="Verse 1:
+        <textarea id="editor" spellcheck="false" placeholder="# Welcome! Type here to build your chart — this is just an example.
+# A chord tag like [1] or [G] sits right before the word it's played on.
+
+Verse 1:
 [1]Amazing grace how [4]sweet the [1]sound
 That saved a [5]wretch like [1]me
 
+# Those numbers are the Nashville Number System (NN) — 1, 4, 5 stand in
+# for chords instead of letters. The same numbers work in ANY key: pick
+# a Key above the editor and they turn into the right letter chords.
+
 Chorus:
 [4]I once was [1]lost but [5]now I'm [1]found
-Was [6m]blind but [5]now I [1]see"></textarea>
+Was [6m]blind but [5]now I [1]see
+
+# Want to add or change a chord? Double-click any word to pick one.
+# Need a new part like a Bridge? Click a button above (Insert Section).
+# Start typing anywhere to clear this example and begin your song!"></textarea>
       </div>
       <div id="previewPane">
         <div class="pane-head">
@@ -1938,6 +1949,7 @@ const App = (() => {
     } else {
       el('editor').value = currentSong.content || '';
     }
+    syncUndoBaseline();
     setNotationStyle(currentSong.notationStyle || 'arabic', false);
     setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
     originalKey = usableKey;
@@ -2071,6 +2083,19 @@ const App = (() => {
     undoStack.push(prevValue);
     if(undoStack.length>100) undoStack.shift();
     redoStack = [];
+  }
+  // Keeps the debounced-undo baseline (_lastValue) in sync whenever the
+  // editor's value is set programmatically — song load, transpose,
+  // key-change reflow, version restore, undo/redo itself — rather than by
+  // the user typing. Without this, the baseline stays stuck at whatever it
+  // last was (the empty string at startup, or a previous song's content),
+  // so the very next real edit's undo would revert to that stale value
+  // instead of the one character just typed — in practice, wiping the
+  // whole chart back to blank. Also cancels any pending debounced push so a
+  // programmatic change can't get queued up behind a stale snapshot.
+  function syncUndoBaseline(){
+    clearTimeout(undoTimer);
+    el('editor')._lastValue = el('editor').value;
   }
   function onEditorInput(e){
     dirty = true; updateSaveStatus();
@@ -2216,6 +2241,7 @@ const App = (() => {
     const preferFlat = Transposer.FLAT_KEYS.has(fromKey);
     const newContent = Transposer.transposeText(el('editor').value, semis, preferFlat);
     el('editor').value = newContent;
+    syncUndoBaseline();
     const toKeyIdx = ((Transposer.SHARP_SCALE.indexOf(fromKey.replace('m','')) + semis) % 12 + 12) % 12;
     const isMinor = fromKey.endsWith('m');
     const scale = preferFlat ? Transposer.FLAT_SCALE : Transposer.SHARP_SCALE;
@@ -2252,6 +2278,7 @@ const App = (() => {
         const semis = Transposer.semitoneDelta(liveKey, newKey);
         el('editor').value = Transposer.transposeText(el('editor').value, semis, preferFlat);
       }
+      syncUndoBaseline();
       liveKey = newKey;
       updateCapoNote();
       onEditorInput();
@@ -2266,6 +2293,7 @@ const App = (() => {
     const preferFlat = Transposer.FLAT_KEYS.has(newKey);
     const semis = Transposer.semitoneDelta(liveKey, newKey);
     el('editor').value = Transposer.transposeText(el('editor').value, semis, preferFlat);
+    syncUndoBaseline();
     liveKey = newKey;
     updateCapoNote();
     onEditorInput();
@@ -3781,6 +3809,7 @@ const App = (() => {
         btn.onclick = () => {
           const v = currentSong.versions[Number(btn.dataset.restore)];
           el('editor').value = v.content;
+          syncUndoBaseline();
           el('mDisplayKey').value = v.key || el('mDisplayKey').value;
           onEditorInput();
           toast('Version restored (unsaved — click Save to keep)');
@@ -3842,6 +3871,7 @@ const App = (() => {
           if(currentSong.key === 'NN'){
             const preferFlat = Transposer.FLAT_KEYS.has(fallbackKey);
             el('editor').value = NashvilleSystem.contentToLetters(el('editor').value, fallbackKey.replace(/m$/, ''), preferFlat);
+            syncUndoBaseline();
           } else {
             currentSong.key = fallbackKey;
           }
@@ -4032,12 +4062,14 @@ const App = (() => {
       if(undoStack.length===0) return;
       redoStack.push(el('editor').value);
       el('editor').value = undoStack.pop();
+      syncUndoBaseline();
       onEditorInput();
     };
     el('btnRedo').onclick = () => {
       if(redoStack.length===0) return;
       undoStack.push(el('editor').value);
       el('editor').value = redoStack.pop();
+      syncUndoBaseline();
       onEditorInput();
     };
 
