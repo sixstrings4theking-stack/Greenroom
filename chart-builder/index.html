@@ -99,21 +99,23 @@ small{color:var(--text-faint);}
   display:flex; flex-direction:column; gap:10px;
   padding:10px 12px; background:var(--bg-panel-2); border-bottom:1px solid var(--border-soft); flex-shrink:0;
 }
-/* Collapse toggle for smaller screens / a chord-focused workflow — hides
-   everything but Title (so you still know what you're editing) while
-   charting. A thin full-width handle sitting between the metadata bar and
-   Insert Section, rather than a button inside the collapsible content
-   itself, so it stays put (doesn't jump position) whichever state it's in. */
-#btnToggleMeta{
+/* Shared thin "collapse handle" bar — three triangles, toggles a section's
+   visibility. Used for the metadata bar (hides everything but Title for a
+   chord-focused workflow) and the tag filter list. A standalone element
+   next to whatever it collapses, rather than a button inside the
+   collapsible content itself, so it stays put (doesn't jump position)
+   whichever state it's in. */
+.collapse-handle{
   display:flex; justify-content:center; align-items:center; gap:6px;
   width:100%; padding:2px 0; margin:0; border:none; border-radius:0;
   background:var(--bg-panel); flex-shrink:0;
 }
-#btnToggleMeta:hover{background:var(--bg-input);}
-#btnToggleMeta span{font-size:8px; line-height:1; color:var(--text-faint); transition:transform .15s ease;}
-#btnToggleMeta:hover span{color:var(--text-dim);}
-#btnToggleMeta.collapsed span{transform:rotate(180deg);}
+.collapse-handle:hover{background:var(--bg-input);}
+.collapse-handle span{font-size:8px; line-height:1; color:var(--text-faint); transition:transform .15s ease;}
+.collapse-handle:hover span{color:var(--text-dim);}
+.collapse-handle.collapsed span{transform:rotate(180deg);}
 #metaBar.collapsed .meta-collapsible{display:none;}
+#tagFilters.collapsed{display:none;}
 .meta-row{display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 14px;}
 #metaBar .field{flex:1 1 120px; min-width:110px;}
 #metaBar .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:3px;}
@@ -383,6 +385,7 @@ small{color:var(--text-faint);}
       <input type="text" id="searchBox" placeholder="Search title, artist, lyrics…">
     </div>
     <div id="tagFilters"></div>
+    <button type="button" id="btnToggleTags" class="collapse-handle hidden" title="Hide tag filters"><span>▲</span><span>▲</span><span>▲</span></button>
     <div id="songList"></div>
   </div>
 
@@ -426,12 +429,12 @@ small{color:var(--text-faint);}
             <div class="key-chips" id="preferredKeyChips"></div>
           </div>
           <label style="margin-top:6px;">Tags (comma-sep)</label>
-          <input id="mTags" placeholder="fast, christmas, key-of-g">
+          <input id="mTags" placeholder="fast, christmas, communion, easter">
         </div>
       </div>
       <div class="meta-row meta-collapsible">
         <div class="field" style="flex:2 1 240px;">
-          <label>Copyright</label>
+          <label>Copyright/Licensing</label>
           <div class="copyright-input-row">
             <div class="copyright-mode-controls" id="copyrightModeControls">
               <button type="button" class="copyright-symbol-btn" data-mode="©" title="Copyright">©</button>
@@ -445,7 +448,7 @@ small{color:var(--text-faint);}
         <div class="field"><label>Church CCLI #</label><input id="mChurchCCLI" placeholder="License # (optional)"></div>
       </div>
     </div>
-    <button type="button" id="btnToggleMeta" title="Hide song metadata (Title stays visible)"><span>▲</span><span>▲</span><span>▲</span></button>
+    <button type="button" id="btnToggleMeta" class="collapse-handle" title="Hide song metadata (Title stays visible)"><span>▲</span><span>▲</span><span>▲</span></button>
 
     <div id="structBar">
       <span class="lbl">Insert Section:</span>
@@ -632,6 +635,15 @@ const FontScaleStore = (() => {
 // other display preferences above.
 const MetaBarCollapseStore = (() => {
   const KEY = 'wcb_metabar_collapsed';
+  function get(){ return localStorage.getItem(KEY) === 'true'; }
+  function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
+  return { get, set };
+})();
+
+// Same idea, for the sidebar's tag filter list — once a library has a lot
+// of tags, that chip row can eat a chunk of the song list's vertical space.
+const TagFilterCollapseStore = (() => {
+  const KEY = 'wcb_tagfilters_collapsed';
   function get(){ return localStorage.getItem(KEY) === 'true'; }
   function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
   return { get, set };
@@ -2092,8 +2104,9 @@ const App = (() => {
     songs.forEach(s => (s.tags||[]).forEach(t => tagSet.add(t)));
     const box = el('tagFilters');
     box.innerHTML = '';
-    if(tagSet.size === 0){ box.classList.add('hidden'); return; }
+    if(tagSet.size === 0){ box.classList.add('hidden'); el('btnToggleTags').classList.add('hidden'); return; }
     box.classList.remove('hidden');
+    el('btnToggleTags').classList.remove('hidden');
     [...tagSet].sort().forEach(tag => {
       const chip = document.createElement('span');
       chip.className = 'tag-chip' + (activeTagFilters.has(tag) ? ' active' : '');
@@ -3860,6 +3873,17 @@ const App = (() => {
     applyMetaBarCollapse(collapsed);
   }
 
+  function applyTagFilterCollapse(collapsed){
+    el('tagFilters').classList.toggle('collapsed', collapsed);
+    el('btnToggleTags').classList.toggle('collapsed', collapsed);
+    el('btnToggleTags').title = collapsed ? 'Show tag filters' : 'Hide tag filters';
+  }
+  function toggleTagFilterCollapse(){
+    const collapsed = !TagFilterCollapseStore.get();
+    TagFilterCollapseStore.set(collapsed);
+    applyTagFilterCollapse(collapsed);
+  }
+
   /* ---------------- Intro popup ---------------- */
   function maybeShowNNIntro(force=false){
     if(!force && (!NNModeStore.isEnabled() || NNModeStore.introDismissed())) return;
@@ -3923,6 +3947,7 @@ const App = (() => {
     el('btnSettings').onclick = openSettings;
     el('btnNNMode').onclick = toggleNNMode;
     el('btnToggleMeta').onclick = toggleMetaBarCollapse;
+    el('btnToggleTags').onclick = toggleTagFilterCollapse;
     el('btnRomanNumerals').onclick = toggleNotationStyle;
 
     ['mTitle','mArtist','mCCLI','mCopyright','mChurchCCLI','mTags'].forEach(id => {
@@ -4038,6 +4063,7 @@ const App = (() => {
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
     applyMetaBarCollapse(MetaBarCollapseStore.get());
+    applyTagFilterCollapse(TagFilterCollapseStore.get());
     await refreshLibrary();
     if(songs.length){ selectSong(songs[0].id); }
     else { newSong(); }
