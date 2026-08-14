@@ -164,6 +164,13 @@ small{color:var(--text-faint);}
 .key-chip span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
 .key-chip button{flex-shrink:0; background:none; border:none; color:var(--accent); opacity:.6; cursor:pointer; font-size:11px; line-height:1; padding:0;}
 .key-chip button:hover{opacity:1; color:var(--danger);}
+/* Faint hint shown in the chips area until at least one key is added —
+   spans the full grid width rather than sitting in a single narrow column,
+   and switches the container to flex just for this state so the hint can
+   sit vertically centered against the picker beside it (the grid's
+   align-content:start otherwise packs a single row to the top). */
+.key-chips-empty{grid-column:1 / -1; font-size:12.6px; font-style:italic; color:var(--text-faint);}
+.key-chips:has(.key-chips-empty){display:flex; align-items:center;}
 
 /* Structure toolbar — wraps to additional rows as more section buttons
    accumulate (a long song can have many Verse/Chorus/Tag buttons) rather
@@ -1801,6 +1808,10 @@ const App = (() => {
   function renderPreferredKeyChips(){
     const box = el('preferredKeyChips');
     const keys = (currentSong && currentSong.preferredKeys) || [];
+    if(!keys.length){
+      box.innerHTML = `<span class="key-chips-empty">Select and add Preferred keys</span>`;
+      return;
+    }
     box.innerHTML = keys.map(k => `
       <span class="key-chip" data-key="${Renderer.escapeHtml(k)}"><span>${Renderer.escapeHtml(formatPreferredKeyLabel(k))}</span><button type="button" title="Remove">✕</button></span>
     `).join('');
