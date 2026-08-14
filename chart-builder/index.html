@@ -170,6 +170,12 @@ small{color:var(--text-faint);}
 }
 #structBar .lbl{font-size:11px; color:var(--text-faint); margin-right:4px; white-space:nowrap;}
 #structBar button{font-size:12px; padding:5px 9px; white-space:nowrap;}
+/* Same purple as Circle of 5ths (.circle-btn), but following this bar's own
+   plain-outline button convention (Intro/Verse/Chorus/...) rather than a
+   filled swatch — background stays the normal button background, only the
+   border and text pick up the color. */
+#btnKeyChange{color:#8b6ef2; border-color:#8b6ef2; font-weight:600;}
+#btnKeyChange:hover{background:rgba(139,110,242,.12); border-color:#8b6ef2;}
 .dynamic-group{display:inline-flex; gap:4px; margin-right:6px;}
 .dynamic-group button.next-num{border-color:var(--accent-dim); color:var(--accent);}
 .dynamic-group button.next-num:hover{border-color:var(--accent);}
@@ -238,6 +244,11 @@ small{color:var(--text-faint);}
 .cs-section{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
 .cs-section-label{font-size:calc(11px * var(--chart-font-scale)); font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#a06a1e; margin-bottom:3px;}
 .cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:calc(12px * var(--chart-font-scale));}
+/* Key-change marker (see ChordParser.KEY_CHANGE_RE / Renderer.renderSections)
+   — same purple as the song-map roadmap line, since it's the same "where
+   the song moves" family of information. Scales with editor-typed content
+   like the rest of the chart body. */
+.cs-keychange-row{font-weight:700; letter-spacing:.3px; color:#7a5ce8; font-size:calc(12px * var(--chart-font-scale)); margin:4px 0;}
 .cs-line{display:flex; flex-direction:column; white-space:pre;}
 .chord-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.1; white-space:pre; margin-bottom:var(--chord-lyric-gap);}
 .lyric-row{font-family:var(--mono); font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.5; white-space:pre; color:#111;}
@@ -296,6 +307,15 @@ small{color:var(--text-faint);}
 #notePopup input{width:100%; margin-bottom:8px;}
 #notePopup .np-row{display:flex; gap:6px; justify-content:flex-end;}
 #notePopup button{font-size:12px; padding:5px 10px;}
+
+/* Key-change insertion popup (Key Change button in the struct bar) */
+#keyChangePopup{position:fixed; z-index:80; width:200px; background:var(--bg-panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.5); padding:10px; font-size:12px;}
+#keyChangePopup .kc-label{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:8px; text-align:center;}
+#keyChangePopup .kc-stepper{display:flex; align-items:center; justify-content:center; gap:14px; margin-bottom:10px;}
+#keyChangePopup .kc-stepper button{font-size:15px; padding:4px 12px; line-height:1;}
+#keyChangePopup .kc-value{font-size:18px; font-weight:700; min-width:44px; text-align:center; font-variant-numeric:tabular-nums;}
+#keyChangePopup .kc-row{display:flex; gap:6px; justify-content:flex-end;}
+#keyChangePopup button{font-size:12px; padding:5px 10px;}
 
 /* PRINT — A4, fixed 0.25in margins */
 @page{ size: A4; margin: 0.25in; }
@@ -435,6 +455,7 @@ small{color:var(--text-faint);}
       <span id="tagButtonGroup" class="dynamic-group"></span>
       <span id="interludeButtonGroup" class="dynamic-group"></span>
       <button data-tag="Outro">Outro</button>
+      <button type="button" id="btnKeyChange" title="Insert a key change — transposes everything after it in the chart until the next key change">⇅ Key Change</button>
       <div class="right-controls">
         <div class="display-key-control">
           <label class="lbl" style="margin:0;">Display Key:</label>
@@ -506,6 +527,7 @@ Was [6m]blind but [5]now I [1]see"></textarea>
 <div id="toast"></div>
 <div id="chordPopup" class="hidden"></div>
 <div id="notePopup" class="hidden"></div>
+<div id="keyChangePopup" class="hidden"></div>
 
 <div id="nnIntroBackdrop" class="hidden">
   <div id="nnIntroModal">
@@ -651,10 +673,18 @@ const ChordParser = (() => {
     return sections.filter(s => s.label !== null || s.lines.some(l=>l.trim()!==''));
   }
 
+  // ChordPro-style directive, e.g. "{Key Change: +2}" — inserted via the
+  // struct bar's Key Change button (see App.openKeyChangePopup). Editor-only
+  // for now: recognized here so it doesn't get misread as a lyric line, but
+  // the renderer deliberately skips it rather than showing it in the chart.
+  const KEY_CHANGE_RE = /^\s*\{\s*key change\s*:\s*([+-]?\d+)\s*\}\s*$/i;
+
   // Parse a single lyric+chord line into tokens: {chord, text}
   // "text" is the lyric fragment that follows the chord up to the next chord.
   function parseLine(line){
     if(line.trim()==='') return {type:'blank'};
+    const kc = line.match(KEY_CHANGE_RE);
+    if(kc) return {type:'keychange', semitones: parseInt(kc[1], 10)};
     // full-line comment: wrap in parentheses or start with '#'
     if(/^\s*#/.test(line)) return {type:'comment', text: line.replace(/^\s*#\s?/,'')};
     if(!line.includes('[')){
@@ -1058,6 +1088,13 @@ const Renderer = (() => {
   // untouched either way — they're absolute, not key-relative. Note-annotations
   // (tokens starting with '*', e.g. [*Repeat 2x]) are never chords — pass through.
   //
+  // keyChangeSemitones is the running total from every {Key Change: N} marker
+  // (see ChordParser.KEY_CHANGE_RE) at or before this token, applied on top of
+  // the base display key — same rationale as capo below for why it's skipped
+  // in NN mode: a mid-song modulation shifts the SOUNDING pitch of a letter
+  // chart, but Nashville numbers are already key-relative, so there's nothing
+  // for a semitone shift to mean there.
+  //
   // Capo handling: a capo raises every open-string pitch by however many frets
   // it's on, so the SOUNDING chord equals (shape played) + (capo frets). To keep
   // the sounding key constant once a capo is added, the SHAPE shown on the chart
@@ -1068,7 +1105,7 @@ const Renderer = (() => {
   // capo affects the physical shape either way. It intentionally does NOT apply
   // when displayKey is 'NN' or unset, since raw scale-degree numbers are already
   // key-independent and aren't a physical shape to shift.
-  function formatChordForDisplay(token, displayKey, capo){
+  function formatChordForDisplay(token, displayKey, capo, keyChangeSemitones){
     if(token.charAt(0) === '*') return token;
     if(!displayKey || displayKey === 'NN') return token;
     let letterChord = token;
@@ -1077,6 +1114,10 @@ const Renderer = (() => {
       const keyRoot = displayKey.replace(/m$/, '');
       try{ letterChord = NashvilleSystem.toLetterChord(token, keyRoot, preferFlat); }
       catch(e){ letterChord = token; }
+    }
+    if(keyChangeSemitones){
+      const preferFlat = Transposer.FLAT_KEYS.has(displayKey);
+      letterChord = Transposer.transposeChord(letterChord, keyChangeSemitones, preferFlat);
     }
     const capoNum = parseInt(capo, 10);
     if(capoNum > 0){
@@ -1096,12 +1137,27 @@ const Renderer = (() => {
     return escapeHtml(displayChord);
   }
 
-  function renderLine(parsedLine, displayKey, capo){
+  // Key-change marker display text (see ChordParser.KEY_CHANGE_RE) — a
+  // letter-key chart shows a plain "Key Change" callout (the transposed
+  // chords after it already say the rest), but Nashville Numbers stay
+  // key-independent by design (see formatChordForDisplay), so there's no
+  // transposed chord to point at — it spells out the modulation directly.
+  function renderKeyChangeMarker(parsedLine, displayKey){
+    if(!displayKey || displayKey === 'NN'){
+      const n = Math.abs(parsedLine.semitones);
+      const dir = parsedLine.semitones > 0 ? 'Up' : (parsedLine.semitones < 0 ? 'Down' : null);
+      const text = dir ? `Modulate: ${dir} ${n} semitone${n === 1 ? '' : 's'}` : 'Modulate: No change';
+      return `<div class="cs-keychange-row">${escapeHtml(text)}</div>`;
+    }
+    return `<div class="cs-keychange-row">Key Change</div>`;
+  }
+
+  function renderLine(parsedLine, displayKey, capo, keyChangeSemitones){
     if(parsedLine.type === 'blank') return `<div class="cs-line">&nbsp;</div>`;
     if(parsedLine.type === 'comment') return `<div class="comment-row">${escapeHtml(parsedLine.text)}</div>`;
     if(parsedLine.type === 'lyric-only') return `<div class="lyric-row">${escapeHtml(parsedLine.text)}</div>`;
     if(parsedLine.type === 'chords-only'){
-      const html = parsedLine.chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo))).join('   ');
+      const html = parsedLine.chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo, keyChangeSemitones))).join('   ');
       return `<div class="chordonly-row">${html}</div>`;
     }
     // 'line': build a chord row aligned above a lyric row using padding.
@@ -1114,7 +1170,7 @@ const Renderer = (() => {
     parsedLine.tokens.forEach(tok => {
       const lyricText = tok.text || '';
       if(tok.chord){
-        const displayChord = formatChordForDisplay(tok.chord, displayKey, capo);
+        const displayChord = formatChordForDisplay(tok.chord, displayKey, capo, keyChangeSemitones);
         while(col < offset){ builtHtml += ' '; col++; }
         builtHtml += renderTokenHtml(displayChord);
         col += displayChord.length;
@@ -1126,6 +1182,10 @@ const Renderer = (() => {
   }
 
   function renderSections(sections, displayKey, capo){
+    // Running total of every {Key Change: N} marker encountered so far —
+    // persists across section boundaries (a key change isn't scoped to one
+    // section) and keeps accumulating until a later marker changes it again.
+    let keyChangeSemitones = 0;
     return sections.map(sec => {
       // If the section's FIRST content line is chords-only (a lead-in
       // progression, or the entire content for something like a pure-
@@ -1136,12 +1196,19 @@ const Renderer = (() => {
       let inlineChordsHtml = '';
       let remainingLines = sec.lines;
       if(sec.lines.length && sec.lines[0].type === 'chords-only'){
-        const chordsHtml = sec.lines[0].chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo))).join('&nbsp;&nbsp;&nbsp;');
+        const chordsHtml = sec.lines[0].chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo, keyChangeSemitones))).join('&nbsp;&nbsp;&nbsp;');
         inlineChordsHtml = ` <span class="cs-inline-chords">${chordsHtml}</span>`;
         remainingLines = sec.lines.slice(1);
       }
       const label = sec.label ? `<div class="cs-section-label">${escapeHtml(sec.label)}:${inlineChordsHtml}</div>` : '';
-      const lines = remainingLines.map(l => renderLine(l, displayKey, capo)).join('');
+      const lines = remainingLines.map(l => {
+        if(l.type === 'keychange'){
+          const marker = renderKeyChangeMarker(l, displayKey);
+          keyChangeSemitones += l.semitones;
+          return marker;
+        }
+        return renderLine(l, displayKey, capo, keyChangeSemitones);
+      }).join('');
       return `<div class="cs-section" data-section="${sec.label ? escapeHtml(sec.label) : ''}">${label}${lines}</div>`;
     }).join('');
   }
@@ -1441,6 +1508,13 @@ const IO = (() => {
       if(sec.label) out += `${sec.label}:\n`;
       sec.lines.forEach(pl => {
         if(pl.type === 'blank'){ out += '\n'; return; }
+        // Key-change marker — no equivalent in this plain-text format, and
+        // not shown in the chart yet either (see ChordParser.KEY_CHANGE_RE),
+        // so it's dropped here rather than crashing on the 'line' fallback
+        // below (which expects .tokens). ChordPro export keeps it, since
+        // that format is raw passthrough and it's already valid-looking
+        // ChordPro directive syntax there.
+        if(pl.type === 'keychange'){ return; }
         if(pl.type === 'comment'){ out += `; ${pl.text}\n`; return; }
         if(pl.type === 'lyric-only'){ out += `${pl.text}\n`; return; }
         if(pl.type === 'chords-only'){ out += `${pl.chords.join('   ')}\n`; return; }
@@ -2835,6 +2909,99 @@ const App = (() => {
     if(!popup.contains(e.target)) npClose();
   }
 
+  /* ---------------- Key Change Popup (struct bar button) ---------------- */
+  // Inserts a "{Key Change: +N}" marker on its own line at the cursor —
+  // present in the editor (and round-trips through ChordPro export, since
+  // it's already valid-looking ChordPro directive syntax) but deliberately
+  // not rendered in the chart yet (see ChordParser.KEY_CHANGE_RE and
+  // Renderer.renderLine) — actually transposing everything after it in the
+  // chart is future work.
+  let kcSemitones = 0;
+
+  function openKeyChangePopup(e){
+    kcSemitones = 0;
+    const popup = el('keyChangePopup');
+    popup.classList.remove('hidden');
+    kcRender();
+    const btnRect = e.currentTarget.getBoundingClientRect();
+    positionKeyChangePopup(btnRect.left, btnRect.bottom + 6);
+    setTimeout(() => {
+      document.addEventListener('mousedown', kcOutsideClick, true);
+      document.addEventListener('keydown', kcEscClose, true);
+    }, 0);
+  }
+
+  function positionKeyChangePopup(clientX, clientY){
+    const popup = el('keyChangePopup');
+    const margin = 8;
+    let left = clientX, top = clientY;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    requestAnimationFrame(() => {
+      const rect = popup.getBoundingClientRect();
+      if(rect.right > window.innerWidth - margin) left -= (rect.right - (window.innerWidth - margin));
+      if(rect.bottom > window.innerHeight - margin) top -= (rect.bottom - (window.innerHeight - margin));
+      if(left < margin) left = margin;
+      if(top < margin) top = margin;
+      popup.style.left = left + 'px';
+      popup.style.top = top + 'px';
+    });
+  }
+
+  function kcRender(){
+    const popup = el('keyChangePopup');
+    const display = kcSemitones > 0 ? `+${kcSemitones}` : String(kcSemitones);
+    popup.innerHTML = `
+      <div class="kc-label">Semitones</div>
+      <div class="kc-stepper">
+        <button type="button" id="kcDown" title="Down a semitone">−</button>
+        <div class="kc-value">${display}</div>
+        <button type="button" id="kcUp" title="Up a semitone">+</button>
+      </div>
+      <div class="kc-row">
+        <button type="button" id="kcCancel" class="ghost">Cancel</button>
+        <button type="button" id="kcInsert" class="primary">Insert</button>
+      </div>
+    `;
+    popup.querySelector('#kcDown').onclick = () => { kcSemitones = Math.max(-36, kcSemitones - 1); kcRender(); };
+    popup.querySelector('#kcUp').onclick = () => { kcSemitones = Math.min(36, kcSemitones + 1); kcRender(); };
+    popup.querySelector('#kcCancel').onclick = kcClose;
+    popup.querySelector('#kcInsert').onclick = kcInsert;
+  }
+
+  function kcInsert(){
+    const ta = el('editor');
+    const pos = ta.selectionStart;
+    const before = ta.value.slice(0, pos);
+    const after = ta.value.slice(pos);
+    const needsNL = before.length && !before.endsWith('\n') ? '\n' : '';
+    const sign = kcSemitones > 0 ? '+' : '';
+    const marker = `{Key Change: ${sign}${kcSemitones}}`;
+    const insertion = `${needsNL}${marker}\n`;
+    ta.value = before + insertion + after;
+    const newPos = (before + insertion).length;
+    onEditorInput();
+    ta.focus();
+    ta.setSelectionRange(newPos, newPos);
+    kcClose();
+  }
+
+  function kcClose(){
+    const popup = el('keyChangePopup');
+    popup.classList.add('hidden');
+    popup.innerHTML = '';
+    document.removeEventListener('mousedown', kcOutsideClick, true);
+    document.removeEventListener('keydown', kcEscClose, true);
+  }
+
+  function kcOutsideClick(e){
+    const popup = el('keyChangePopup');
+    if(!popup.contains(e.target)) kcClose();
+  }
+  function kcEscClose(e){
+    if(e.key === 'Escape') kcClose();
+  }
+
   /* ---------------- Import / Export ---------------- */
   function readFileAsText(file){
     return new Promise((resolve, reject) => {
@@ -3749,6 +3916,7 @@ const App = (() => {
     el('btnCCLI').onclick = openCCLIMock;
     el('btnPP').onclick = openProPresenterMock;
     el('btnCircle').onclick = openCircleOfFifths;
+    el('btnKeyChange').onclick = openKeyChangePopup;
     el('btnVersions').onclick = openVersions;
     el('btnSettings').onclick = openSettings;
     el('btnNNMode').onclick = toggleNNMode;
