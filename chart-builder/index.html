@@ -509,7 +509,6 @@ small{color:var(--text-faint);}
   <button id="btnLyricsOnly" class="lyrics-btn" title="Lyrics-only editor view, for parsing/exporting presentation slides">Lyrics</button>
   <span id="saveStatus">No song loaded</span>
   <div class="tb-group" style="border-right:none;">
-    <button id="btnCCLI" title="CCLI metadata lookup (mock)">CCLI Lookup</button>
     <button id="btnPP" title="ProPresenter sync (mock)">ProPresenter</button>
     <button id="btnVersions" title="Version history">History</button>
     <button id="btnSettings" title="Settings & Parameters">⚙</button>
@@ -3875,7 +3874,7 @@ const App = (() => {
     toast('PDF exported');
   }
 
-  /* ---------------- Drawers: Settings / CCLI mock / ProPresenter mock / Versions ---------------- */
+  /* ---------------- Drawers: Settings / ProPresenter mock / Versions ---------------- */
   function openDrawer(title, bodyHtml, onMount){
     const backdrop = document.createElement('div');
     backdrop.className = 'drawer-backdrop';
@@ -4024,49 +4023,6 @@ const App = (() => {
     });
   }
 
-  function openCCLIMock(){
-    const body = `
-      <h4>CCLI SongSelect Lookup <span class="badge">mock</span></h4>
-      <div class="form-row"><label>Search by title or CCLI song number</label><input id="ccliQuery" placeholder="e.g. Amazing Grace, or 4638"></div>
-      <button id="ccliSearchBtn" class="primary">Search</button>
-      <div id="ccliResult"></div>
-      <div class="mock-note">
-        // [API-MOCK] This panel simulates a CCLI SongSelect metadata response.
-        Real CCLI SongSelect API access requires an authenticated partner integration
-        under CCLI's Terms of Service, so live lookups are not performed client-side.
-        // [FUTURE-PYTHON] A FastAPI endpoint (e.g. <code>/api/ccli/lookup</code>) would
-        proxy authenticated CCLI requests server-side and return normalized JSON here.
-      </div>
-    `;
-    openDrawer('API Hook: CCLI Metadata', body, (drawer) => {
-      drawer.querySelector('#ccliSearchBtn').onclick = () => {
-        const q = drawer.querySelector('#ccliQuery').value.trim();
-        if(!q){ return; }
-        const mockData = {
-          title: q.match(/^\d+$/) ? '(mock) Song Title for CCLI #' + q : q,
-          ccli: q.match(/^\d+$/) ? q : String(1000000 + Math.floor(Math.random()*8999999)),
-          author: 'Various Writers (mock)',
-          copyright: `© ${new Date().getFullYear()} Mock Publishing (CCLI License required for use)`
-        };
-        drawer.querySelector('#ccliResult').innerHTML = `
-          <div class="mock-result">
-            <div><b>Title:</b> ${Renderer.escapeHtml(mockData.title)}</div>
-            <div><b>CCLI #:</b> ${mockData.ccli}</div>
-            <div><b>Author(s):</b> ${mockData.author}</div>
-            <div><b>Copyright:</b> ${mockData.copyright}</div>
-            <div style="margin-top:8px;"><button id="applyCCLI">Apply to current song</button></div>
-          </div>`;
-        drawer.querySelector('#applyCCLI').onclick = () => {
-          el('mTitle').value = mockData.title;
-          el('mCCLI').value = mockData.ccli;
-          el('mCopyright').value = mockData.copyright;
-          onEditorInput();
-          toast('Mock metadata applied');
-          drawer.remove();
-        };
-      };
-    });
-  }
 
   function openProPresenterMock(){
     const body = `
@@ -4889,7 +4845,6 @@ const App = (() => {
     el('btnExport').onclick = exportCurrent;
     el('btnPrint').onclick = doPrint;
     el('btnPDF').onclick = doPDF;
-    el('btnCCLI').onclick = openCCLIMock;
     el('btnPP').onclick = openProPresenterMock;
     el('btnCircle').onclick = openCircleOfFifths;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
