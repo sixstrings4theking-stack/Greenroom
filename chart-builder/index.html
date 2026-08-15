@@ -76,7 +76,26 @@ small{color:var(--text-faint);}
 #sidebar{
   width:270px; flex-shrink:0; background:var(--bg-panel); border-right:1px solid var(--border-soft);
   display:flex; flex-direction:column; min-height:0;
+  overflow:hidden; transition:width .2s ease;
 }
+/* Collapses the WHOLE library/song-list column (not just one row inside
+   it) — right edge recedes toward the left as width shrinks to 0, freeing
+   the full column's width for the editor/preview on a small screen.
+   overflow:hidden on #sidebar clips every child (search box, filter rows,
+   song list, the Libraries/Tags explainer) as one unit while it shrinks. */
+#sidebar.collapsed{width:0; border-right:none;}
+/* Persistent handle between the sidebar and main content — stays visible
+   in both states so the sidebar can always be reopened. Same three-tick
+   visual language as .collapse-handle, just rotated into a vertical bar. */
+#btnToggleSidebar{
+  display:flex; flex-direction:column; justify-content:center; align-items:center; gap:6px;
+  width:14px; flex-shrink:0; padding:0; margin:0; border:none; border-radius:0;
+  border-right:1px solid var(--border-soft); background:var(--bg-panel);
+}
+#btnToggleSidebar:hover{background:var(--bg-input);}
+#btnToggleSidebar span{font-size:8px; line-height:1; color:var(--text-faint); transition:transform .15s ease;}
+#btnToggleSidebar:hover span{color:var(--text-dim);}
+#btnToggleSidebar.collapsed span{transform:rotate(180deg);}
 #sidebar .sb-head{padding:10px; display:flex; flex-direction:column; gap:6px; border-bottom:1px solid var(--border-soft);}
 #sidebar .sb-head input{width:100%;}
 /* Creates a brand-new library and adds the CURRENTLY OPEN song to it.
@@ -117,6 +136,12 @@ small{color:var(--text-faint);}
 #sidebar .sb-empty p{margin:0 0 12px;}
 #sidebar .sb-empty p:last-child{margin-bottom:0;}
 #sidebar .sb-empty strong{color:var(--text-dim);}
+/* Always pinned under the song list (flex-shrink:0 keeps it from getting
+   squeezed as the list grows) — a standing explainer, not a dismissible
+   tip, since Libraries vs. Tags is a distinction worth having on hand every
+   time, not just once. */
+#libraryTagsExplainer{flex-shrink:0; padding:10px 12px; border-top:1px solid var(--border-soft); font-size:11px; line-height:1.5; color:var(--text-faint);}
+#libraryTagsExplainer strong{color:var(--text-dim);}
 
 #main{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;}
 
@@ -450,7 +475,11 @@ small{color:var(--text-faint);}
     <div id="tagFilters"></div>
     <button type="button" id="btnToggleTags" class="collapse-handle hidden" title="Hide tag filters"><span>▲</span><span>▲</span><span>▲</span></button>
     <div id="songList"></div>
+    <div id="libraryTagsExplainer">
+      <strong>Libraries</strong> are the broad, parent grouping — which whole set of songs a chart belongs to (e.g. separate repertoire for two different bands). <strong>Tags</strong> are finer-grained labels within that — theme, season, or purpose (e.g. fast, communion, Christmas) — for narrowing down what you're looking at inside a library.
+    </div>
   </div>
+  <button type="button" id="btnToggleSidebar" title="Hide song list"><span>◀</span><span>◀</span><span>◀</span></button>
 
   <!-- MAIN -->
   <div id="main">
@@ -710,6 +739,18 @@ const FontScaleStore = (() => {
   function set(pct){ localStorage.setItem(KEY, String(pct)); }
   function apply(pct){ document.documentElement.style.setProperty('--chart-font-scale', pct / 100); }
   return { get, set, apply, MIN_PCT, MAX_PCT, DEFAULT_PCT };
+})();
+
+// Persisted collapse state for the WHOLE sidebar column (Libraries, filter
+// rows, search, song list, the Libraries/Tags explainer — all of it) — lets
+// a small-screen workflow reclaim that entire width for the editor/preview,
+// not just one row inside it. Manual toggle only; remembered across reloads
+// like the other display preferences here.
+const SidebarCollapseStore = (() => {
+  const KEY = 'wcb_sidebar_collapsed';
+  function get(){ return localStorage.getItem(KEY) === 'true'; }
+  function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
+  return { get, set };
 })();
 
 // Persisted collapse state for the metadata bar — lets a chord-focused
@@ -4337,6 +4378,17 @@ const App = (() => {
     toast(NNModeStore.isEnabled() ? 'Nashville Number mode ON' : 'Nashville Number mode OFF — Key now transposes letter chords directly');
   }
 
+  function applySidebarCollapse(collapsed){
+    el('sidebar').classList.toggle('collapsed', collapsed);
+    el('btnToggleSidebar').classList.toggle('collapsed', collapsed);
+    el('btnToggleSidebar').title = collapsed ? 'Show song list' : 'Hide song list';
+  }
+  function toggleSidebarCollapse(){
+    const collapsed = !SidebarCollapseStore.get();
+    SidebarCollapseStore.set(collapsed);
+    applySidebarCollapse(collapsed);
+  }
+
   function applyMetaBarCollapse(collapsed){
     el('metaBar').classList.toggle('collapsed', collapsed);
     el('btnToggleMeta').classList.toggle('collapsed', collapsed);
@@ -4438,6 +4490,7 @@ const App = (() => {
     el('btnVersions').onclick = openVersions;
     el('btnSettings').onclick = openSettings;
     el('btnNNMode').onclick = toggleNNMode;
+    el('btnToggleSidebar').onclick = toggleSidebarCollapse;
     el('btnToggleMeta').onclick = toggleMetaBarCollapse;
     el('btnToggleTags').onclick = toggleTagFilterCollapse;
     el('btnToggleKeyFilters').onclick = toggleKeyFilterCollapse;
@@ -4561,6 +4614,7 @@ const App = (() => {
     syncRomanButtonForMode();
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
+    applySidebarCollapse(SidebarCollapseStore.get());
     applyMetaBarCollapse(MetaBarCollapseStore.get());
     applyTagFilterCollapse(TagFilterCollapseStore.get());
     applyKeyFilterCollapse(KeyFilterCollapseStore.get());
