@@ -89,9 +89,13 @@ small{color:var(--text-faint);}
 .csl-add-row button{font-size:11px; padding:4px 8px; white-space:nowrap;}
 /* #libraryFilters is a multi-select OR filter over the song list, exactly
    like #tagFilters/#keyFilters below — click a library to show only songs
-   in it, click again to remove it from the filter. No label, same as those
-   two rows — it's self-evident sitting right above the song list. */
+   in it, click again to remove it from the filter. Always expanded — with
+   Full Catalog as the built-in "show everything" option, there's no state
+   worth hiding away. */
 #libraryFilters{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border-soft);}
+/* Sits outside the collapsible #keyFilters/#tagFilters boxes so the section
+   name stays visible even while collapsed — only the chips themselves hide. */
+.filter-label{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); padding:8px 10px 0;}
 #keyFilters{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border-soft);}
 #tagFilters{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border-soft);}
 .tag-chip{font-size:11px; padding:3px 8px; border-radius:12px; background:var(--bg-input); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; white-space:nowrap;}
@@ -139,7 +143,6 @@ small{color:var(--text-faint);}
 #metaBar.collapsed .meta-collapsible{display:none;}
 #tagFilters.collapsed{display:none;}
 #keyFilters.collapsed{display:none;}
-#libraryFilters.collapsed{display:none;}
 .meta-row{display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 14px;}
 #metaBar .field{flex:1 1 120px; min-width:110px;}
 #metaBar .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:3px;}
@@ -431,12 +434,13 @@ small{color:var(--text-faint);}
       </div>
     </div>
     <div id="libraryFilters"></div>
-    <button type="button" id="btnToggleLibraries" class="collapse-handle hidden" title="Hide library filters"><span>▲</span><span>▲</span><span>▲</span></button>
     <div class="sb-head">
       <input type="text" id="searchBox" placeholder="Search title, artist, lyrics…">
     </div>
+    <div id="keyFiltersLabel" class="filter-label hidden">Preferred Key</div>
     <div id="keyFilters"></div>
     <button type="button" id="btnToggleKeyFilters" class="collapse-handle hidden" title="Hide key filters"><span>▲</span><span>▲</span><span>▲</span></button>
+    <div id="tagFiltersLabel" class="filter-label hidden">Tags</div>
     <div id="tagFilters"></div>
     <button type="button" id="btnToggleTags" class="collapse-handle hidden" title="Hide tag filters"><span>▲</span><span>▲</span><span>▲</span></button>
     <div id="songList"></div>
@@ -726,14 +730,6 @@ const TagFilterCollapseStore = (() => {
 // Same idea, for the sidebar's Preferred Key filter list.
 const KeyFilterCollapseStore = (() => {
   const KEY = 'wcb_keyfilters_collapsed';
-  function get(){ return localStorage.getItem(KEY) === 'true'; }
-  function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
-  return { get, set };
-})();
-
-// Same idea, for the sidebar's Library filter list.
-const LibraryFilterCollapseStore = (() => {
-  const KEY = 'wcb_libraryfilters_collapsed';
   function get(){ return localStorage.getItem(KEY) === 'true'; }
   function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
   return { get, set };
@@ -2255,9 +2251,8 @@ const App = (() => {
     songs.forEach(s => (s.libraries||[]).forEach(l => librarySet.add(l)));
     const box = el('libraryFilters');
     box.innerHTML = '';
-    if(librarySet.size <= 1){ box.classList.add('hidden'); el('btnToggleLibraries').classList.add('hidden'); return; }
+    if(librarySet.size <= 1){ box.classList.add('hidden'); return; }
     box.classList.remove('hidden');
-    el('btnToggleLibraries').classList.remove('hidden');
     const others = [...librarySet].filter(l => l !== STARTING_LIBRARY).sort();
     [STARTING_LIBRARY, ...others].forEach(lib => {
       const chip = document.createElement('span');
@@ -2307,6 +2302,10 @@ const App = (() => {
     songs.forEach(s => (s.preferredKeys||[]).forEach(k => keySet.add(k)));
     const box = el('keyFilters');
     box.innerHTML = '';
+    // The label always shows once songs exist, even with zero Preferred
+    // Keys assigned yet — same idea as the always-visible "Add to a new
+    // library" box. Only the chip row + collapse arrow need actual data.
+    el('keyFiltersLabel').classList.toggle('hidden', songs.length === 0);
     if(keySet.size === 0){ box.classList.add('hidden'); el('btnToggleKeyFilters').classList.add('hidden'); return; }
     box.classList.remove('hidden');
     el('btnToggleKeyFilters').classList.remove('hidden');
@@ -2340,6 +2339,9 @@ const App = (() => {
     songs.forEach(s => (s.tags||[]).forEach(t => tagSet.add(t)));
     const box = el('tagFilters');
     box.innerHTML = '';
+    // Same rule as the Preferred Key label above — always shown once songs
+    // exist, independent of whether any tag has been used yet.
+    el('tagFiltersLabel').classList.toggle('hidden', songs.length === 0);
     if(tagSet.size === 0){ box.classList.add('hidden'); el('btnToggleTags').classList.add('hidden'); return; }
     box.classList.remove('hidden');
     el('btnToggleTags').classList.remove('hidden');
@@ -4316,17 +4318,6 @@ const App = (() => {
     applyKeyFilterCollapse(collapsed);
   }
 
-  function applyLibraryFilterCollapse(collapsed){
-    el('libraryFilters').classList.toggle('collapsed', collapsed);
-    el('btnToggleLibraries').classList.toggle('collapsed', collapsed);
-    el('btnToggleLibraries').title = collapsed ? 'Show library filters' : 'Hide library filters';
-  }
-  function toggleLibraryFilterCollapse(){
-    const collapsed = !LibraryFilterCollapseStore.get();
-    LibraryFilterCollapseStore.set(collapsed);
-    applyLibraryFilterCollapse(collapsed);
-  }
-
   /* ---------------- Intro popup ---------------- */
   function maybeShowNNIntro(force=false){
     if(!force && (!NNModeStore.isEnabled() || NNModeStore.introDismissed())) return;
@@ -4398,7 +4389,6 @@ const App = (() => {
     el('btnToggleMeta').onclick = toggleMetaBarCollapse;
     el('btnToggleTags').onclick = toggleTagFilterCollapse;
     el('btnToggleKeyFilters').onclick = toggleKeyFilterCollapse;
-    el('btnToggleLibraries').onclick = toggleLibraryFilterCollapse;
     el('btnAddCurrentSongLibrary').onclick = addCurrentSongLibrary;
     el('currentSongLibraryInput').addEventListener('keydown', (e) => {
       if(e.key === 'Enter'){ e.preventDefault(); addCurrentSongLibrary(); }
@@ -4522,7 +4512,6 @@ const App = (() => {
     applyMetaBarCollapse(MetaBarCollapseStore.get());
     applyTagFilterCollapse(TagFilterCollapseStore.get());
     applyKeyFilterCollapse(KeyFilterCollapseStore.get());
-    applyLibraryFilterCollapse(LibraryFilterCollapseStore.get());
     await refreshLibrary();
     if(songs.length){ selectSong(songs[0].id); }
     else { newSong(); }
