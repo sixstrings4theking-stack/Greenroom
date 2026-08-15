@@ -372,7 +372,6 @@ small{color:var(--text-faint);}
    same plain style. */
 .cs-roadmap{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
 .cs-roadmap-item{display:inline-flex; align-items:center; gap:3px;}
-.cs-roadmap-count{font-size:10px; font-weight:700; color:#888;}
 .cs-section{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
 .cs-section-label{font-size:calc(11px * var(--chart-font-scale)); font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#a06a1e; margin-bottom:3px;}
 .cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:calc(12px * var(--chart-font-scale));}
@@ -1550,30 +1549,21 @@ const Renderer = (() => {
   // Interlude/Intro/Outro — see matchSectionFamily) renders as that family's
   // code (V1, PC2, ...); anything else (a custom user-typed section name)
   // falls back to a plain first-letter code. Every badge renders in the same
-  // plain black-on-white style — no per-family color mapping. Consecutive
-  // repeats of the exact same entry (e.g. the same chorus sung twice
-  // back-to-back) collapse into one badge with a "×N" count rather than
-  // repeating the badge N times.
+  // plain black-on-white style — no per-family color mapping. Every section
+  // gets its own badge, including back-to-back repeats of the same one
+  // (e.g. two V2's in a row) — the map should read as literally what was
+  // entered, not a collapsed summary of it.
   function buildRoadmap(sections){
-    const raw = [];
+    const codes = [];
     sections.forEach(sec => {
       if(!sec.label) return;
       const label = sec.label.trim();
       const match = matchSectionFamily(label);
-      if(match) { raw.push(match.code); return; }
+      if(match) { codes.push(match.code); return; }
       const firstLetterMatch = label.match(/[A-Za-z]/);
-      if(firstLetterMatch) raw.push(firstLetterMatch[0].toUpperCase());
+      if(firstLetterMatch) codes.push(firstLetterMatch[0].toUpperCase());
     });
-    const collapsed = [];
-    raw.forEach(code => {
-      const last = collapsed[collapsed.length - 1];
-      if(last && last.code === code) last.count++;
-      else collapsed.push({code, count:1});
-    });
-    return collapsed.map(c => {
-      const countHtml = c.count > 1 ? `<span class="cs-roadmap-count">&times;${c.count}</span>` : '';
-      return `<span class="cs-roadmap-item">${sectionBadgeSvg(c.code, ROADMAP_BADGE_SIZE)}${countHtml}</span>`;
-    }).join('');
+    return codes.map(code => `<span class="cs-roadmap-item">${sectionBadgeSvg(code, ROADMAP_BADGE_SIZE)}</span>`).join('');
   }
 
   function renderChordSheet(container, song, opts={}){
