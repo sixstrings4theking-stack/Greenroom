@@ -278,7 +278,13 @@ small{color:var(--text-faint);}
 .cs-meta{font-size:10.5px; color:#888; display:flex; gap:14px; border-top:1px solid #ddd; padding-top:4px; margin-bottom:10px; flex-wrap:wrap;}
 .cs-copyright{font-size:8pt; color:#666; margin:0 0 3px;}
 .cs-permission{font-size:8pt; color:#666; margin:0 0 3px;}
-.cs-roadmap{font-size:14pt; font-weight:700; letter-spacing:.4px; color:#7a5ce8; margin-bottom:10px;}
+/* The "song map" — round black-on-white section-marker badges (see
+   sectionBadgeSvg / buildRoadmap), one per section in order. No per-family
+   coloring; every badge (recognized family or custom section name) uses the
+   same plain style. */
+.cs-roadmap{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+.cs-roadmap-item{display:inline-flex; align-items:center; gap:3px;}
+.cs-roadmap-count{font-size:10px; font-weight:700; color:#888;}
 .cs-section{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
 .cs-section-label{font-size:calc(11px * var(--chart-font-scale)); font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#a06a1e; margin-bottom:3px;}
 .cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:calc(12px * var(--chart-font-scale));}
@@ -734,6 +740,49 @@ const KeyFilterCollapseStore = (() => {
   function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
   return { get, set };
 })();
+
+// Identifies which family (and instance number, where relevant) a raw
+// section-header label belongs to, e.g. "Pre-Chorus 2" -> {family:'Pre-Chorus',
+// num:2, code:'PC2'}. Returns null for a label that doesn't match any known
+// family (a custom user-typed section name) — callers fall back to a plain
+// first-letter badge in that case. No per-family color mapping — every
+// badge renders in the same plain black-on-white style (see sectionBadgeSvg)
+// regardless of family; only the code text differs.
+function matchSectionFamily(label){
+  if(!label) return null;
+  const trimmed = label.trim();
+  if(/^intro$/i.test(trimmed)) return {family:'Intro', num:null, code:'I'};
+  if(/^outro$/i.test(trimmed)) return {family:'Outro', num:null, code:'O'};
+  const families = [
+    {family:'Pre-Chorus', re:/^pre.?chorus\s*(\d+)?$/i, prefix:'PC'},
+    {family:'Verse',      re:/^verse\s*(\d+)?$/i,       prefix:'V'},
+    {family:'Chorus',     re:/^chorus\s*(\d+)?$/i,      prefix:'C'},
+    {family:'Bridge',     re:/^bridge\s*(\d+)?$/i,      prefix:'B'},
+    {family:'Tag',        re:/^tag\s*(\d+)?$/i,         prefix:'T'},
+    {family:'Interlude',  re:/^interlude\s*(\d+)?$/i,   prefix:'I'},
+  ];
+  for(const {family, re, prefix} of families){
+    const m = trimmed.match(re);
+    if(m){
+      const num = m[1] ? parseInt(m[1], 10) : null;
+      return {family, num, code: prefix + (num || '')};
+    }
+  }
+  return null;
+}
+
+// Renders one round section-marker badge as inline SVG — plain black-on-
+// white, no per-family coloring: white-filled circle, black ring, bold
+// black letter code centered with the dy="0.35em" baseline trick
+// (dominant-baseline renders inconsistently across font weights in Chrome).
+// Print-friendly by design, since these render on the chart's white page.
+// sizePx controls the rendered footprint; the internal font-size steps down
+// as the code gets longer (I / V1 / PC2) so longer codes still fit.
+function sectionBadgeSvg(code, sizePx){
+  const len = code.length;
+  const fontSize = len <= 2 ? 24 : (len === 3 ? 19 : 15);
+  return `<svg class="section-badge" viewBox="0 0 72 72" width="${sizePx}" height="${sizePx}" style="flex-shrink:0;"><circle cx="36" cy="36" r="33" fill="#fff" stroke="#000" stroke-width="3"/><text x="36" y="36" text-anchor="middle" dy="0.35em" font-family="-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="700" fill="#000">${code}</text></svg>`;
+}
 
 /* ---------------------------------------------------------------------------
    1. CHORD / LYRIC PARSER
@@ -1313,26 +1362,26 @@ const Renderer = (() => {
     }).join('');
   }
 
-  // Builds the "song order" roadmap line: shorthand for each labeled section
-  // in the order it appears. Verse and Chorus specifically carry their number
-  // straight from the label text ("Verse 2" -> "V2", "Chorus 1" -> "C1") per
-  // explicit instruction — every other section type keeps the plain
-  // first-letter abbreviation, except Pre-Chorus which uses "PC" (a bare "P"
-  // would be unhelpfully generic). Numbering Verse/Chorus is also what makes
-  // the collapse rule below correctly tell two DIFFERENT verses apart rather
-  // than folding them into a false "V(2)" repeat. Consecutive repeats of the
-  // exact same entry (e.g. the same chorus sung twice back-to-back) still
-  // collapse into one with a "(N)" count. Entries are separated by " | ".
+  const ROADMAP_BADGE_SIZE = 36; // bigger than the inline Key Change badge — the song map is the headline element
+
+  // Builds the "song map": the row of round section-marker badges under the
+  // chart's title/meta block, one per labeled section in the order it
+  // appears (this IS the "song map" — not a separate widget). A section
+  // whose label matches a known family (Verse/Pre-Chorus/Chorus/Bridge/Tag/
+  // Interlude/Intro/Outro — see matchSectionFamily) renders as that family's
+  // code (V1, PC2, ...); anything else (a custom user-typed section name)
+  // falls back to a plain first-letter code. Every badge renders in the same
+  // plain black-on-white style — no per-family color mapping. Consecutive
+  // repeats of the exact same entry (e.g. the same chorus sung twice
+  // back-to-back) collapse into one badge with a "×N" count rather than
+  // repeating the badge N times.
   function buildRoadmap(sections){
     const raw = [];
     sections.forEach(sec => {
       if(!sec.label) return;
       const label = sec.label.trim();
-      if(/^pre.?chorus/i.test(label)) { raw.push('PC'); return; }
-      const verseMatch = label.match(/^verse\s*(\d+)/i);
-      if(verseMatch) { raw.push('V' + verseMatch[1]); return; }
-      const chorusMatch = label.match(/^chorus\s*(\d+)/i);
-      if(chorusMatch) { raw.push('C' + chorusMatch[1]); return; }
+      const match = matchSectionFamily(label);
+      if(match) { raw.push(match.code); return; }
       const firstLetterMatch = label.match(/[A-Za-z]/);
       if(firstLetterMatch) raw.push(firstLetterMatch[0].toUpperCase());
     });
@@ -1342,7 +1391,10 @@ const Renderer = (() => {
       if(last && last.code === code) last.count++;
       else collapsed.push({code, count:1});
     });
-    return collapsed.map(c => c.count > 1 ? `${c.code}(${c.count})` : c.code).join(' | ');
+    return collapsed.map(c => {
+      const countHtml = c.count > 1 ? `<span class="cs-roadmap-count">&times;${c.count}</span>` : '';
+      return `<span class="cs-roadmap-item">${sectionBadgeSvg(c.code, ROADMAP_BADGE_SIZE)}${countHtml}</span>`;
+    }).join('');
   }
 
   function renderChordSheet(container, song, opts={}){
@@ -1361,7 +1413,7 @@ const Renderer = (() => {
       <div class="cs-artist" style="text-align:${titleAlign};">${artistLineParts.join(' | ')}</div>
       ${copyrightText ? `<div class="cs-copyright" style="text-align:${titleAlign};">${escapeHtml(copyrightText)}</div>` : ''}
       ${song.churchCcli ? `<div class="cs-permission" style="text-align:${titleAlign};">Used by Permission CCLI #: ${escapeHtml(song.churchCcli)}</div>` : ''}
-      ${roadmap ? `<div class="cs-roadmap" style="text-align:${titleAlign};">${escapeHtml(roadmap)}</div>` : ''}
+      ${roadmap ? `<div class="cs-roadmap" style="justify-content:${titleAlign==='center'?'center':(titleAlign==='right'?'flex-end':'flex-start')};">${roadmap}</div>` : ''}
       ${metaBits.length ? `<div class="cs-meta">${metaBits.map(escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
       ${renderSections(sections, song.key, song.capo)}
     `;
@@ -2137,7 +2189,7 @@ const App = (() => {
       <div class="cs-artist" style="text-align:${ta};">${parts.artistLineParts.join(' | ')}</div>
       ${parts.copyrightText ? `<div class="cs-copyright" style="text-align:${ta};">${Renderer.escapeHtml(parts.copyrightText)}</div>` : ''}
       ${song.churchCcli ? `<div class="cs-permission" style="text-align:${ta};">Used by Permission CCLI #: ${Renderer.escapeHtml(song.churchCcli)}</div>` : ''}
-      ${parts.roadmap ? `<div class="cs-roadmap" style="text-align:${ta};">${Renderer.escapeHtml(parts.roadmap)}</div>` : ''}
+      ${parts.roadmap ? `<div class="cs-roadmap" style="justify-content:${ta==='center'?'center':(ta==='right'?'flex-end':'flex-start')};">${parts.roadmap}</div>` : ''}
       ${parts.metaBits.length ? `<div class="cs-meta">${parts.metaBits.map(Renderer.escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
     `;
   }
