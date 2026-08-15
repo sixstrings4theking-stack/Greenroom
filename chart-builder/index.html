@@ -58,6 +58,13 @@ small{color:var(--text-faint);}
 #saveStatus{font-size:12px; color:var(--text-faint); white-space:nowrap;}
 .circle-btn{background:linear-gradient(135deg,#8b6ef2,#6a4fd8); color:#fff; border:1px solid #7a5ce8; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
 .circle-btn:hover{filter:brightness(1.1); border-color:#8b6ef2;}
+/* Mint/lime green, plain-outline by default like the RN/next-num toggle
+   convention elsewhere, filling in solid once selected (dark text on the
+   light fill for contrast, matching --accent-text's convention). */
+.lyrics-btn{background:var(--bg-input); color:#6fe0a0; border:1px solid #6fe0a0; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
+.lyrics-btn:hover{background:rgba(111,224,160,.12); border-color:#8de971;}
+.lyrics-btn.active{background:linear-gradient(135deg,#8de971,#4fd68a); color:#0d2b1a; border-color:#6fe0a0;}
+.lyrics-btn.active:hover{filter:brightness(1.05);}
 
 /* Intro popup */
 #nnIntroBackdrop{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:60; display:flex; align-items:center; justify-content:center;}
@@ -224,9 +231,13 @@ small{color:var(--text-faint);}
 /* Structure toolbar — wraps to additional rows as more section buttons
    accumulate (a long song can have many Verse/Chorus/Tag buttons) rather
    than scrolling horizontally, so every button stays visible at once. */
-#structBar{
+#structBar{flex-shrink:0;}
+/* #structBarChart (Insert Section + Display Key/Capo/RN) and #structBarLyrics
+   (slide-view controls) are mutually exclusive views of the same bar — only
+   one is ever un-hidden at a time (see toggleLyricsOnlyView). */
+#structBarChart, #structBarLyrics{
   display:flex; flex-wrap:wrap; gap:6px; padding:6px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border-soft);
-  flex-shrink:0; align-items:center;
+  align-items:center;
 }
 #structBar .lbl{font-size:11px; color:var(--text-faint); margin-right:4px; white-space:nowrap;}
 #structBar button{font-size:12px; padding:5px 9px; white-space:nowrap;}
@@ -253,6 +264,42 @@ small{color:var(--text-faint);}
 #btnRomanNumerals:disabled:hover{background:var(--bg-input);}
 .capo-control select{padding:5px 8px; font-size:12px;}
 
+/* Segmented button group — Slide View / Aspect Ratio controls in
+   #structBarLyrics. Same mint accent as the Lyrics button itself. */
+.seg-control{display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden;}
+.seg-control button{border:none; border-radius:0; background:var(--bg-input); color:var(--text-dim); padding:5px 10px;}
+.seg-control button + button{border-left:1px solid var(--border);}
+.seg-control button.active{background:#6fe0a0; color:#0d2b1a; font-weight:600;}
+#slideNavControls{gap:6px;}
+#slideNavControls.hidden{display:none;}
+#slideCounter{font-size:12px; color:var(--text-faint); min-width:44px; text-align:center;}
+
+/* Lyrics-mode slide preview (see renderLyricsSlides) — a black projector-
+   style box per slide, centered white text, no chords/labels/song-map
+   chrome ever rendered inside it (see the mission note above
+   toggleLyricsOnlyView: nothing here is meant to export, this box's
+   CONTENTS are literally what a congregation would see). */
+.slide-stage{display:flex; align-items:center; justify-content:center; width:100%; min-height:100%; padding:24px; box-sizing:border-box;}
+.slide-box{position:relative; background:#000; color:#fff; display:flex; align-items:center; justify-content:center; text-align:center; width:100%; max-width:820px; border-radius:6px; box-shadow:0 8px 30px rgba(0,0,0,.5); padding:28px; box-sizing:border-box;}
+/* Light theme — straight inversion (see LyricsThemeStore), dark is default. */
+.slide-box.light{background:#fff; color:#111; box-shadow:0 8px 30px rgba(0,0,0,.18); border:1px solid #e2e2e2;}
+/* Same --chart-font-scale var the chart-sheet text uses (see the
+   pane-head's A−/A+/Reset controls) — those were built for the normal
+   chart view and silently did nothing here until wired to this var too. */
+.slide-text{font-size:calc(26px * var(--chart-font-scale)); font-weight:600; line-height:1.45; white-space:pre-wrap;}
+/* Same metadata shown at the top of the chart (title/Authored By/CCLI/
+   copyright/permission — see buildSlideFootnoteHtml), stacked one line per
+   field just like the chart header is, bottom-right justified in the LAST
+   slide only, like a CCLI compliance block. */
+.slide-footnote{position:absolute; right:14px; bottom:8px; max-width:65%; font-size:11px; font-style:italic; color:rgba(255,255,255,.55); line-height:1.35; text-align:right;}
+.slide-box.light .slide-footnote{color:rgba(0,0,0,.5);}
+.slide-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:16px; width:100%; padding:16px; box-sizing:border-box; align-content:start;}
+.slide-grid .slide-box{padding:14px; box-shadow:0 3px 10px rgba(0,0,0,.4);}
+.slide-grid .slide-box.light{box-shadow:0 3px 10px rgba(0,0,0,.12);}
+.slide-grid .slide-text{font-size:calc(13px * var(--chart-font-scale)); line-height:1.35; font-weight:500;}
+.slide-grid .slide-footnote{font-size:7px; bottom:3px; right:6px;}
+.slide-empty{padding:40px; color:var(--text-faint); font-size:13px; text-align:center; width:100%;}
+
 /* Split pane */
 #splitPane{flex:1; display:flex; min-height:0;}
 #editorPane, #previewPane{flex:1; min-width:0; display:flex; flex-direction:column; min-height:0;}
@@ -263,10 +310,15 @@ small{color:var(--text-faint);}
    heights side by side. */
 .pane-head{display:flex; justify-content:space-between; align-items:center; padding:6px 12px; min-height:42px; background:var(--bg-panel-2); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); flex-shrink:0;}
 .pane-head .hint{text-transform:none; letter-spacing:0; font-size:11px;}
+.pane-head-left{display:flex; align-items:center; gap:10px;}
 #editor{
   flex:1; resize:none; border:none; border-radius:0; background:var(--bg); color:var(--text);
   font-family:var(--mono); font-size:14px; line-height:1.6; padding:14px; white-space:pre; overflow:auto;
 }
+/* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
+   stripe + tinted background make it visually obvious this isn't the normal
+   editable chart, matching the Lyrics button's own color. */
+#editor.lyrics-only-mode{background:#0e1a13; box-shadow:inset 4px 0 0 #6fe0a0; cursor:default;}
 #previewScroll{flex:1; overflow:auto; background:#0e1014; padding:24px; display:flex; flex-direction:column; align-items:center;}
 /* Live preview pages: real A4 mm dimensions + real 0.25in margin baked in as
    padding (since there's no browser @page mechanism outside of an actual
@@ -445,6 +497,7 @@ small{color:var(--text-faint);}
   </div>
   <div class="spacer"></div>
   <button id="btnCircle" class="circle-btn" title="Open Circle of Fifths chord wheel in a new window">⭘ Circle of 5ths</button>
+  <button id="btnLyricsOnly" class="lyrics-btn" title="Lyrics-only editor view, for parsing/exporting presentation slides">Lyrics</button>
   <span id="saveStatus">No song loaded</span>
   <div class="tb-group" style="border-right:none;">
     <button id="btnCCLI" title="CCLI metadata lookup (mock)">CCLI Lookup</button>
@@ -544,43 +597,72 @@ small{color:var(--text-faint);}
     <button type="button" id="btnToggleMeta" class="collapse-handle" title="Hide song metadata (Title stays visible)"><span>▲</span><span>▲</span><span>▲</span></button>
 
     <div id="structBar">
-      <span class="lbl">Insert Section:</span>
-      <button data-tag="Intro">Intro</button>
-      <span id="verseButtonGroup" class="dynamic-group"></span>
-      <span id="prechorusButtonGroup" class="dynamic-group"></span>
-      <span id="chorusButtonGroup" class="dynamic-group"></span>
-      <span id="bridgeButtonGroup" class="dynamic-group"></span>
-      <span id="tagButtonGroup" class="dynamic-group"></span>
-      <span id="interludeButtonGroup" class="dynamic-group"></span>
-      <button data-tag="Outro">Outro</button>
-      <button type="button" id="btnKeyChange" title="Insert a key change — transposes everything after it in the chart until the next key change">⇅ Key Change</button>
-      <div class="right-controls">
-        <div class="display-key-control">
-          <label class="lbl" style="margin:0;">Display Key:</label>
-          <button id="btnTransDown" class="icon" title="Transpose down">−</button>
-          <select id="mDisplayKey">
-            <option value="NN">Nashville #s (NN)</option>
-            <option>C</option><option>C#</option><option>Db</option><option>D</option><option>Eb</option>
-            <option>E</option><option>F</option><option>F#</option><option>Gb</option><option>G</option>
-            <option>Ab</option><option>A</option><option>Bb</option><option>B</option>
-          </select>
-          <button id="btnTransUp" class="icon" title="Transpose up">+</button>
-          <small id="origKeyNote"></small>
+      <div id="structBarChart">
+        <span class="lbl">Insert Section:</span>
+        <button data-tag="Intro">Intro</button>
+        <span id="verseButtonGroup" class="dynamic-group"></span>
+        <span id="prechorusButtonGroup" class="dynamic-group"></span>
+        <span id="chorusButtonGroup" class="dynamic-group"></span>
+        <span id="bridgeButtonGroup" class="dynamic-group"></span>
+        <span id="tagButtonGroup" class="dynamic-group"></span>
+        <span id="interludeButtonGroup" class="dynamic-group"></span>
+        <button data-tag="Outro">Outro</button>
+        <button type="button" id="btnKeyChange" title="Insert a key change — transposes everything after it in the chart until the next key change">⇅ Key Change</button>
+        <div class="right-controls">
+          <div class="display-key-control">
+            <label class="lbl" style="margin:0;">Display Key:</label>
+            <button id="btnTransDown" class="icon" title="Transpose down">−</button>
+            <select id="mDisplayKey">
+              <option value="NN">Nashville #s (NN)</option>
+              <option>C</option><option>C#</option><option>Db</option><option>D</option><option>Eb</option>
+              <option>E</option><option>F</option><option>F#</option><option>Gb</option><option>G</option>
+              <option>Ab</option><option>A</option><option>Bb</option><option>B</option>
+            </select>
+            <button id="btnTransUp" class="icon" title="Transpose up">+</button>
+            <small id="origKeyNote"></small>
+          </div>
+          <button type="button" id="btnRomanNumerals" title="Display and enter chords as Roman numerals (I, ii, IV...) instead of Nashville Numbers">RN</button>
+          <div class="capo-control">
+            <label class="lbl" style="margin:0;">Capo:</label>
+            <select id="mCapo">
+              <option value="">None</option>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+              <option value="7">7</option>
+              <option value="8">8</option>
+            </select>
+          </div>
         </div>
-        <button type="button" id="btnRomanNumerals" title="Display and enter chords as Roman numerals (I, ii, IV...) instead of Nashville Numbers">RN</button>
-        <div class="capo-control">
-          <label class="lbl" style="margin:0;">Capo:</label>
-          <select id="mCapo">
-            <option value="">None</option>
-            <option value="1">1</option>
-            <option value="2">2</option>
-            <option value="3">3</option>
-            <option value="4">4</option>
-            <option value="5">5</option>
-            <option value="6">6</option>
-            <option value="7">7</option>
-            <option value="8">8</option>
-          </select>
+      </div>
+      <!-- Replaces structBarChart entirely while the Lyrics view is active
+           (see toggleLyricsOnlyView) — slide-view controls instead of
+           chart-editing controls, since inserting structure only ever
+           happens in the chart editor (see the mission note above
+           toggleLyricsOnlyView). -->
+      <div id="structBarLyrics" class="hidden">
+        <span class="lbl">Slide View:</span>
+        <div class="seg-control" id="slideViewModeControl">
+          <button type="button" data-mode="individual">Individual</button>
+          <button type="button" data-mode="collective">Collective</button>
+        </div>
+        <span class="lbl" style="margin-left:14px;">Aspect Ratio:</span>
+        <div class="seg-control" id="slideAspectControl">
+          <button type="button" data-ratio="16:9">16:9</button>
+          <button type="button" data-ratio="4:3">4:3</button>
+        </div>
+        <span class="lbl" style="margin-left:14px;">Theme:</span>
+        <div class="seg-control" id="slideThemeControl">
+          <button type="button" data-theme="dark">Dark</button>
+          <button type="button" data-theme="light">Light</button>
+        </div>
+        <div class="right-controls" id="slideNavControls">
+          <button type="button" id="slidePrevBtn" class="icon" title="Previous slide">‹</button>
+          <span id="slideCounter"></span>
+          <button type="button" id="slideNextBtn" class="icon" title="Next slide">›</button>
         </div>
       </div>
     </div>
@@ -588,7 +670,10 @@ small{color:var(--text-faint);}
     <div id="splitPane">
       <div id="editorPane">
         <div class="pane-head">
-          <span>Editor</span>
+          <span class="pane-head-left">
+            <span>Editor</span>
+            <span class="hint" id="editorClickHint"></span>
+          </span>
           <span class="hint" id="parseStatus">0 lines</span>
         </div>
         <textarea id="editor" spellcheck="false" placeholder="# Welcome! Type here to build your chart — this is just an example.
@@ -735,6 +820,27 @@ const FontScaleStore = (() => {
   function set(pct){ localStorage.setItem(KEY, String(pct)); }
   function apply(pct){ document.documentElement.style.setProperty('--chart-font-scale', pct / 100); }
   return { get, set, apply, MIN_PCT, MAX_PCT, DEFAULT_PCT };
+})();
+
+// Lyrics-mode slide preview preferences (see renderLyricsSlides) — global
+// display prefs, same convention as font scale/2-column above, not per-song.
+const LyricsAspectStore = (() => {
+  const KEY = 'wcb_lyrics_aspect';
+  function get(){ const v = localStorage.getItem(KEY); return v === '4:3' ? '4:3' : '16:9'; } // 16:9 default
+  function set(v){ localStorage.setItem(KEY, v); }
+  return { get, set };
+})();
+const LyricsSlideViewStore = (() => {
+  const KEY = 'wcb_lyrics_slideview';
+  function get(){ const v = localStorage.getItem(KEY); return v === 'individual' ? 'individual' : 'collective'; } // collective default
+  function set(v){ localStorage.setItem(KEY, v); }
+  return { get, set };
+})();
+const LyricsThemeStore = (() => {
+  const KEY = 'wcb_lyrics_theme';
+  function get(){ const v = localStorage.getItem(KEY); return v === 'light' ? 'light' : 'dark'; } // dark default
+  function set(v){ localStorage.setItem(KEY, v); }
+  return { get, set };
 })();
 
 // Persisted collapse state for the WHOLE sidebar column (Libraries, filter
@@ -1868,6 +1974,8 @@ const App = (() => {
   let originalKey = null; // key of the song as stored (untransposed baseline)
   let liveKey = null; // key the editor content is CURRENTLY written in (source of truth for transposition)
   let dirty = false;
+  let lyricsSlideIndex = 0; // current slide in Individual slide-view mode (see renderLyricsSlides)
+  let lyricsUndoStack = [], lyricsRedoStack = []; // separate from undoStack/redoStack — lyrics-view breaks edit currentSong.lyricsContent, never the chart
   let activeTagFilters = new Set(); // library filter: song must have at least one selected tag
   let activeKeyFilters = new Set(); // library filter: song must have at least one selected preferred key
   let activeLibraryFilters = new Set(); // library filter: song must be in at least one selected Library
@@ -2058,10 +2166,11 @@ const App = (() => {
     // yet, loadIntoForm's default-key logic just shows NN, same as any
     // other song that's never been saved with a letter key showing.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(),
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
+    lyricsUndoStack = []; lyricsRedoStack = [];
     loadIntoForm();
     dirty = false;
     updateSaveStatus();
@@ -2136,6 +2245,7 @@ const App = (() => {
   }
 
   function loadIntoForm(){
+    exitLyricsOnlyView(); // never carry a stale stripped view into a different/reloaded song
     el('mTitle').value = currentSong.title || '';
     el('mArtist').value = currentSong.artist || '';
     el('mCCLI').value = currentSong.ccli || '';
@@ -2165,7 +2275,7 @@ const App = (() => {
       el('editor').value = currentSong.content || '';
     }
     syncUndoBaseline();
-    setNotationStyle(currentSong.notationStyle || 'arabic', false);
+    setNotationStyle(currentSong.notationStyle || 'roman', false);
     setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
     originalKey = usableKey;
     liveKey = usableKey;
@@ -2255,6 +2365,7 @@ const App = (() => {
   // if it fits/breaks a certain way here, it fits/breaks that way on paper.
   function renderPreview(){
     if(!currentSong) return;
+    if(el('btnLyricsOnly').classList.contains('active')){ renderLyricsSlides(); return; }
     const twoCol = el('toggle2col').checked;
     const {song, pages} = buildPrintPages();
     const parts = buildPageMetaParts(song);
@@ -2651,6 +2762,7 @@ const App = (() => {
     if(!s) return;
     currentSong = JSON.parse(JSON.stringify(s));
     undoStack = []; redoStack = [];
+    lyricsUndoStack = []; lyricsRedoStack = [];
     loadIntoForm();
     dirty = false;
     updateSaveStatus();
@@ -2684,7 +2796,7 @@ const App = (() => {
     currentSong.ccli = el('mCCLI').value.trim();
     currentSong.copyright = el('mCopyright').value.trim();
     currentSong.copyrightMode = currentSong.copyrightMode || '©';
-    currentSong.notationStyle = currentSong.notationStyle || 'arabic';
+    currentSong.notationStyle = currentSong.notationStyle || 'roman';
     currentSong.churchCcli = el('mChurchCCLI').value.trim();
     currentSong.capo = el('mCapo').value;
     // Once a song's canonical storage is Nashville Numbers, `key` stays 'NN'
@@ -3309,6 +3421,7 @@ const App = (() => {
   }
 
   function onEditorDoubleClick(e){
+    if(el('btnLyricsOnly').classList.contains('active')){ onLyricsDoubleClick(e); return; }
     const ta = el('editor');
     const clickPos = ta.selectionStart;
     const existing = findChordTokenAt(ta.value, clickPos);
@@ -3368,6 +3481,7 @@ const App = (() => {
   let npInsertIndex = null;
 
   function onEditorContextMenu(e){
+    if(el('btnLyricsOnly').classList.contains('active')){ onLyricsContextMenu(e); return; }
     e.preventDefault();
     const ta = el('editor');
     // Right-click places the caret at the click position in effectively all
@@ -3619,6 +3733,7 @@ const App = (() => {
     if(lastSong){
       currentSong = JSON.parse(JSON.stringify(lastSong));
       undoStack=[]; redoStack=[];
+      lyricsUndoStack = []; lyricsRedoStack = [];
       loadIntoForm();
       dirty = false;
       updateSaveStatus();
@@ -3959,7 +4074,24 @@ const App = (() => {
   /* ---------------- Circle of Fifths (opens in its own window) ---------------- */
   let circleWinRef = null;
 
-  function buildCircleOfFifthsHTML(){
+  // Maps every Display Key dropdown spelling to its slot in the wheel's own
+  // ORDER array (which only uses ONE spelling per pitch class — F#/Db, not
+  // Gb/C#) so an enharmonic Display Key still lands on the right wedge.
+  const CIRCLE_KEY_TO_INDEX = {'C':0,'G':1,'D':2,'A':3,'E':4,'B':5,'F#':6,'Gb':6,'Db':7,'C#':7,'Ab':8,'Eb':9,'Bb':10,'F':11};
+
+  // Which key the wheel should open pre-selected to: the open song's active
+  // Display Key if it's a real letter key, otherwise C — covers a brand-new
+  // song (no letter key chosen yet) and a canonical-NN song being viewed as
+  // NN (key-relative, so there's no absolute key to point at) the same way.
+  function circleInitialIndex(){
+    if(currentSong){
+      const dk = el('mDisplayKey').value;
+      if(dk && CIRCLE_KEY_TO_INDEX.hasOwnProperty(dk)) return CIRCLE_KEY_TO_INDEX[dk];
+    }
+    return 0;
+  }
+
+  function buildCircleOfFifthsHTML(initialIndex){
     // Self-contained document — this is a separate browser window, so it can't
     // share the main app's CSS/JS scope. Colors are hardcoded to match the
     // app's dark theme. Diatonic scales are hand-verified music theory (each
@@ -3979,7 +4111,7 @@ const App = (() => {
     return `<!DOCTYPE html>
 <html><head><meta charset="UTF-8"><title>Circle of Fifths — Chart Builder</title>
 <style>
-  :root{ --bg:#14171c; --panel:#1b1f27; --border:#2e3440; --text:#e7e9ee; --text-dim:#9aa2b1; --text-faint:#5f6779; --tonic:#e8b45a; --sub:#e6935a; --dom:#68c98f; }
+  :root{ --bg:#14171c; --panel:#1b1f27; --border:#2e3440; --text:#e7e9ee; --text-dim:#9aa2b1; --text-faint:#5f6779; --tonic:#68c98f; --sub:#e6935a; --dom:#e8b45a; }
   *{box-sizing:border-box;}
   body{margin:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; padding:10px 12px; text-align:center; overflow:hidden;}
   h2{font-size:17px; margin:0 0 2px;}
@@ -3998,8 +4130,16 @@ const App = (() => {
   .numeral{font-size:13px; font-weight:800; fill:#000; opacity:0; pointer-events:none; transition:opacity .25s, transform .7s cubic-bezier(.34,1.3,.64,1);}
   .numeral.show{opacity:1;}
   .wedge{fill:rgba(255,255,255,.025); stroke:var(--border); stroke-width:1; cursor:pointer; transition:fill .3s;}
-  .wedge.tonic{fill:rgba(232,180,90,.34);}
-  .wedge.dom{fill:rgba(104,201,143,.28);}
+  /* Base fill for the three rings — same purple family as the "Circle of
+     5ths" button that opens this window (#8b6ef2/#7a5ce8/#6a4fd8), instead
+     of the old near-invisible white tint. Darkens slightly ring by ring
+     (major, then minor, then dim) so the three bands stay legible as
+     distinct rings rather than one flat wash. */
+  .wedge.wedge-major{fill:rgba(139,110,242,.16);}
+  .wedge.wedge-minor{fill:rgba(122,92,232,.12);}
+  .wedge.wedge-dim{fill:rgba(106,79,216,.09);}
+  .wedge.tonic{fill:rgba(104,201,143,.34);}
+  .wedge.dom{fill:rgba(232,180,90,.28);}
   .wedge.sub{fill:rgba(230,147,90,.28);}
   .ring{fill:none; stroke:var(--border); stroke-width:1;}
   #panel{margin-top:8px; background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:9px 12px; font-size:13px;}
@@ -4120,9 +4260,9 @@ const App = (() => {
     var minorKey = SCALES[majorKey][5] + 'm';
     var dimKey = SCALES[majorKey][6] + '\u00b0';
 
-    wedgesMajor.push(el('path', {d: wedgePath(rHole, rMajorOuter, dividerAngle), class:'wedge'}));
-    wedgesMinor.push(el('path', {d: wedgePath(rMajorOuter, rMinorOuter, dividerAngle), class:'wedge'}));
-    wedgesDim.push(el('path', {d: wedgePath(rMinorOuter, rDimOuter, dividerAngle), class:'wedge'}));
+    wedgesMajor.push(el('path', {d: wedgePath(rHole, rMajorOuter, dividerAngle), class:'wedge wedge-major'}));
+    wedgesMinor.push(el('path', {d: wedgePath(rMajorOuter, rMinorOuter, dividerAngle), class:'wedge wedge-minor'}));
+    wedgesDim.push(el('path', {d: wedgePath(rMinorOuter, rDimOuter, dividerAngle), class:'wedge wedge-dim'}));
     wheelGroup.appendChild(wedgesMajor[i]);
     wheelGroup.appendChild(wedgesMinor[i]);
     wheelGroup.appendChild(wedgesDim[i]);
@@ -4159,7 +4299,7 @@ const App = (() => {
     clearRing(minorMain, minorNum, 'lbl minor');
     clearRing(dimMain, dimNum, 'lbl dim');
     for(var j=0;j<12;j++){
-      wedgesMajor[j].setAttribute('class','wedge'); wedgesMinor[j].setAttribute('class','wedge'); wedgesDim[j].setAttribute('class','wedge');
+      wedgesMajor[j].setAttribute('class','wedge wedge-major'); wedgesMinor[j].setAttribute('class','wedge wedge-minor'); wedgesDim[j].setAttribute('class','wedge wedge-dim');
     }
 
     highlightSlot(i, 'tonic', 'I', majorMain, majorNum, wedgesMajor, 'lbl major');
@@ -4259,7 +4399,7 @@ const App = (() => {
   svg.addEventListener('pointerup', endDrag);
   svg.addEventListener('pointercancel', function(){ dragging = false; wheelGroup.classList.remove('dragging'); });
 
-  selectKey(0);
+  selectKey(${Number.isInteger(initialIndex) && initialIndex >= 0 && initialIndex < 12 ? initialIndex : 0});
 <\/script>
 </body></html>`;
   }
@@ -4269,10 +4409,265 @@ const App = (() => {
     const w = window.open('', 'wcbCircleOfFifths', 'width=700,height=980,resizable=yes,scrollbars=no,menubar=no,toolbar=no,location=no,status=no');
     if(!w){ toast('Popup blocked — please allow popups for this site to use the Circle of Fifths'); return; }
     circleWinRef = w;
-    w.document.write(buildCircleOfFifthsHTML());
+    w.document.write(buildCircleOfFifthsHTML(circleInitialIndex()));
     w.document.close();
     w.focus();
   }
+
+  /* ---------------- Lyrics-only view ---------------- */
+  // ARCHITECTURE: Lyrics view does NOT edit the chart. currentSong.lyricsContent
+  // is an independent copy of the song's lyrics (chords/note-annotations/
+  // comments stripped out), and double-click/right-click breaks edit THAT
+  // field only — currentSong.content (the actual chart) is never touched
+  // from here. The two stay linked one-directionally: whenever the chart's
+  // own lyrics change, lyricsContent is regenerated from scratch on the next
+  // trip into Lyrics view (see ensureLyricsContentSynced) so new sections/
+  // lines always show up here. The tradeoff is coarse-grained: ANY change to
+  // the chart's lyrics text since lyricsContent was last derived wipes and
+  // regenerates the whole thing, so manual line/paragraph breaks only
+  // survive as long as you don't go edit the chart's lyrics in the
+  // meantime. A real per-line diff/merge would preserve breaks through
+  // unrelated chart edits too, but is real complexity for later, not now.
+  function stripChartToLyrics(canonical){
+    return canonical.split('\n')
+      .filter(line => !/^\s*#/.test(line))
+      .map(line => line.replace(ChordParser.CHORD_TOKEN, '').replace(/[ \t]+$/, ''))
+      .join('\n');
+  }
+
+  // Regenerates currentSong.lyricsContent from the chart if (and only if)
+  // the chart's lyrics have changed since lyricsContent was last derived —
+  // detected via lyricsSourceSnapshot, a copy of the stripped chart text
+  // taken at derivation time. Returns true if it regenerated (caller uses
+  // this to know whether to also reset the lyrics undo history, since old
+  // undo entries for a just-discarded lyricsContent make no sense to keep).
+  function ensureLyricsContentSynced(){
+    const fresh = stripChartToLyrics(currentSong.content || '');
+    if(currentSong.lyricsContent == null || currentSong.lyricsSourceSnapshot !== fresh){
+      currentSong.lyricsContent = fresh;
+      currentSong.lyricsSourceSnapshot = fresh;
+      return true;
+    }
+    return false;
+  }
+
+  // Editor pane-head hint — what double-click/right-click do changes
+  // completely between the chart editor and Lyrics view (see
+  // onEditorDoubleClick/onEditorContextMenu's lyrics-mode branch), so the
+  // instructions next to the "Editor" label need to switch with it.
+  function updateEditorClickHint(){
+    const hint = el('editorClickHint');
+    if(el('btnLyricsOnly').classList.contains('active')){
+      hint.textContent = 'Double-click: line break · Right-click: paragraph break';
+    } else {
+      hint.textContent = 'Double-click: insert/edit a chord · Right-click: insert a note';
+    }
+  }
+
+  // Read-only by design, EXCEPT for two specific structural edits — a line
+  // break (double-click) and a paragraph break (right-click), see
+  // onLyricsDoubleClick/onLyricsContextMenu below, which edit
+  // currentSong.lyricsContent only (see the architecture note above).
+  // Everything else about this view is look-don't-touch: no typing, no
+  // chord/note popups. Also swaps the struct bar over to the slide-view
+  // ribbon and switches Live Preview to the slide render — see the mission
+  // note: inserted STRUCTURE (new sections) only ever happens in the chart
+  // editor; this view can only ever reshape how existing lyrics break into
+  // lines/slides.
+  function toggleLyricsOnlyView(){
+    if(!currentSong) return;
+    const btn = el('btnLyricsOnly');
+    const editor = el('editor');
+    const turningOn = !btn.classList.contains('active');
+    btn.classList.toggle('active', turningOn);
+    el('structBarChart').classList.toggle('hidden', turningOn);
+    el('structBarLyrics').classList.toggle('hidden', !turningOn);
+    updateEditorClickHint();
+    if(turningOn){
+      const regenerated = ensureLyricsContentSynced();
+      if(regenerated){ lyricsUndoStack = []; lyricsRedoStack = []; }
+      editor.value = currentSong.lyricsContent;
+      editor.readOnly = true;
+      editor.classList.add('lyrics-only-mode');
+      lyricsSlideIndex = 0;
+      renderLyricsRibbon();
+    } else {
+      editor.readOnly = false;
+      editor.classList.remove('lyrics-only-mode');
+      if(currentSong.key === 'NN' && liveKey && liveKey !== 'NN'){
+        const preferFlat = Transposer.FLAT_KEYS.has(liveKey);
+        editor.value = NashvilleSystem.contentToLetters(currentSong.content || '', liveKey.replace(/m$/, ''), preferFlat);
+      } else {
+        editor.value = currentSong.content || '';
+      }
+      syncUndoBaseline();
+    }
+    renderPreview();
+  }
+
+  // Cross-song safety net — called before loading a different song so a
+  // stale stripped/read-only view never carries over. Doesn't bother
+  // restoring editor content itself; loadIntoForm (the only caller)
+  // overwrites it immediately anyway for the song being loaded.
+  function exitLyricsOnlyView(){
+    const btn = el('btnLyricsOnly');
+    if(!btn.classList.contains('active')) return;
+    btn.classList.remove('active');
+    el('editor').classList.remove('lyrics-only-mode');
+    el('editor').readOnly = false;
+    el('structBarChart').classList.remove('hidden');
+    el('structBarLyrics').classList.add('hidden');
+  }
+
+  // Inserts breakStr (a run of '\n's) into currentSong.lyricsContent at
+  // `pos` — a straight string splice, since editor.value IS lyricsContent
+  // verbatim while this view is active (no position translation needed,
+  // unlike editing would require against the chart's chord-laden text).
+  // Pushes the pre-edit state onto the lyrics-only undo stack first.
+  function insertLyricsBreak(pos, breakStr){
+    if(!currentSong) return;
+    lyricsUndoStack.push(currentSong.lyricsContent);
+    if(lyricsUndoStack.length > 100) lyricsUndoStack.shift();
+    lyricsRedoStack = [];
+    const text = currentSong.lyricsContent || '';
+    currentSong.lyricsContent = text.slice(0, pos) + breakStr + text.slice(pos);
+    dirty = true; updateSaveStatus();
+    el('editor').value = currentSong.lyricsContent;
+    const newPos = pos + breakStr.length;
+    el('editor').setSelectionRange(newPos, newPos);
+    el('editor').focus();
+    renderPreview();
+    renderParseStatus();
+  }
+
+  // Double-click = line break, right-click = paragraph break (a blank line
+  // — the actual slide-boundary rule from buildLyricsSlides). Native
+  // double-click already selects the clicked word before this fires, so
+  // selectionStart lands right at its start — the break goes in right
+  // there, same "insert before the clicked word" convention the chord
+  // editor's own double-click uses (see onEditorDoubleClick), just for a
+  // different purpose. Right-click reuses the same read of selectionStart
+  // the note-popup handler already relies on (see onEditorContextMenu).
+  function onLyricsDoubleClick(e){
+    e.preventDefault();
+    insertLyricsBreak(el('editor').selectionStart, '\n');
+  }
+  function onLyricsContextMenu(e){
+    e.preventDefault();
+    insertLyricsBreak(el('editor').selectionStart, '\n\n');
+  }
+
+  // Splits currentSong.lyricsContent into slides: every SECTION starts a new
+  // slide (a new Verse/Chorus/etc.), and within a section every blank line
+  // (paragraph break) starts another one — matches however the song is
+  // actually structured to be performed. lyricsContent is already fully
+  // stripped (see stripChartToLyrics), so ChordParser.parseSections' own
+  // header-detection works on it directly with nothing left to remove. A
+  // section with no actual lyrics (a pure-instrumental Intro/Outro, or one
+  // that's just a header with nothing under it) is skipped entirely — no
+  // blank slide for it, since there's nothing to display. The section
+  // LABEL itself is kept only as metadata for the UI (slide counter/caption
+  // in Individual view) — never rendered inside the slide box, since that's
+  // the actual exportable content and section names aren't meant to be seen
+  // by the congregation any more than the song-map badges are.
+  function buildLyricsSlides(){
+    if(!currentSong) return [];
+    const sections = ChordParser.parseSections(currentSong.lyricsContent || '');
+    const slides = [];
+    sections.forEach(sec => {
+      const paragraphs = [];
+      let current = [];
+      (sec.lines || []).forEach(line => {
+        if(line.trim() === ''){
+          if(current.length){ paragraphs.push(current); current = []; }
+        } else {
+          current.push(line);
+        }
+      });
+      if(current.length) paragraphs.push(current);
+      paragraphs.forEach(p => slides.push({label: sec.label, lines: p}));
+    });
+    return slides;
+  }
+
+  function updateSlideNavUI(current, total){
+    const nav = el('slideNavControls');
+    const mode = LyricsSlideViewStore.get();
+    nav.classList.toggle('hidden', mode !== 'individual' || total === 0);
+    el('slideCounter').textContent = total ? `${current} / ${total}` : '';
+    el('slidePrevBtn').disabled = current <= 1;
+    el('slideNextBtn').disabled = current >= total;
+  }
+
+  // Same metadata shown at the top of the chart (buildPageMetaParts), laid
+  // out the SAME way it is there too — one stacked line per field (title,
+  // artist, copyright, permission), not one run-on line — reused as a
+  // small footnote on the LAST slide only, like the CCLI compliance block
+  // churches commonly show on a song's closing slide. Deliberately excludes
+  // .roadmap (the song map — never exports anywhere, this included) and
+  // metaBits (Key/Capo — performance directions for whoever's playing, not
+  // something the congregation needs on screen).
+  function buildSlideFootnoteHtml(song){
+    const parts = buildPageMetaParts(song);
+    const lines = [];
+    if(song.title) lines.push(Renderer.escapeHtml(song.title));
+    if(parts.artistLineParts.length) lines.push(parts.artistLineParts.join(' | '));
+    if(parts.copyrightText) lines.push(Renderer.escapeHtml(parts.copyrightText));
+    if(song.churchCcli) lines.push('Used by Permission CCLI #: ' + Renderer.escapeHtml(song.churchCcli));
+    return lines.map(l => `<div>${l}</div>`).join('');
+  }
+
+  // Renders Live Preview as slides instead of the normal chart sheet —
+  // called from renderPreview() whenever Lyrics view is active. Individual
+  // shows one slide with prev/next; Collective shows every slide at once in
+  // a grid. Aspect ratio (16:9 default, or 4:3) shapes every slide box the
+  // same way regardless of mode.
+  function renderLyricsSlides(){
+    const container = el('previewScroll');
+    const slides = buildLyricsSlides();
+    const ratioCss = LyricsAspectStore.get() === '4:3' ? '4/3' : '16/9';
+    const mode = LyricsSlideViewStore.get();
+    const themeClass = LyricsThemeStore.get() === 'light' ? ' light' : '';
+    if(slides.length === 0){
+      container.innerHTML = `<div class="slide-empty">No lyrics yet — add sections and lines in the chart editor.</div>`;
+      updateSlideNavUI(0, 0);
+      return;
+    }
+    // currentSongSnapshot() (not currentSong directly) so unsaved edits to
+    // Title/Artist/CCLI/etc. show up immediately, matching how the normal
+    // chart preview already reads live form fields via the same function.
+    const footnoteHtml = buildSlideFootnoteHtml(currentSongSnapshot());
+    if(mode === 'individual'){
+      lyricsSlideIndex = Math.max(0, Math.min(lyricsSlideIndex, slides.length - 1));
+      const isLast = lyricsSlideIndex === slides.length - 1;
+      const s = slides[lyricsSlideIndex];
+      const text = s.lines.map(l => Renderer.escapeHtml(l)).join('<br>') || '&nbsp;';
+      const footnote = (isLast && footnoteHtml) ? `<div class="slide-footnote">${footnoteHtml}</div>` : '';
+      container.innerHTML = `<div class="slide-stage"><div class="slide-box${themeClass}" style="aspect-ratio:${ratioCss};"><div class="slide-text">${text}</div>${footnote}</div></div>`;
+      updateSlideNavUI(lyricsSlideIndex + 1, slides.length);
+    } else {
+      container.innerHTML = `<div class="slide-grid">${slides.map((s, i) => {
+        const text = s.lines.map(l => Renderer.escapeHtml(l)).join('<br>') || '&nbsp;';
+        const footnote = (i === slides.length - 1 && footnoteHtml) ? `<div class="slide-footnote">${footnoteHtml}</div>` : '';
+        return `<div class="slide-box${themeClass}" style="aspect-ratio:${ratioCss};"><div class="slide-text">${text}</div>${footnote}</div>`;
+      }).join('')}</div>`;
+      updateSlideNavUI(0, slides.length);
+    }
+  }
+
+  function renderLyricsRibbon(){
+    const aspect = LyricsAspectStore.get();
+    const mode = LyricsSlideViewStore.get();
+    const theme = LyricsThemeStore.get();
+    el('slideAspectControl').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.ratio === aspect));
+    el('slideViewModeControl').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    el('slideThemeControl').querySelectorAll('button').forEach(b => b.classList.toggle('active', b.dataset.theme === theme));
+  }
+
+  // Individual-mode navigation — shared by the prev/next buttons and the
+  // Left/Right arrow keys (see the document keydown handler in wire()).
+  function lyricsPrevSlide(){ lyricsSlideIndex = Math.max(0, lyricsSlideIndex - 1); renderPreview(); }
+  function lyricsNextSlide(){ lyricsSlideIndex += 1; renderPreview(); }
 
   // Genuine OS-level "always on top" requires the Document Picture-in-Picture
   // API, which the spec restricts to being REQUESTED from the top-level tab —
@@ -4288,7 +4683,7 @@ const App = (() => {
     }
     try{
       const pip = await documentPictureInPicture.requestWindow({width:520, height:760});
-      pip.document.write(buildCircleOfFifthsHTML());
+      pip.document.write(buildCircleOfFifthsHTML(circleInitialIndex()));
       pip.document.close();
       if(circleWinRef && !circleWinRef.closed) circleWinRef.close();
       circleWinRef = pip;
@@ -4451,6 +4846,18 @@ const App = (() => {
     el('btnCCLI').onclick = openCCLIMock;
     el('btnPP').onclick = openProPresenterMock;
     el('btnCircle').onclick = openCircleOfFifths;
+    el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
+    el('slideViewModeControl').querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => { LyricsSlideViewStore.set(btn.dataset.mode); renderLyricsRibbon(); renderPreview(); };
+    });
+    el('slideAspectControl').querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => { LyricsAspectStore.set(btn.dataset.ratio); renderLyricsRibbon(); renderPreview(); };
+    });
+    el('slidePrevBtn').onclick = lyricsPrevSlide;
+    el('slideNextBtn').onclick = lyricsNextSlide;
+    el('slideThemeControl').querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => { LyricsThemeStore.set(btn.dataset.theme); renderLyricsRibbon(); renderPreview(); };
+    });
     el('btnKeyChange').onclick = openKeyChangePopup;
     el('btnVersions').onclick = openVersions;
     el('btnSettings').onclick = openSettings;
@@ -4542,7 +4949,21 @@ const App = (() => {
       keyPickerRemoveChip(btn.closest('.key-chip').dataset.key);
     });
 
+    // Same buttons (and Ctrl+Z/Ctrl+Shift+Z) drive whichever undo history
+    // matches the currently active view — the chart's own stack normally,
+    // or the separate lyrics-only stack (see insertLyricsBreak) while
+    // Lyrics view is active. Never mixed: a lyrics-view undo only ever
+    // touches currentSong.lyricsContent, never the chart.
     el('btnUndo').onclick = () => {
+      if(el('btnLyricsOnly').classList.contains('active')){
+        if(lyricsUndoStack.length===0) return;
+        lyricsRedoStack.push(currentSong.lyricsContent);
+        currentSong.lyricsContent = lyricsUndoStack.pop();
+        el('editor').value = currentSong.lyricsContent;
+        dirty = true; updateSaveStatus();
+        renderPreview(); renderParseStatus();
+        return;
+      }
       if(undoStack.length===0) return;
       redoStack.push(el('editor').value);
       el('editor').value = undoStack.pop();
@@ -4550,6 +4971,15 @@ const App = (() => {
       onEditorInput();
     };
     el('btnRedo').onclick = () => {
+      if(el('btnLyricsOnly').classList.contains('active')){
+        if(lyricsRedoStack.length===0) return;
+        lyricsUndoStack.push(currentSong.lyricsContent);
+        currentSong.lyricsContent = lyricsRedoStack.pop();
+        el('editor').value = currentSong.lyricsContent;
+        dirty = true; updateSaveStatus();
+        renderPreview(); renderParseStatus();
+        return;
+      }
       if(redoStack.length===0) return;
       undoStack.push(el('editor').value);
       el('editor').value = redoStack.pop();
@@ -4564,6 +4994,12 @@ const App = (() => {
       else if(mod && !e.shiftKey && e.key.toLowerCase()==='z'){ e.preventDefault(); el('btnUndo').click(); }
       else if(mod && e.shiftKey && e.key.toLowerCase()==='z'){ e.preventDefault(); el('btnRedo').click(); }
       else if(mod && e.key.toLowerCase()==='p'){ e.preventDefault(); doPrint(); }
+      // Left/Right flips through slides in Individual view — the natural
+      // "presentation clicker" gesture, on top of the prev/next buttons.
+      else if(!mod && el('btnLyricsOnly').classList.contains('active') && LyricsSlideViewStore.get()==='individual' && (e.key==='ArrowLeft' || e.key==='ArrowRight')){
+        e.preventDefault();
+        if(e.key==='ArrowLeft') lyricsPrevSlide(); else lyricsNextSlide();
+      }
     });
 
     window.addEventListener('beforeunload', (e) => {
@@ -4573,6 +5009,7 @@ const App = (() => {
 
   async function init(){
     wire();
+    updateEditorClickHint();
     updateRomanButtonVisibility();
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
