@@ -5019,7 +5019,13 @@ const App = (() => {
     applyTagFilterCollapse(TagFilterCollapseStore.get());
     applyKeyFilterCollapse(KeyFilterCollapseStore.get());
     await refreshLibrary();
-    if(songs.length){ selectSong(songs[0].id); }
+    // ?song=<id> deep link — how the Greenroom parent app opens a specific
+    // chart (from a service plan or the song library) straight into the editor.
+    // Falls through to the normal "most recent song" behaviour if the id isn't
+    // present or no longer exists.
+    const requestedId = Number(new URLSearchParams(location.search).get('song'));
+    if(requestedId && songs.some(s => s.id === requestedId)){ selectSong(requestedId); }
+    else if(songs.length){ selectSong(songs[0].id); }
     else { newSong(); }
     maybeShowNNIntro();
   }

@@ -1,0 +1,2946 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greenroom</title>
+<style>
+/* ==========================================================================
+   DESIGN TOKENS
+   The neutrals are deliberately the SAME values as chart-builder/index.html so
+   the two read as one product. Chart Builder is a child surface of this app
+   (see the "Chart Builder" nav tab, which embeds it rather than
+   reimplementing it), so any drift in those would immediately look like two
+   different apps bolted together.
+
+   The ACCENT is the one deliberate divergence: Greenroom takes the mint green
+   Chart Builder already uses for its Lyrics mode (#6fe0a0 on #0d2b1a), while
+   Chart Builder keeps amber. Same family, distinguishable at a glance — which
+   matters when one is running inside the other.
+   ========================================================================== */
+:root{
+  --bg:#14171c; --bg-panel:#1b1f27; --bg-panel-2:#20242e; --bg-input:#262b36;
+  --border:#2e3440; --border-soft:#242833;
+  --text:#e7e9ee; --text-dim:#9aa2b1; --text-faint:#5f6779;
+  --accent:#6fe0a0; --accent-dim:#3d8a5f; --accent-text:#0d2b1a;
+  --accent-glow:rgba(111,224,160,.09);
+  /* --warn carries the "needs attention, not broken" meaning that --accent
+     used to carry back when the accent was amber (partial coverage, a library
+     that's connected but empty). Kept amber on purpose: against a green
+     accent, a green caution state would read as success. */
+  --danger:#e2637a; --good:#68c98f; --warn:#e8a13f;
+  --radius:8px; --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+
+  /* One accent per team, all six independent of the brand accent — a team
+     colour has to keep meaning "this team" even as the brand changes. Note
+     Streaming's green sits next to the brand mint; they never share a
+     surface (team colours appear on dots and labels, the brand on chrome). */
+  --t-preacher:#e8a13f;  --t-preacher-bg:#3a2c14;
+  --t-worship:#4fb3a5;   --t-worship-bg:#153230;
+  --t-audio:#8b7fe0;     --t-audio-bg:#241f3d;
+  --t-visual:#e8637e;    --t-visual-bg:#3a1f28;
+  --t-tech:#5b9bd5;      --t-tech-bg:#16293a;
+  --t-streaming:#68c98f; --t-streaming-bg:#173322;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+  font-size:14px; display:flex; flex-direction:column; height:100vh; overflow:hidden;
+}
+button{font-family:var(--sans); cursor:pointer; background:var(--bg-input); color:var(--text);
+  border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:13px;}
+button:hover{border-color:var(--accent-dim);}
+button.primary{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+button.primary:hover{filter:brightness(1.08);}
+button.ghost{background:transparent;}
+button.danger-text{background:none; border:none; color:var(--danger); padding:6px 4px;}
+button.danger-text:hover{text-decoration:underline;}
+button:disabled{opacity:.4; cursor:not-allowed;}
+button.icon{padding:5px 8px; line-height:1;}
+input,select,textarea{font-family:var(--sans); color:var(--text); background:var(--bg-input);
+  border:1px solid var(--border); border-radius:6px; padding:6px 8px; font-size:13px;}
+input:focus,select:focus,textarea:focus{outline:1px solid var(--accent);}
+input:disabled,select:disabled{opacity:.4; cursor:not-allowed;}
+select option, select optgroup{background:var(--bg-input); color:var(--text);}
+textarea{resize:vertical; min-height:60px; line-height:1.5;}
+h1,h2,h3{margin:0;}
+a{color:var(--accent);}
+::-webkit-scrollbar{width:10px; height:10px;}
+::-webkit-scrollbar-thumb{background:var(--border); border-radius:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+.hidden{display:none !important;}
+.muted{color:var(--text-dim);}
+.faint{color:var(--text-faint);}
+.mono{font-family:var(--mono);}
+.label{font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint);}
+
+/* ==========================================================================
+   TOP BAR + PRIMARY NAV
+   ========================================================================== */
+#topbar{
+  display:flex; align-items:center; gap:10px; padding:8px 12px;
+  background:var(--bg-panel); border-bottom:1px solid var(--border-soft); flex-shrink:0; z-index:20;
+}
+#topbar .brand{font-weight:700; font-size:15px; letter-spacing:.2px; white-space:nowrap; margin-right:4px;}
+#topbar .brand span{color:var(--accent);}
+#topbar .org{
+  font-size:11px; color:var(--text-faint); border-left:1px solid var(--border-soft);
+  padding-left:10px; margin-left:2px; white-space:nowrap;
+}
+#nav{display:flex; gap:2px; margin-left:8px;}
+#nav button{
+  background:transparent; border:1px solid transparent; border-radius:6px; color:var(--text-dim);
+  padding:6px 11px; font-size:13px; font-weight:500; white-space:nowrap;
+}
+#nav button:hover{color:var(--text); background:var(--bg-panel-2);}
+#nav button.active{color:var(--text); background:var(--bg-panel-2); border-color:var(--border); box-shadow:inset 0 -2px 0 var(--accent);}
+#topbar .spacer{flex:1;}
+#topbar .status{font-size:12px; color:var(--text-faint); white-space:nowrap;}
+
+/* ==========================================================================
+   VIEW SHELL
+   ========================================================================== */
+#views{flex:1; min-height:0; display:flex;}
+.view{flex:1; min-height:0; min-width:0; display:none; flex-direction:column;}
+.view.active{display:flex;}
+.view-head{
+  display:flex; align-items:center; gap:10px; padding:12px 16px;
+  border-bottom:1px solid var(--border-soft); background:var(--bg-panel-2); flex-shrink:0;
+}
+.view-head h2{font-size:15px; font-weight:600;}
+.view-head .sub{font-size:12px; color:var(--text-faint);}
+.view-body{flex:1; overflow-y:auto; padding:16px; min-height:0;}
+.empty{
+  border:1px dashed var(--border); border-radius:var(--radius); padding:28px 20px;
+  text-align:center; color:var(--text-faint); font-size:13px; line-height:1.6;
+}
+.empty strong{color:var(--text-dim);}
+
+/* ==========================================================================
+   SERVICES VIEW
+   ========================================================================== */
+/* One section per service type. The heading uses the same quiet uppercase
+   label as every other section head in the app rather than a colour per type —
+   six team colours are already in play and a seventh scale would fight them. */
+.svc-section{margin-bottom:26px;}
+.svc-section:last-child{margin-bottom:0;}
+.svc-section-head{display:flex; align-items:center; gap:8px; margin-bottom:10px;}
+.svc-section-head h3{font-size:11.5px; text-transform:uppercase; letter-spacing:.6px; font-weight:600;}
+.type-dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.svc-section-head .count{font-family:var(--mono); font-size:10.5px; color:var(--text-faint);}
+.svc-section-head .rule{flex:1; height:1px; background:var(--border-soft);}
+.svc-section-head button{opacity:0; font-size:11.5px; padding:3px 9px;}
+.svc-section:hover .svc-section-head button{opacity:1;}
+.svc-section-head button:focus-visible{opacity:1;}
+.svc-section-empty{font-size:12.5px; color:var(--text-faint); padding:2px 2px 4px;}
+.btn-sm{font-size:11.5px; padding:4px 9px;}
+
+.svc-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:12px;}
+.svc-card{
+  background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:var(--radius);
+  padding:14px 14px 14px 17px; cursor:pointer; display:flex; flex-direction:column; gap:10px;
+  position:relative; overflow:hidden;
+}
+/* Type colour as a spine down the card's leading edge — a different form from
+   the team colours' round pips, so the two never read as the same scale. */
+.svc-card::before{
+  content:''; position:absolute; left:0; top:0; bottom:0; width:3px;
+  background:var(--type-color, var(--text-faint));
+}
+.svc-card:hover{border-color:var(--accent-dim);}
+.svc-card.next{border-color:var(--accent-dim); background:linear-gradient(180deg,#22242c,var(--bg-panel));}
+.svc-card .sc-top{display:flex; align-items:flex-start; gap:8px;}
+.svc-card .sc-date{
+  font-family:var(--mono); font-size:11px; color:var(--accent); text-transform:uppercase; letter-spacing:.5px;
+}
+.svc-card .sc-title{font-size:15px; font-weight:600; margin-top:3px; display:flex; align-items:center; gap:7px; flex-wrap:wrap;}
+.svc-card .sc-series{font-size:12px; color:var(--text-faint); margin-top:2px;}
+.svc-card .sc-menu{margin-left:auto; flex-shrink:0;}
+.svc-card .sc-stats{display:flex; gap:14px; font-size:12px; color:var(--text-dim);}
+.svc-card .sc-teams{display:flex; gap:4px; flex-wrap:wrap;}
+.badge-next{
+  font-family:var(--mono); font-size:9.5px; letter-spacing:.6px; text-transform:uppercase;
+  background:var(--accent); color:var(--accent-text); border-radius:10px; padding:2px 7px; font-weight:700;
+}
+.cov-bar{height:4px; border-radius:3px; background:var(--bg-input); overflow:hidden;}
+.cov-bar i{display:block; height:100%; background:var(--good);}
+.cov-bar.partial i{background:var(--warn);}
+.cov-bar.thin i{background:var(--danger);}
+
+/* Team pips — a tiny per-team coverage read-out used on service cards. */
+.pip{
+  display:inline-flex; align-items:center; gap:4px; font-family:var(--mono); font-size:10px;
+  border:1px solid var(--border); border-radius:10px; padding:1px 6px; color:var(--text-faint);
+}
+.pip i{width:6px; height:6px; border-radius:50%; display:inline-block;}
+.pip.full{color:var(--text-dim);}
+.pip.gap{border-color:var(--danger); color:var(--danger);}
+
+/* ==========================================================================
+   PLAN VIEW — 3 columns: palette / order of service / assignments
+   ========================================================================== */
+#view-plan .plan-wrap{flex:1; display:flex; min-height:0;}
+.col{display:flex; flex-direction:column; min-height:0; background:var(--bg-panel);}
+.col-palette{width:262px; flex-shrink:0; border-right:1px solid var(--border-soft);}
+.col-plan{flex:1; min-width:0; background:var(--bg);}
+.col-assign{width:344px; flex-shrink:0; border-left:1px solid var(--border-soft);}
+.col-head{
+  display:flex; align-items:center; gap:8px; padding:9px 12px;
+  border-bottom:1px solid var(--border-soft); flex-shrink:0;
+}
+.col-head h3{font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); font-weight:600;}
+.col-head .spacer{flex:1;}
+.col-scroll{flex:1; overflow-y:auto; padding:10px;}
+
+/* Palette tabs */
+.seg{display:flex; gap:2px; padding:8px 10px 0;}
+.seg button{
+  flex:1; background:transparent; border:1px solid transparent; border-bottom:2px solid transparent;
+  border-radius:0; color:var(--text-faint); font-size:12px; padding:5px 4px;
+}
+.seg button.active{color:var(--text); border-bottom-color:var(--accent);}
+.pal-search{margin:8px 10px 0;}
+.pal-search input{width:100%;}
+
+.pal-item{
+  display:flex; align-items:center; gap:9px; padding:7px 9px; border-radius:6px;
+  border:1px solid transparent; cursor:grab; margin-bottom:2px;
+}
+.pal-item:hover{background:var(--bg-panel-2); border-color:var(--border-soft);}
+.pal-item:active{cursor:grabbing;}
+.pal-item .glyph{
+  width:22px; height:22px; flex-shrink:0; border-radius:5px; background:var(--bg-input);
+  display:flex; align-items:center; justify-content:center; font-size:12px; color:var(--text-dim);
+}
+.pal-item .pi-body{min-width:0; flex:1;}
+.pal-item .pi-title{font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.pal-item .pi-sub{font-size:11px; color:var(--text-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-top:1px;}
+.pal-hint{font-size:11px; color:var(--text-faint); line-height:1.5; padding:8px 10px; border-top:1px solid var(--border-soft);}
+
+/* Order of service */
+.plan-toolbar{
+  display:flex; align-items:center; gap:8px; padding:10px 14px;
+  border-bottom:1px solid var(--border-soft); background:var(--bg-panel-2); flex-shrink:0; flex-wrap:wrap;
+}
+.plan-toolbar input.title-in{
+  background:transparent; border:1px solid transparent; font-size:15px; font-weight:600; padding:4px 6px; min-width:180px;
+}
+.plan-toolbar input.title-in:hover, .plan-toolbar input.title-in:focus{border-color:var(--border); background:var(--bg-input);}
+.plan-toolbar .meta-in{font-family:var(--mono); font-size:12px; padding:5px 7px;}
+
+.plan-list{padding:12px 14px 60px;}
+.pitem{
+  position:relative; background:var(--bg-panel); border:1px solid var(--border-soft);
+  border-radius:var(--radius); padding:10px 12px; margin-bottom:6px; cursor:pointer;
+}
+.pitem:hover{border-color:var(--border);}
+.pitem.selected{border-color:var(--accent-dim); background:var(--bg-panel-2);}
+.pitem.dragging{opacity:.35;}
+/* Insertion indicator for drag-and-drop. Drawn as a pseudo-element bar so the
+   list never reflows mid-drag (a real placeholder node makes items jump). */
+.pitem.drop-before::before, .pitem.drop-after::after{
+  content:''; position:absolute; left:0; right:0; height:2px; background:var(--accent);
+  border-radius:2px; box-shadow:0 0 6px var(--accent-dim);
+}
+.pitem.drop-before::before{top:-4px;}
+.pitem.drop-after::after{bottom:-4px;}
+.pi-row{display:flex; align-items:center; gap:10px;}
+.pi-clock{font-family:var(--mono); font-size:11px; color:var(--text-faint); width:52px; flex-shrink:0;}
+.pi-glyph{
+  width:24px; height:24px; flex-shrink:0; border-radius:6px; display:flex; align-items:center;
+  justify-content:center; font-size:12px; background:var(--bg-input); color:var(--text-dim);
+}
+.pi-main{flex:1; min-width:0;}
+.pi-name{font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.pi-meta{font-size:11.5px; color:var(--text-faint); margin-top:2px; display:flex; gap:8px; flex-wrap:wrap;}
+.pi-dur{
+  font-family:var(--mono); font-size:11px; color:var(--text-dim); flex-shrink:0;
+  background:var(--bg-input); border:1px solid var(--border); border-radius:5px; padding:2px 6px;
+}
+.pi-actions{display:flex; gap:2px; flex-shrink:0; opacity:0;}
+.pitem:hover .pi-actions, .pitem.selected .pi-actions{opacity:1;}
+.pi-actions button{background:none; border:none; color:var(--text-faint); padding:3px 5px; font-size:12px;}
+.pi-actions button:hover{color:var(--text);}
+.pi-actions button.del:hover{color:var(--danger);}
+.pi-lead{
+  display:inline-flex; align-items:center; gap:5px; font-size:11.5px; color:var(--text-dim);
+  margin-top:7px; background:var(--bg-input); border:1px solid var(--border); border-radius:12px; padding:2px 8px 2px 3px;
+}
+.plan-drop{
+  border:1px dashed var(--border); border-radius:var(--radius); padding:22px 16px; text-align:center;
+  color:var(--text-faint); font-size:12.5px; line-height:1.6;
+}
+.plan-drop.over{border-color:var(--accent); color:var(--text-dim); background:var(--accent-glow);}
+.plan-total{
+  display:flex; align-items:center; gap:10px; padding:10px 14px; border-top:1px solid var(--border-soft);
+  background:var(--bg-panel-2); font-family:var(--mono); font-size:12px; color:var(--text-dim); flex-shrink:0;
+}
+
+/* Assignments panel */
+.asg-seg{display:flex; gap:2px; padding:8px 10px 0; border-bottom:1px solid var(--border-soft);}
+.asg-seg button{
+  flex:1; background:transparent; border:none; border-bottom:2px solid transparent; border-radius:0;
+  color:var(--text-faint); font-size:12px; padding:6px 4px;
+}
+.asg-seg button.active{color:var(--text); border-bottom-color:var(--accent);}
+.asg-seg button:disabled{opacity:.35;}
+
+.lane{margin-bottom:14px;}
+.lane-head{display:flex; align-items:center; gap:7px; margin-bottom:6px;}
+.lane-dot{width:7px; height:7px; border-radius:50%; flex-shrink:0;}
+.lane-name{font-family:var(--mono); font-size:10.5px; text-transform:uppercase; letter-spacing:.5px;}
+.lane-count{font-family:var(--mono); font-size:10px; color:var(--text-faint); margin-left:auto;}
+.lane-add{background:none; border:1px dashed var(--border); color:var(--text-faint); font-size:11px; padding:3px 7px; border-radius:12px;}
+.lane-add:hover{border-color:var(--accent-dim); color:var(--text-dim);}
+
+.slot{
+  display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:6px;
+  background:var(--bg-panel-2); border:1px solid var(--border-soft); margin-bottom:4px;
+}
+.slot.over{border-color:var(--accent); background:var(--accent-glow);}
+.slot.reject{border-color:var(--danger); background:rgba(226,99,122,.08);}
+.slot-pos{font-family:var(--mono); font-size:9.5px; width:78px; flex-shrink:0; color:var(--text-faint);
+  overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.slot select{flex:1; min-width:0; background:transparent; border:none; padding:3px 2px; font-size:12.5px;}
+.slot select:focus{outline:none;}
+.slot .warn{color:var(--danger); font-size:12px; cursor:help; flex-shrink:0;}
+.slot .rm{background:none; border:none; color:var(--text-faint); font-size:12px; padding:2px 3px; flex-shrink:0; opacity:0;}
+.slot:hover .rm{opacity:1;}
+.slot .rm:hover{color:var(--danger);}
+.lane-empty{font-family:var(--mono); font-size:11px; color:var(--text-faint); padding:2px 0 4px;}
+
+.field{margin-bottom:11px;}
+.field > label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px;
+  color:var(--text-faint); margin-bottom:4px;}
+.field input, .field select, .field textarea{width:100%;}
+.row2{display:flex; gap:8px;}
+.row2 > *{flex:1; min-width:0;}
+.teamnote{margin-bottom:8px;}
+.teamnote label{display:flex; align-items:center; gap:6px; font-family:var(--mono); font-size:10px;
+  text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:3px;}
+.teamnote textarea{width:100%; min-height:40px; font-size:12.5px;}
+
+/* ==========================================================================
+   PEOPLE VIEW
+   ========================================================================== */
+.filters{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.chip{
+  font-size:11px; padding:3px 9px; border-radius:12px; background:var(--bg-input);
+  border:1px solid var(--border); color:var(--text-dim); cursor:pointer; white-space:nowrap; user-select:none;
+}
+.chip:hover{border-color:var(--accent-dim);}
+.chip.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+.chip.team.active{color:#12141a; font-weight:600;}
+.chip-add{border-style:dashed; color:var(--text-faint); background:transparent;}
+
+.people-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(268px,1fr)); gap:10px;}
+.pcard{
+  display:flex; align-items:flex-start; gap:10px; padding:11px; border-radius:var(--radius);
+  background:var(--bg-panel); border:1px solid var(--border-soft); cursor:grab;
+}
+.pcard:hover{border-color:var(--accent-dim);}
+.pcard.inactive{opacity:.5;}
+.avatar{
+  width:34px; height:34px; border-radius:50%; flex-shrink:0; display:flex; align-items:center;
+  justify-content:center; font-weight:700; font-size:12.5px; color:#12141a;
+}
+.avatar.sm{width:22px; height:22px; font-size:9.5px;}
+.pc-body{min-width:0; flex:1;}
+.pc-name{font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:6px;}
+.pc-contact{font-size:11.5px; color:var(--text-faint); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.pc-pos{display:flex; gap:3px; flex-wrap:wrap; margin-top:6px;}
+.pos-badge{
+  font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:.3px;
+  border:1px solid var(--border); border-radius:9px; padding:1px 6px; color:var(--text-faint); line-height:1.6;
+}
+.tag-guest{
+  font-family:var(--mono); font-size:8.5px; text-transform:uppercase; letter-spacing:.5px;
+  color:var(--accent); border:1px solid var(--accent-dim); border-radius:4px; padding:1px 4px;
+}
+.pc-edit{background:none; border:none; color:var(--text-faint); padding:2px 4px; opacity:0; flex-shrink:0;}
+.pcard:hover .pc-edit{opacity:1;}
+
+/* ==========================================================================
+   TEAMS VIEW
+   ========================================================================== */
+.team-block{
+  background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:var(--radius);
+  padding:14px; margin-bottom:12px;
+}
+.tb-head{display:flex; align-items:center; gap:8px; margin-bottom:12px;}
+.tb-head h3{font-size:14px; font-weight:600;}
+.tb-head .count{font-family:var(--mono); font-size:11px; color:var(--text-faint); margin-left:auto;}
+.pos-table{display:flex; flex-direction:column; gap:4px;}
+.pos-row{
+  display:flex; align-items:center; gap:10px; padding:6px 9px; border-radius:6px;
+  background:var(--bg-panel-2); border:1px solid var(--border-soft);
+}
+.pos-row .pname{font-size:12.5px; flex:1; min-width:0;}
+.pos-row .bench{font-family:var(--mono); font-size:10.5px; color:var(--text-faint); flex-shrink:0;}
+.pos-row .bench.none{color:var(--danger);}
+.pos-row .rm{background:none; border:none; color:var(--text-faint); font-size:12px; padding:2px 4px; opacity:0;}
+.pos-row:hover .rm{opacity:1;}
+.pos-row .rm:hover{color:var(--danger);}
+
+/* ==========================================================================
+   SONGS VIEW
+   ========================================================================== */
+.banner{
+  display:flex; align-items:center; gap:10px; padding:10px 12px; border-radius:var(--radius);
+  background:var(--bg-panel); border:1px solid var(--border); margin-bottom:12px; font-size:12.5px; color:var(--text-dim);
+}
+.banner .dot{width:8px; height:8px; border-radius:50%; flex-shrink:0;}
+.banner .spacer{flex:1;}
+.song-table{width:100%; border-collapse:collapse; font-size:13px;}
+.song-table th{
+  text-align:left; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint);
+  font-weight:600; padding:6px 10px; border-bottom:1px solid var(--border-soft);
+}
+.song-table td{padding:8px 10px; border-bottom:1px solid var(--border-soft);}
+.song-table tr:hover td{background:var(--bg-panel);}
+.song-table .st-title{font-weight:600;}
+.song-table .st-actions{text-align:right; white-space:nowrap;}
+
+/* ==========================================================================
+   CHART BUILDER EMBED
+   ========================================================================== */
+#chartFrame{flex:1; width:100%; border:none; background:var(--bg); min-height:0;}
+
+/* ==========================================================================
+   MODALS / TOAST
+   ========================================================================== */
+.backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:60;
+  display:none; align-items:center; justify-content:center; padding:20px;
+}
+.backdrop.show{display:flex;}
+.modal{
+  background:var(--bg-panel); border:1px solid var(--border); border-radius:12px;
+  width:440px; max-width:100%; max-height:86vh; overflow-y:auto; padding:20px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);
+}
+.modal.wide{width:560px;}
+.modal h3{font-size:16px; margin-bottom:4px;}
+.modal .modal-sub{font-size:12px; color:var(--text-faint); margin-bottom:14px;}
+.modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:16px;}
+.modal-actions .left{margin-right:auto;}
+.switch{display:flex; align-items:flex-start; gap:10px; cursor:pointer; padding:10px 11px;
+  background:var(--bg-panel-2); border:1px solid var(--border-soft); border-radius:8px;}
+.switch input{position:absolute; opacity:0; width:0; height:0;}
+.switch .box{
+  width:34px; height:19px; border-radius:20px; background:var(--bg-input); border:1px solid var(--border);
+  flex-shrink:0; position:relative; margin-top:1px; transition:background .15s,border-color .15s;
+}
+.switch .box::after{content:''; position:absolute; top:2px; left:2px; width:13px; height:13px; border-radius:50%;
+  background:var(--text-faint); transition:transform .15s,background .15s;}
+.switch input:checked + .box{background:var(--accent-dim); border-color:var(--accent);}
+.switch input:checked + .box::after{transform:translateX(15px); background:var(--accent);}
+.switch .txt{display:flex; flex-direction:column; gap:2px;}
+.switch .t1{font-size:13px; font-weight:600;}
+.switch .t2{font-size:11.5px; color:var(--text-faint); line-height:1.45;}
+.date-chips{display:flex; flex-wrap:wrap; gap:5px; margin-top:6px;}
+.date-chip{
+  font-family:var(--mono); font-size:10.5px; background:var(--bg-input); border:1px solid var(--border);
+  border-radius:10px; padding:2px 4px 2px 8px; display:inline-flex; align-items:center; gap:4px; color:var(--text-dim);
+}
+.date-chip button{background:none; border:none; color:var(--text-faint); padding:0 3px; font-size:12px; line-height:1;}
+.date-chip button:hover{color:var(--danger);}
+
+/* Settings drawer — same right-side drawer Chart Builder uses for its own
+   Settings, down to the widths and section headings, so the two feel like one
+   preferences surface rather than two conventions. */
+.drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:70; display:flex; justify-content:flex-end;}
+.drawer{width:420px; max-width:92vw; background:var(--bg-panel); height:100%; box-shadow:-8px 0 30px rgba(0,0,0,.5); display:flex; flex-direction:column;}
+.drawer-head{display:flex; justify-content:space-between; align-items:center; padding:14px 16px; border-bottom:1px solid var(--border-soft);}
+.drawer-head h3{font-size:15px;}
+.drawer-body{flex:1; overflow-y:auto; padding:16px;}
+.drawer-body h4{font-size:12px; text-transform:uppercase; color:var(--text-faint); letter-spacing:.5px; margin:18px 0 8px;}
+.drawer-body h4:first-child{margin-top:0;}
+.form-row{margin-bottom:10px;}
+.form-row label{display:block; font-size:12px; color:var(--text-dim); margin-bottom:4px;}
+.form-row input,.form-row select,.form-row textarea{width:100%;}
+.form-row.inline{display:flex; gap:6px;}
+.form-row.inline button{flex:1;}
+.note{font-size:11px; color:var(--text-faint); border-left:2px solid var(--accent-dim); padding-left:8px; margin-top:10px; line-height:1.5;}
+/* Checkbox rows read as a sentence, so the label sits beside the box rather
+   than above it the way the text inputs do. */
+.check-row{display:flex; align-items:flex-start; gap:8px; margin-bottom:9px; cursor:pointer;}
+.check-row input{width:auto; margin-top:2px; flex-shrink:0; accent-color:var(--accent);}
+.check-row span{font-size:12.5px; color:var(--text-dim); line-height:1.45;}
+.type-row{border:1px solid var(--border-soft); border-radius:6px; padding:8px; margin-bottom:8px; background:var(--bg-panel-2);}
+.tr-line{display:flex; gap:6px; align-items:center;}
+.tr-line + .tr-line{margin-top:6px;}
+.tr-line input, .tr-line select{width:auto; flex:1; min-width:0;}
+/* Scoped under .tr-line deliberately: the `.tr-line input, .tr-line select`
+   rule above is more specific than a bare `.tr-time`, so an unscoped width
+   here is silently ignored. */
+.tr-line .tr-day{flex:0 0 68px;}
+/* Wide enough for a 12-hour value with its AM/PM and picker icon intact —
+   locales that render 24-hour time simply leave slack. */
+.tr-line .tr-time{flex:0 0 132px;}
+.tr-star, .tr-del{flex:0 0 auto; background:none; border:none; color:var(--text-faint); padding:4px 5px; font-size:13px;}
+.tr-star.on{color:var(--accent);}
+.tr-star:hover{color:var(--accent);}
+.tr-del:hover{color:var(--danger);}
+.tr-swatches{display:flex; gap:6px; margin-top:8px;}
+/* The selected swatch is marked with a ring in the panel colour plus an outer
+   halo, so it stays obvious on light and dark swatches alike — a border alone
+   vanishes against the paler colours. */
+.sw{
+  width:20px; height:20px; border-radius:50%; padding:0; flex:0 0 auto;
+  border:2px solid transparent; cursor:pointer;
+}
+.sw:hover{transform:scale(1.12);}
+.sw.on{border-color:var(--bg-panel-2); box-shadow:0 0 0 2px var(--text-dim);}
+
+#toast{
+  position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(14px);
+  background:var(--bg-panel-2); border:1px solid var(--border); border-radius:8px;
+  padding:9px 16px; font-size:12.5px; opacity:0; transition:opacity .2s, transform .2s;
+  z-index:90; pointer-events:none; box-shadow:0 6px 22px rgba(0,0,0,.4);
+}
+#toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+/* ==========================================================================
+   PRINT — run sheet only
+   ========================================================================== */
+#printArea{display:none;}
+@media print{
+  body{height:auto; overflow:visible; background:#fff; color:#000;}
+  #topbar, #views, #toast, .backdrop{display:none !important;}
+  #printArea{display:block; font-size:11pt;}
+  #printArea h1{font-size:18pt; margin-bottom:2pt;}
+  #printArea .ph-sub{font-size:10pt; color:#444; margin-bottom:12pt;}
+  #printArea table{width:100%; border-collapse:collapse; margin-bottom:14pt;}
+  #printArea th{text-align:left; font-size:8.5pt; text-transform:uppercase; letter-spacing:.5px;
+    border-bottom:1px solid #000; padding:3pt 4pt;}
+  #printArea td{padding:4pt; border-bottom:1px solid #ccc; vertical-align:top;}
+  #printArea h2{font-size:12pt; margin:10pt 0 4pt;}
+  #printArea .pnote{font-size:9pt; color:#444;}
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   ========================================================================== */
+@media (max-width:1180px){
+  .col-assign{width:300px;}
+  .col-palette{width:230px;}
+}
+@media (max-width:900px){
+  #view-plan .plan-wrap{flex-direction:column; overflow-y:auto;}
+  .col-palette, .col-assign{width:100%; border:none; border-bottom:1px solid var(--border-soft);}
+  .col-scroll{max-height:280px;}
+}
+</style>
+</head>
+<body>
+
+<!-- ============================== TOP BAR ============================== -->
+<div id="topbar">
+  <div class="brand">Green<span>room</span></div>
+  <div class="org" id="orgName">Grace Community Church</div>
+  <div id="nav">
+    <button data-route="services">Services</button>
+    <button data-route="plan">Plan</button>
+    <button data-route="people">People</button>
+    <button data-route="teams">Teams</button>
+    <button data-route="songs">Songs</button>
+    <button data-route="chart">Chart Builder</button>
+  </div>
+  <div class="spacer"></div>
+  <span class="status" id="statusText"></span>
+  <button class="icon ghost" id="btnSettings" title="Settings &amp; Parameters">⚙</button>
+</div>
+
+<div id="views">
+
+  <!-- ============================ SERVICES ============================ -->
+  <section class="view" id="view-services">
+    <div class="view-head">
+      <h2>Services</h2>
+      <span class="sub" id="svcCount"></span>
+      <div class="spacer" style="flex:1"></div>
+      <button class="primary" id="btnNewService">＋ New service</button>
+    </div>
+    <div class="view-body"><div id="svcList"></div></div>
+  </section>
+
+  <!-- ============================== PLAN ============================== -->
+  <section class="view" id="view-plan">
+    <div class="plan-toolbar" id="planToolbar"></div>
+    <div class="plan-wrap">
+
+      <!-- Palette: things you drag INTO the plan (and people you drag onto slots) -->
+      <div class="col col-palette">
+        <div class="seg" id="palSeg">
+          <button data-pal="elements" class="active">Elements</button>
+          <button data-pal="songs">Songs</button>
+          <button data-pal="people">People</button>
+        </div>
+        <div class="pal-search" id="palSearchWrap"><input type="text" id="palSearch" placeholder="Search…"></div>
+        <div class="col-scroll" id="palList"></div>
+        <div class="pal-hint" id="palHint"></div>
+      </div>
+
+      <!-- Order of service -->
+      <div class="col col-plan">
+        <div class="col-head">
+          <h3>Order of Service</h3>
+          <div class="spacer"></div>
+          <button class="icon ghost" id="btnPrintSheet" title="Print run sheet">🖨</button>
+          <button class="icon ghost" id="btnExportSvc" title="Export this service as JSON">⇩</button>
+        </div>
+        <div class="col-scroll" style="padding:0"><div class="plan-list" id="planList"></div></div>
+        <div class="plan-total" id="planTotal"></div>
+      </div>
+
+      <!-- Assignments -->
+      <div class="col col-assign">
+        <div class="asg-seg" id="asgSeg">
+          <button data-asg="team" class="active">Service team</button>
+          <button data-asg="element" id="asgElementTab" disabled>Element</button>
+        </div>
+        <div class="col-scroll" id="asgBody"></div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ============================= PEOPLE ============================= -->
+  <section class="view" id="view-people">
+    <div class="view-head">
+      <h2>People</h2>
+      <span class="sub" id="peopleCount"></span>
+      <div class="spacer" style="flex:1"></div>
+      <input type="text" id="peopleSearch" placeholder="Search name, position, email…" style="width:250px">
+      <button class="primary" id="btnAddPerson">＋ Add person</button>
+    </div>
+    <div class="view-head" style="background:var(--bg-panel); padding:8px 16px;">
+      <div class="filters" id="peopleFilters"></div>
+    </div>
+    <div class="view-body"><div class="people-grid" id="peopleGrid"></div></div>
+  </section>
+
+  <!-- ============================== TEAMS ============================= -->
+  <section class="view" id="view-teams">
+    <div class="view-head">
+      <h2>Teams &amp; Positions</h2>
+      <span class="sub">Positions defined here are what you can schedule on a service, and what a profile can be qualified for.</span>
+    </div>
+    <div class="view-body"><div id="teamsList"></div></div>
+  </section>
+
+  <!-- ============================== SONGS ============================= -->
+  <section class="view" id="view-songs">
+    <div class="view-head">
+      <h2>Song Library</h2>
+      <span class="sub" id="songCount"></span>
+      <div class="spacer" style="flex:1"></div>
+      <input type="text" id="songSearch" placeholder="Search songs…" style="width:230px">
+      <button id="btnImportSongs">Import charts…</button>
+      <input type="file" id="songFile" accept=".json" multiple class="hidden">
+      <button id="btnRefreshSongs">↻ Refresh</button>
+    </div>
+    <div class="view-body">
+      <div id="songBanner"></div>
+      <div id="songTableWrap"></div>
+    </div>
+  </section>
+
+  <!-- ========================== CHART BUILDER ========================= -->
+  <section class="view" id="view-chart">
+    <div class="view-head">
+      <h2>Chart Builder</h2>
+      <span class="sub">Running inside Greenroom — same app, same database as the standalone editor.</span>
+      <div class="spacer" style="flex:1"></div>
+      <button id="btnChartNewTab">Open in new tab ↗</button>
+    </div>
+    <iframe id="chartFrame" title="Chart Builder"></iframe>
+  </section>
+
+</div>
+
+<!-- ============================== MODALS ============================== -->
+<div class="backdrop" id="personBackdrop">
+  <div class="modal" id="personModal">
+    <h3 id="personTitle">Add person</h3>
+    <div class="modal-sub">Profiles drive everything downstream — a person can only be scheduled for positions their teams actually cover.</div>
+    <div class="field"><label>Full name</label><input id="pName" placeholder="Jordan Alvarez"></div>
+    <div class="field"><label>Teams</label><div class="filters" id="pTeams"></div></div>
+    <div class="field"><label>Qualified positions</label><div class="filters" id="pPositions"></div></div>
+    <div class="row2">
+      <div class="field"><label>Email</label><input id="pEmail" placeholder="jordan@church.org"></div>
+      <div class="field"><label>Phone</label><input id="pPhone" type="tel" placeholder="(555) 123-4567"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Birthday</label>
+        <div class="row2"><select id="pBMonth"></select><select id="pBDay"></select></div>
+      </div>
+      <div class="field"><label>Anniversary</label>
+        <div class="row2"><select id="pAMonth"></select><select id="pADay"></select></div>
+      </div>
+    </div>
+    <div class="field"><label>Blockout dates <span class="faint" style="text-transform:none;letter-spacing:0">— dates they can't serve</span></label>
+      <div class="row2"><input type="date" id="pBlockDate"><button id="btnAddBlock" style="flex:0 0 auto">Add</button></div>
+      <div class="date-chips" id="pBlockList"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="pNotes" placeholder="Availability, emergency contact, allergies…"></textarea></div>
+    <div class="field">
+      <label class="switch">
+        <input type="checkbox" id="pGuest"><span class="box"></span>
+        <span class="txt"><span class="t1">Guest</span>
+        <span class="t2">One-off for a special occasion. Hidden from the People list until you search their name, but still schedulable.</span></span>
+      </label>
+    </div>
+    <div class="field">
+      <label class="switch">
+        <input type="checkbox" id="pInactive"><span class="box"></span>
+        <span class="txt"><span class="t1">Inactive</span>
+        <span class="t2">Keeps the profile and their serving history, but takes them out of auto-fill and the default roster.</span></span>
+      </label>
+    </div>
+    <div class="modal-actions">
+      <button class="danger-text left hidden" id="btnDeletePerson">Remove person</button>
+      <button class="ghost" data-close="personBackdrop">Cancel</button>
+      <button class="primary" id="btnSavePerson">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="serviceBackdrop">
+  <div class="modal">
+    <h3 id="serviceTitle">New service</h3>
+    <div class="modal-sub">Starts with your standard team template — trim or extend it per service.</div>
+    <div class="field"><label>Type</label><select id="sType"></select></div>
+    <div class="field"><label>Title</label><input id="sTitle" placeholder="Sunday Gathering"></div>
+    <div class="row2">
+      <div class="field"><label>Date</label><input type="date" id="sDate"></div>
+      <div class="field"><label>Start time</label><input type="time" id="sTime" value="10:00"></div>
+    </div>
+    <div class="row2">
+      <div class="field"><label>Series</label><input id="sSeries" placeholder="Rooted"></div>
+      <div class="field"><label>Venue</label><input id="sVenue" placeholder="Main Auditorium"></div>
+    </div>
+    <div class="field"><label>Notes</label><textarea id="sNotes" placeholder="Anything the whole team should know…"></textarea></div>
+    <div class="modal-actions">
+      <button class="ghost" data-close="serviceBackdrop">Cancel</button>
+      <button class="primary" id="btnSaveService">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="itemBackdrop">
+  <div class="modal">
+    <h3 id="itemTitle">Element</h3>
+    <div class="field"><label>Type</label><select id="iType"></select></div>
+    <div class="field"><label>Title</label><input id="iName" placeholder="Welcome &amp; Announcements"></div>
+    <div class="row2">
+      <div class="field"><label>Duration (min)</label><input type="number" id="iDur" min="1" value="5"></div>
+      <div class="field"><label>Key <span class="faint" style="text-transform:none;letter-spacing:0">(songs)</span></label><input id="iKey" placeholder="G"></div>
+    </div>
+    <div class="field"><label>Description</label><textarea id="iNote" placeholder="What happens here…"></textarea></div>
+    <div class="modal-actions">
+      <button class="ghost" data-close="itemBackdrop">Cancel</button>
+      <button class="primary" id="btnSaveItem">Save</button>
+    </div>
+  </div>
+</div>
+
+<div class="backdrop" id="confirmBackdrop">
+  <div class="modal" style="width:380px">
+    <h3 id="confirmTitle">Are you sure?</h3>
+    <div class="modal-sub" id="confirmBody"></div>
+    <div class="modal-actions">
+      <button class="ghost" data-close="confirmBackdrop">Cancel</button>
+      <button class="primary" id="btnConfirmYes">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+<div id="printArea"></div>
+
+<script>
+/* ===========================================================================
+   GREENROOM — parent application shell.
+
+   Owns the things Chart Builder deliberately does not: people, teams and
+   positions, services, and who is doing what in each service. Chart Builder
+   stays the single source of truth for charts themselves; this app reads its
+   library (read-only) and embeds it rather than reimplementing any of it.
+
+   Storage:
+     GreenroomDB          (this app)          -> people, services, songs, prefs
+     WorshipChartBuilderDB (Chart Builder)    -> songs   [READ ONLY from here]
+   =========================================================================== */
+
+/* ---------------------------------------------------------------------------
+   1. TEAM + ELEMENT CONFIGURATION
+   Scoped to the six teams that actually run a service: the person preaching,
+   the worship team, and the audio / visual / tech / streaming crews.
+--------------------------------------------------------------------------- */
+const TEAM_ORDER = ['preacher','worship','audio','visual','tech','streaming'];
+
+const TEAM_META = {
+  preacher : {label:'Preacher',  color:'var(--t-preacher)',  bg:'var(--t-preacher-bg)'},
+  worship  : {label:'Worship',   color:'var(--t-worship)',   bg:'var(--t-worship-bg)'},
+  audio    : {label:'Audio',     color:'var(--t-audio)',     bg:'var(--t-audio-bg)'},
+  visual   : {label:'Visual',    color:'var(--t-visual)',    bg:'var(--t-visual-bg)'},
+  tech     : {label:'Tech',      color:'var(--t-tech)',      bg:'var(--t-tech-bg)'},
+  streaming: {label:'Streaming', color:'var(--t-streaming)', bg:'var(--t-streaming-bg)'}
+};
+
+/* Editable in the Teams view; persisted under the 'positions' pref. */
+const DEFAULT_POSITIONS = {
+  preacher : ['Speaker','Liturgist','Scripture Reader','Prayer','Host / MC'],
+  worship  : ['Worship Leader','Vocals','Acoustic Guitar','Electric Guitar','Bass','Keys','Drums','Percussion','Aux / Strings'],
+  audio    : ['FOH Engineer','Monitor Engineer','A2 / Stage Tech','Wireless Tech'],
+  visual   : ['Lyrics / Slides','Lighting','Camera 1','Camera 2','Video Director'],
+  tech     : ['Presentation Computer','Playback / Tracks','Stage Manager','Setup / Teardown'],
+  streaming: ['Stream Director','Stream Audio','Chat Host','Encoder Tech']
+};
+
+/* The slots a brand-new service starts with — a typical Sunday, trimmed per
+   service from the assignment panel. */
+const SERVICE_TEMPLATE = {
+  preacher : ['Speaker'],
+  worship  : ['Worship Leader','Vocals','Acoustic Guitar','Bass','Keys','Drums'],
+  audio    : ['FOH Engineer','Monitor Engineer'],
+  visual   : ['Lyrics / Slides','Lighting','Camera 1'],
+  tech     : ['Presentation Computer','Playback / Tracks'],
+  streaming: ['Stream Director','Chat Host']
+};
+
+/* `lead` names the team whose lead person is worth surfacing on the plan row
+   (a song has a worship leader, a sermon has a speaker). null = no lead. */
+const ELEMENT_TYPES = [
+  {key:'song',         label:'Song',              glyph:'♪', dur:5,  lead:'worship'},
+  {key:'sermon',       label:'Sermon',            glyph:'▤', dur:30, lead:'preacher'},
+  {key:'scripture',    label:'Scripture Reading', glyph:'▥', dur:3,  lead:'preacher'},
+  {key:'prayer',       label:'Prayer',            glyph:'✜', dur:3,  lead:'preacher'},
+  {key:'welcome',      label:'Welcome',           glyph:'✦', dur:3,  lead:'preacher'},
+  {key:'announcement', label:'Announcements',     glyph:'◈', dur:4,  lead:'preacher'},
+  {key:'media',        label:'Video / Media',     glyph:'▶', dur:3,  lead:'visual'},
+  {key:'offering',     label:'Offering',          glyph:'⊕', dur:4,  lead:'preacher'},
+  {key:'communion',    label:'Communion',         glyph:'✚', dur:8,  lead:'preacher'},
+  {key:'baptism',      label:'Baptism',           glyph:'≈', dur:8,  lead:'preacher'},
+  {key:'transition',   label:'Transition',        glyph:'→', dur:1,  lead:null},
+  {key:'other',        label:'Other',             glyph:'·', dur:5,  lead:null}
+];
+const TYPE_BY_KEY = Object.fromEntries(ELEMENT_TYPES.map(t => [t.key, t]));
+
+/* ---------------------------------------------------------------------------
+   2. UTILITIES
+--------------------------------------------------------------------------- */
+const $ = id => document.getElementById(id);
+let idSeed = 0;
+const uid = () => `${Date.now().toString(36)}${(idSeed++).toString(36)}${Math.random().toString(36).slice(2,6)}`;
+
+function esc(s){
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+function initials(name){
+  return String(name||'?').split(/\s+/).filter(Boolean).slice(0,2).map(w=>w[0].toUpperCase()).join('');
+}
+function avatarColor(seed){
+  const palette = ['#4fb3a5','#e8a13f','#8b7fe0','#e8637e','#5b9bd5','#68c98f','#c98f5f','#9db35b'];
+  let h = 0;
+  for(const ch of String(seed)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+  return palette[h % palette.length];
+}
+function todayISO(){
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+/* Next occurrence of a given weekday, always in the future — planning a
+   service for today is not the common case, and the date field is right there
+   if it is. */
+function nextServiceDate(day){
+  const want = Number(day) || 0;
+  const d = new Date();
+  d.setDate(d.getDate() + (((want - d.getDay()) % 7 + 7) % 7 || 7));
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
+/* Parsed as local time on purpose — `new Date('2026-08-16')` is UTC midnight
+   and renders as the previous day for anyone west of Greenwich. */
+function parseISO(iso){
+  const [y,m,d] = String(iso||'').split('-').map(Number);
+  return (y && m && d) ? new Date(y, m-1, d) : null;
+}
+function fmtDate(iso, opts){
+  const d = parseISO(iso);
+  if(!d) return 'No date';
+  return d.toLocaleDateString(undefined, opts || {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+}
+function fmtTime(hhmm){
+  const [h,m] = String(hhmm||'').split(':').map(Number);
+  if(isNaN(h)) return '';
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m||0).padStart(2,'0')}${ampm}`;
+}
+function addMinutes(hhmm, mins){
+  const [h,m] = String(hhmm||'10:00').split(':').map(Number);
+  const total = (isNaN(h) ? 600 : h*60 + (m||0)) + mins;
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  return `${String(Math.floor(wrapped/60)).padStart(2,'0')}:${String(wrapped%60).padStart(2,'0')}`;
+}
+function fmtDuration(mins){
+  const h = Math.floor(mins/60), m = mins % 60;
+  return h ? `${h}h ${m}m` : `${m}m`;
+}
+function toast(msg){
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+function debounce(fn, ms){
+  let h;
+  return (...a) => { clearTimeout(h); h = setTimeout(() => fn(...a), ms); };
+}
+function openModal(id){ $(id).classList.add('show'); }
+function closeModal(id){ $(id).classList.remove('show'); }
+function confirmAction(title, body, onYes){
+  $('confirmTitle').textContent = title;
+  $('confirmBody').textContent = body;
+  const btn = $('btnConfirmYes');
+  const clone = btn.cloneNode(true);          // drop any handler from a previous call
+  btn.replaceWith(clone);
+  clone.addEventListener('click', () => { closeModal('confirmBackdrop'); onYes(); });
+  openModal('confirmBackdrop');
+}
+
+/* ---------------------------------------------------------------------------
+   3. DATA LAYER — GreenroomDB
+     people   (keyPath id)  -> profiles
+     services (keyPath id)  -> service plans, including their team assignments
+     songs    (keyPath id)  -> songs imported from a Chart Builder JSON export,
+                               used only when the live Chart Builder database
+                               isn't reachable from this page
+     prefs    (keyPath key) -> org name, editable position lists, seed flag
+--------------------------------------------------------------------------- */
+const DB = (() => {
+  const NAME = 'GreenroomDB', VERSION = 1;
+  let dbPromise = null;
+
+  function open(){
+    if(dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(NAME, VERSION);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if(!db.objectStoreNames.contains('people'))   db.createObjectStore('people',   {keyPath:'id'});
+        if(!db.objectStoreNames.contains('services')) db.createObjectStore('services', {keyPath:'id'});
+        if(!db.objectStoreNames.contains('songs'))    db.createObjectStore('songs',    {keyPath:'id'});
+        if(!db.objectStoreNames.contains('prefs'))    db.createObjectStore('prefs',    {keyPath:'key'});
+      };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+  async function store(name, mode){
+    const db = await open();
+    return db.transaction(name, mode).objectStore(name);
+  }
+  function wrap(req){
+    return new Promise((res, rej) => { req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error); });
+  }
+  return {
+    async all(name){ return wrap((await store(name,'readonly')).getAll()); },
+    async put(name, value){ return wrap((await store(name,'readwrite')).put(value)); },
+    async del(name, id){ return wrap((await store(name,'readwrite')).delete(id)); },
+    async getPref(key, fallback){
+      try{ const r = await wrap((await store('prefs','readonly')).get(key)); return r ? r.value : fallback; }
+      catch(e){ return fallback; }
+    },
+    async setPref(key, value){ return wrap((await store('prefs','readwrite')).put({key, value})); }
+  };
+})();
+
+/* ---------------------------------------------------------------------------
+   4. CHART BUILDER BRIDGE — read-only view of WorshipChartBuilderDB.
+
+   Opening another app's IndexedDB by name is not free of side effects: if the
+   database does not exist yet, `indexedDB.open(name)` CREATES it at version 1
+   with no object stores. Chart Builder would then open that same version-1
+   database, never fire its own onupgradeneeded, and find no 'songs' store —
+   i.e. merely visiting this page first would break it. So we detect the
+   create-by-accident case (onupgradeneeded firing at all) and delete the
+   empty database again before handing back "no library".
+--------------------------------------------------------------------------- */
+const ChartLibrary = (() => {
+  const NAME = 'WorshipChartBuilderDB';
+  let state = {status:'unknown', songs:[], source:'none'};
+
+  function openExisting(){
+    return new Promise(resolve => {
+      let created = false, req;
+      try{ req = indexedDB.open(NAME); }
+      catch(e){ return resolve({db:null, why:'unavailable'}); }
+
+      req.onupgradeneeded = () => { created = true; };
+      req.onerror   = () => resolve({db:null, why:'unavailable'});
+      req.onblocked = () => resolve({db:null, why:'unavailable'});
+      req.onsuccess = () => {
+        const db = req.result;
+        const hasSongs = db.objectStoreNames.contains('songs');
+        if(created || !hasSongs){
+          db.close();
+          if(created) indexedDB.deleteDatabase(NAME);   // undo our accidental creation
+          return resolve({db:null, why:'absent'});
+        }
+        resolve({db, why:'ok'});
+      };
+    });
+  }
+
+  async function readLive(){
+    const {db, why} = await openExisting();
+    if(!db) return {ok:false, why, songs:[]};
+    try{
+      const songs = await new Promise((res, rej) => {
+        const r = db.transaction('songs','readonly').objectStore('songs').getAll();
+        r.onsuccess = () => res(r.result || []);
+        r.onerror = () => rej(r.error);
+      });
+      db.close();
+      return {ok:true, why:'ok', songs};
+    }catch(e){
+      try{ db.close(); }catch(_){}
+      return {ok:false, why:'unavailable', songs:[]};
+    }
+  }
+
+  function normalize(s, source){
+    return {
+      id: s.id,
+      title: s.title || 'Untitled',
+      artist: s.artist || '',
+      ccli: s.ccli || '',
+      keys: Array.isArray(s.preferredKeys) ? s.preferredKeys : (s.key && s.key !== 'NN' ? [s.key] : []),
+      tags: Array.isArray(s.tags) ? s.tags : [],
+      structure: Array.isArray(s.structure) ? s.structure : [],
+      updatedAt: s.updatedAt || 0,
+      source
+    };
+  }
+
+  async function refresh(){
+    const live = await readLive();
+    if(live.ok && live.songs.length){
+      state = {status:'live', songs: live.songs.map(s => normalize(s,'chart-builder')), source:'chart-builder'};
+      return state;
+    }
+    /* Nothing live to show. The three reasons are genuinely different and the
+       banner says so: Chart Builder is connected but empty; Chart Builder has
+       never been used on this origin; or its database can't be read at all.
+       Either way, fall back to anything imported here. */
+    const imported = await DB.all('songs');
+    const status = live.ok ? 'empty' : (live.why === 'absent' ? 'absent' : 'unreachable');
+    state = {
+      status,
+      songs: imported.map(s => normalize(s,'imported')),
+      source: imported.length ? 'imported' : 'none'
+    };
+    return state;
+  }
+
+  return {
+    refresh,
+    get(){ return state; },
+    byId(id){ return state.songs.find(s => String(s.id) === String(id)) || null; }
+  };
+})();
+
+/* ---------------------------------------------------------------------------
+   5. APPLICATION STATE
+--------------------------------------------------------------------------- */
+/* A service type is two things at once: a TEMPLATE (a new service of this type
+   inherits its day, time, title and venue) and a GROUPING (the Services tab
+   sections by it). Sunday ships as the default; everything else — Wednesday,
+   Youth, Good Friday — is added in Settings. */
+/* A fixed palette rather than a free colour picker: every one of these is
+   contrast-checked against the dark panel background, so no type can be given
+   a colour that disappears. New types take the first unused one. */
+const TYPE_COLORS = ['#6fe0a0','#5b9bd5','#b98fe8','#e8637e','#e8853d','#e8d23d','#4fb3a5','#9aa2b1'];
+
+const DEFAULT_SERVICE_TYPES = [
+  {id:'sunday', name:'Sunday', day:0, time:'10:00', title:'Sunday Gathering', venue:'', color:TYPE_COLORS[0]}
+];
+
+/* Everything the Settings drawer owns. Kept as one prefs blob rather than a
+   key each, so adding a setting later doesn't mean another migration. */
+const DEFAULT_SETTINGS = {
+  orgName: 'Grace Community Church',
+  defaultTypeId: 'sunday',
+  autoFillGuests: false,         // guests are one-offs; don't volunteer them
+  respectBlockouts: true,
+  warnDoubleBooked: true
+};
+
+const State = {
+  people: [],
+  services: [],
+  positions: JSON.parse(JSON.stringify(DEFAULT_POSITIONS)),
+  types: JSON.parse(JSON.stringify(DEFAULT_SERVICE_TYPES)),
+  settings: {...DEFAULT_SETTINGS},
+  route: 'services',
+  currentServiceId: null,
+  selectedItemId: null,
+  paletteTab: 'elements',
+  paletteQuery: '',
+  assignTab: 'team',
+  peopleQuery: '',
+  peopleTeamFilter: 'all',
+  songQuery: '',
+  editingPersonId: null,
+  editingItemId: null,
+  personBlockouts: [],
+  personTeams: [],
+  personPositions: []
+};
+
+const currentService = () => State.services.find(s => s.id === State.currentServiceId) || null;
+const personById = id => State.people.find(p => p.id === id) || null;
+const positionsFor = team => State.positions[team] || [];
+const typeById = id => State.types.find(t => t.id === id) || null;
+/* Falls through rather than returning null: a service always needs a template,
+   even if the configured default was deleted out from under it. */
+const defaultType = () => typeById(State.settings.defaultTypeId) || State.types[0] || DEFAULT_SERVICE_TYPES[0];
+async function saveTypes(){ await DB.setPref('serviceTypes', State.types); }
+
+/* Falls back to a neutral rather than a palette colour, so a service whose
+   type was deleted reads as "unfiled" instead of borrowing someone's identity. */
+const typeColor = t => (t && t.color) || 'var(--text-faint)';
+function nextTypeColor(){
+  const taken = new Set(State.types.map(t => t.color));
+  return TYPE_COLORS.find(c => !taken.has(c)) || TYPE_COLORS[State.types.length % TYPE_COLORS.length];
+}
+
+async function savePerson(p){ p.updatedAt = Date.now(); await DB.put('people', p); }
+async function saveService(s){ s.updatedAt = Date.now(); await DB.put('services', s); }
+const saveServiceDebounced = debounce(s => saveService(s), 350);
+
+/* People eligible for a team: on the team, active, and not filtered out. */
+function eligibleFor(team, position){
+  return State.people.filter(p => {
+    if(!p.teams.includes(team)) return false;
+    if(p.inactive) return false;
+    /* Position qualification is advisory: someone on the team with no explicit
+       position list is still offered, so a new profile isn't unschedulable. */
+    if(position && p.positions.length && !p.positions.includes(position)) return false;
+    return true;
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   6. SERVICE HELPERS — coverage, conflicts, scheduling maths
+--------------------------------------------------------------------------- */
+function newServiceObject(fields){
+  const team = {};
+  TEAM_ORDER.forEach(t => {
+    team[t] = (SERVICE_TEMPLATE[t] || []).map(pos => ({id: uid(), position: pos, personId: null}));
+  });
+  /* The type supplies the template; anything in `fields` still wins, since the
+     New service dialog lets you override every one of these before saving. */
+  const type = (fields && fields.typeId ? typeById(fields.typeId) : null) || defaultType();
+  return Object.assign({
+    id: uid(),
+    typeId: type.id,
+    title: type.title,
+    date: nextServiceDate(type.day),
+    startTime: type.time,
+    series: '',
+    venue: type.venue,
+    notes: '',
+    team,
+    items: [],
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  }, fields || {});
+}
+
+function allSlots(svc){
+  return TEAM_ORDER.flatMap(t => (svc.team[t] || []).map(slot => ({team: t, slot})));
+}
+function coverage(svc){
+  const slots = allSlots(svc);
+  return {filled: slots.filter(s => s.slot.personId).length, total: slots.length};
+}
+function teamCoverage(svc, team){
+  const slots = svc.team[team] || [];
+  return {filled: slots.filter(s => s.personId).length, total: slots.length};
+}
+function totalMinutes(svc){
+  return svc.items.reduce((sum, it) => sum + (Number(it.duration) || 0), 0);
+}
+
+/* Three things worth warning about when a person lands in a slot. */
+function slotWarnings(svc, team, slot){
+  if(!slot.personId) return [];
+  const warnings = [];
+  const person = personById(slot.personId);
+  if(!person) return ['This person no longer exists'];
+
+  if(State.settings.warnDoubleBooked){
+    const timesInService = allSlots(svc).filter(s => s.slot.personId === slot.personId).length;
+    if(timesInService > 1) warnings.push('Double-booked in this service');
+  }
+
+  if((person.blockouts || []).includes(svc.date)) warnings.push('Blocked out on this date');
+
+  const clash = State.services.find(other =>
+    other.id !== svc.id && other.date === svc.date &&
+    allSlots(other).some(s => s.slot.personId === slot.personId));
+  if(clash) warnings.push(`Also scheduled on "${clash.title}" the same day`);
+
+  if(person.positions.length && !person.positions.includes(slot.position)){
+    warnings.push(`Not listed as qualified for ${slot.position}`);
+  }
+  return warnings;
+}
+
+/* Serving history, computed from services rather than stored on the profile
+   so it can never drift out of sync with the schedule. */
+function servingStats(personId){
+  const dated = State.services
+    .filter(s => allSlots(s).some(x => x.slot.personId === personId))
+    .map(s => s.date)
+    .filter(Boolean)
+    .sort();
+  const today = todayISO();
+  const past = dated.filter(d => d <= today);
+  const upcoming = dated.filter(d => d > today);
+  return {last: past[past.length-1] || null, upcoming: upcoming.length, total: dated.length};
+}
+
+/* ---------------------------------------------------------------------------
+   7. ROUTER
+--------------------------------------------------------------------------- */
+const ROUTES = ['services','plan','people','teams','songs','chart'];
+
+function go(route, serviceId){
+  if(!ROUTES.includes(route)) route = 'services';
+  if(route === 'plan'){
+    if(serviceId) State.currentServiceId = serviceId;
+    if(!currentService()){
+      /* Nothing to plan yet — bounce to the list rather than showing an
+         editor with no service behind it. */
+      if(!State.services.length){ toast('Create a service first'); return go('services'); }
+      State.currentServiceId = upcomingFirst()[0].id;
+    }
+  }
+  State.route = route;
+  location.hash = route === 'plan' ? `#/plan/${State.currentServiceId}` : `#/${route}`;
+  render();
+}
+function upcomingFirst(){
+  const today = todayISO();
+  const future = State.services.filter(s => (s.date || '') >= today).sort((a,b) => (a.date||'').localeCompare(b.date||''));
+  const past = State.services.filter(s => (s.date || '') < today).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+  return [...future, ...past];
+}
+function readHash(){
+  const parts = location.hash.replace(/^#\/?/, '').split('/');
+  const route = parts[0] || 'services';
+  if(route === 'plan' && parts[1]) State.currentServiceId = parts[1];
+  return ROUTES.includes(route) ? route : 'services';
+}
+
+/* ---------------------------------------------------------------------------
+   8. DRAG AND DROP
+   dataTransfer contents are unreadable during dragover in most browsers, and
+   the drop target needs to know what's coming to decide whether to accept it,
+   so the payload is mirrored in a module-level variable for the drag's life.
+--------------------------------------------------------------------------- */
+let dragPayload = null;
+
+function startDrag(e, payload){
+  dragPayload = payload;
+  e.dataTransfer.effectAllowed = 'copyMove';
+  try{ e.dataTransfer.setData('text/plain', JSON.stringify(payload)); }catch(_){}
+}
+function endDrag(){
+  dragPayload = null;
+  document.querySelectorAll('.drop-before,.drop-after,.over,.reject')
+    .forEach(el => el.classList.remove('drop-before','drop-after','over','reject'));
+}
+document.addEventListener('dragend', endDrag);
+
+/* ---------------------------------------------------------------------------
+   9. RENDER — dispatcher
+--------------------------------------------------------------------------- */
+function render(){
+  document.querySelectorAll('#nav button').forEach(b => b.classList.toggle('active', b.dataset.route === State.route));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${State.route}`));
+  $('orgName').textContent = State.settings.orgName;
+
+  if(State.route === 'services') renderServices();
+  if(State.route === 'plan')     renderPlan();
+  if(State.route === 'people')   renderPeople();
+  if(State.route === 'teams')    renderTeams();
+  if(State.route === 'songs')    renderSongs();
+  if(State.route === 'chart')    renderChart();
+
+  renderStatus();
+}
+
+function renderStatus(){
+  const svc = currentService();
+  if(State.route === 'plan' && svc){
+    const c = coverage(svc);
+    $('statusText').textContent = `${c.filled}/${c.total} positions filled · ${fmtDuration(totalMinutes(svc))}`;
+  } else {
+    $('statusText').textContent = `${State.people.length} people · ${State.services.length} services`;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+   10. SERVICES VIEW
+--------------------------------------------------------------------------- */
+function renderServices(){
+  const list = $('svcList');
+  const services = upcomingFirst();
+  $('svcCount').textContent = services.length ? `${services.length} planned` : '';
+
+  if(!services.length){
+    list.innerHTML = `<div class="empty">
+      No services yet.<br>Create one to start building an order of service and scheduling your teams.
+    </div>`;
+    return;
+  }
+
+  const today = todayISO();
+  const nextId = (services.find(s => (s.date||'') >= today) || {}).id;
+
+  /* Grouped by type, in the order types are configured. Empty types still get
+     a section — a type you just created should be visible and have somewhere
+     to add its first service. Anything pointing at a deleted type collects in
+     a trailing "Other" bucket rather than vanishing. */
+  const grouped = State.types.map(t => ({
+    id: t.id,
+    name: t.name,
+    color: typeColor(t),
+    items: services.filter(s => s.typeId === t.id)
+  }));
+  const orphans = services.filter(s => !typeById(s.typeId));
+  if(orphans.length) grouped.push({id:null, name:'Other', color:'var(--text-faint)', items:orphans});
+
+  const cardHtml = svc => {
+    const cov = coverage(svc);
+    const pct = cov.total ? Math.round(cov.filled / cov.total * 100) : 0;
+    const barClass = pct === 100 ? '' : (pct >= 60 ? 'partial' : 'thin');
+    const pips = TEAM_ORDER.map(t => {
+      const tc = teamCoverage(svc, t);
+      if(!tc.total) return '';
+      const cls = tc.filled === tc.total ? 'full' : (tc.filled === 0 ? 'gap' : '');
+      return `<span class="pip ${cls}"><i style="background:${TEAM_META[t].color}"></i>${tc.filled}/${tc.total}</span>`;
+    }).join('');
+
+    return `<div class="svc-card ${svc.id === nextId ? 'next' : ''}" data-svc="${svc.id}" style="--type-color:${typeColor(typeById(svc.typeId))}">
+      <div class="sc-top">
+        <div style="min-width:0">
+          <div class="sc-date">${esc(fmtDate(svc.date))} · ${esc(fmtTime(svc.startTime))}</div>
+          <div class="sc-title">${esc(svc.title)}
+            ${svc.id === nextId ? '<span class="badge-next">Next up</span>' : ''}</div>
+          <div class="sc-series">${esc([svc.series, svc.venue].filter(Boolean).join(' · ') || '—')}</div>
+        </div>
+        <div class="sc-menu">
+          <button class="icon ghost" data-act="dup" data-svc="${svc.id}" title="Duplicate">⧉</button>
+          <button class="icon ghost" data-act="del" data-svc="${svc.id}" title="Delete">✕</button>
+        </div>
+      </div>
+      <div class="cov-bar ${barClass}"><i style="width:${pct}%"></i></div>
+      <div class="sc-stats">
+        <span>${svc.items.length} element${svc.items.length === 1 ? '' : 's'}</span>
+        <span>${fmtDuration(totalMinutes(svc))}</span>
+        <span>${cov.filled}/${cov.total} filled</span>
+      </div>
+      <div class="sc-teams">${pips}</div>
+    </div>`;
+  };
+
+  list.innerHTML = grouped.map(group => `
+    <section class="svc-section">
+      <div class="svc-section-head">
+        <i class="type-dot" style="background:${group.color}"></i>
+        <h3 style="color:${group.color}">${esc(group.name)}</h3>
+        <span class="count">${group.items.length || 'none'}</span>
+        <i class="rule"></i>
+        ${group.id ? `<button class="ghost btn-sm" data-add-type="${esc(group.id)}">+ New</button>` : ''}
+      </div>
+      ${group.items.length
+        ? `<div class="svc-grid">${group.items.map(cardHtml).join('')}</div>`
+        : `<div class="svc-section-empty">No ${esc(group.name)} services planned.</div>`}
+    </section>`).join('');
+
+  list.querySelectorAll('[data-add-type]').forEach(btn =>
+    btn.addEventListener('click', () => openServiceModal(btn.dataset.addType)));
+
+  list.querySelectorAll('.svc-card').forEach(card => {
+    card.addEventListener('click', e => {
+      if(e.target.closest('[data-act]')) return;
+      go('plan', card.dataset.svc);
+    });
+  });
+  list.querySelectorAll('[data-act="dup"]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const src = State.services.find(s => s.id === btn.dataset.svc);
+      const copy = JSON.parse(JSON.stringify(src));
+      copy.id = uid();
+      copy.title = `${src.title} (copy)`;
+      /* A duplicate keeps its type, so it lands on that type's weekday. */
+      copy.date = nextServiceDate((typeById(src.typeId) || defaultType()).day);
+      copy.createdAt = Date.now();
+      /* Fresh slot ids so the two services can never alias each other. */
+      TEAM_ORDER.forEach(t => (copy.team[t] || []).forEach(s => s.id = uid()));
+      copy.items.forEach(i => i.id = uid());
+      State.services.push(copy);
+      await saveService(copy);
+      render();
+      toast('Service duplicated — team and plan carried over');
+    });
+  });
+  list.querySelectorAll('[data-act="del"]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const svc = State.services.find(s => s.id === btn.dataset.svc);
+      confirmAction('Delete service?', `"${svc.title}" on ${fmtDate(svc.date)} and its assignments will be removed.`, async () => {
+        State.services = State.services.filter(s => s.id !== svc.id);
+        if(State.currentServiceId === svc.id) State.currentServiceId = null;
+        await DB.del('services', svc.id);
+        render();
+        toast('Service deleted');
+      });
+    });
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   11. PLAN VIEW
+--------------------------------------------------------------------------- */
+function renderPlan(){
+  const svc = currentService();
+  if(!svc) return;
+  renderPlanToolbar(svc);
+  renderPalette();
+  renderPlanList(svc);
+  renderAssign(svc);
+}
+
+function renderPlanToolbar(svc){
+  const bar = $('planToolbar');
+  bar.innerHTML = `
+    <button class="ghost icon" id="btnBackSvc" title="All services">←</button>
+    <input class="title-in" id="tbTitle" value="${esc(svc.title)}">
+    <input class="meta-in" type="date" id="tbDate" value="${esc(svc.date)}">
+    <input class="meta-in" type="time" id="tbTime" value="${esc(svc.startTime)}">
+    <input class="meta-in" id="tbSeries" placeholder="Series" value="${esc(svc.series)}" style="width:120px">
+    <select class="meta-in" id="tbType" title="Service type"
+      style="border-left:3px solid ${typeColor(typeById(svc.typeId))}">
+      ${State.types.map(t => `<option value="${esc(t.id)}" ${t.id === svc.typeId ? 'selected' : ''}>${esc(t.name)}</option>`).join('')}
+      ${typeById(svc.typeId) ? '' : '<option value="" selected>Other</option>'}
+    </select>
+    <div style="flex:1"></div>
+    <select id="tbSwitch" title="Switch service">
+      ${upcomingFirst().map(s => `<option value="${s.id}" ${s.id === svc.id ? 'selected' : ''}>${esc(fmtDate(s.date,{month:'short',day:'numeric'}))} — ${esc(s.title)}</option>`).join('')}
+    </select>
+    <button id="btnAutoFill">✨ Auto-fill</button>`;
+
+  $('btnBackSvc').addEventListener('click', () => go('services'));
+  $('tbSwitch').addEventListener('change', e => go('plan', e.target.value));
+  const bind = (id, key) => $(id).addEventListener('input', e => {
+    svc[key] = e.target.value;
+    saveServiceDebounced(svc);
+    if(key === 'startTime' || key === 'date') renderPlanList(svc);
+  });
+  bind('tbTitle','title'); bind('tbDate','date'); bind('tbTime','startTime'); bind('tbSeries','series');
+  /* Changing type only re-files the service under a different heading — it
+     never rewrites the title, date or time you've already set here. */
+  $('tbType').addEventListener('change', e => {
+    svc.typeId = e.target.value || null;
+    saveService(svc);
+    e.target.style.borderLeftColor = typeColor(typeById(svc.typeId));
+    toast(`Filed under ${typeById(svc.typeId) ? typeById(svc.typeId).name : 'Other'}`);
+  });
+  $('btnAutoFill').addEventListener('click', () => autoFill(svc));
+}
+
+/* ---- palette ------------------------------------------------------------ */
+function renderPalette(){
+  document.querySelectorAll('#palSeg button').forEach(b => b.classList.toggle('active', b.dataset.pal === State.paletteTab));
+  const list = $('palList');
+  const hint = $('palHint');
+  const q = State.paletteQuery.trim().toLowerCase();
+  $('palSearchWrap').classList.toggle('hidden', State.paletteTab === 'elements');
+
+  if(State.paletteTab === 'elements'){
+    list.innerHTML = ELEMENT_TYPES.map(t => `
+      <div class="pal-item" draggable="true" data-kind="element" data-type="${t.key}">
+        <div class="glyph">${t.glyph}</div>
+        <div class="pi-body"><div class="pi-title">${esc(t.label)}</div>
+        <div class="pi-sub">${t.dur} min default</div></div>
+      </div>`).join('');
+    hint.textContent = 'Drag an element into the order of service, or drop it between two existing rows to insert it there.';
+  }
+
+  if(State.paletteTab === 'songs'){
+    const songs = ChartLibrary.get().songs
+      .filter(s => !q || s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q))
+      .sort((a,b) => a.title.localeCompare(b.title));
+    list.innerHTML = songs.length ? songs.map(s => `
+      <div class="pal-item" draggable="true" data-kind="song" data-song="${esc(s.id)}">
+        <div class="glyph">♪</div>
+        <div class="pi-body"><div class="pi-title">${esc(s.title)}</div>
+        <div class="pi-sub">${esc([s.artist, s.keys.join('/')].filter(Boolean).join(' · ') || '—')}</div></div>
+      </div>`).join('')
+      : `<div class="empty" style="padding:18px 12px">No songs found.<br>Charts come from Chart Builder — see the <strong>Songs</strong> tab.</div>`;
+    hint.textContent = 'Songs come straight from Chart Builder. Dropping one in keeps the link, so the chart is one click away.';
+  }
+
+  if(State.paletteTab === 'people'){
+    const people = State.people
+      .filter(p => !p.inactive || q)
+      .filter(p => !p.isGuest || q)
+      .filter(p => !q || p.name.toLowerCase().includes(q) || p.positions.some(pos => pos.toLowerCase().includes(q)))
+      .sort((a,b) => a.name.localeCompare(b.name));
+    list.innerHTML = people.length ? people.map(p => `
+      <div class="pal-item" draggable="true" data-kind="person" data-person="${p.id}">
+        <div class="avatar sm" style="background:${avatarColor(p.id)}">${esc(initials(p.name))}</div>
+        <div class="pi-body"><div class="pi-title">${esc(p.name)}</div>
+        <div class="pi-sub">${esc(p.positions.slice(0,3).join(', ') || p.teams.map(t => TEAM_META[t].label).join(', ') || 'No positions')}</div></div>
+      </div>`).join('')
+      : `<div class="empty" style="padding:18px 12px">No one matches.</div>`;
+    hint.textContent = 'Drag a person onto a position slot on the right. Slots they aren’t on the team for will refuse the drop.';
+  }
+
+  list.querySelectorAll('.pal-item').forEach(el => {
+    el.addEventListener('dragstart', e => startDrag(e, {
+      kind: el.dataset.kind,
+      type: el.dataset.type,
+      songId: el.dataset.song,
+      personId: el.dataset.person
+    }));
+  });
+}
+
+/* ---- order of service --------------------------------------------------- */
+function renderPlanList(svc){
+  const list = $('planList');
+
+  if(!svc.items.length){
+    list.innerHTML = `<div class="plan-drop" id="emptyDrop">
+      <strong>Drag an element or a song here</strong><br>
+      Elements and songs from the left panel build the run of the service. You can reorder any of it later by dragging.
+    </div>`;
+    $('planTotal').textContent = 'Nothing planned yet';
+    return;
+  }
+
+  let clock = svc.startTime;
+  list.innerHTML = svc.items.map((it, idx) => {
+    const type = TYPE_BY_KEY[it.type] || TYPE_BY_KEY.other;
+    const at = clock;
+    clock = addMinutes(clock, Number(it.duration) || 0);
+    const lead = it.leadPersonId ? personById(it.leadPersonId) : null;
+    const song = it.songId ? ChartLibrary.byId(it.songId) : null;
+    const meta = [
+      it.songKey ? `Key ${esc(it.songKey)}` : '',
+      song ? esc(song.artist) : '',
+      it.note ? esc(it.note) : ''
+    ].filter(Boolean).slice(0,2).map(m => `<span>${m}</span>`).join('');
+
+    return `<div class="pitem ${it.id === State.selectedItemId ? 'selected' : ''}" draggable="true" data-item="${it.id}">
+      <div class="pi-row">
+        <div class="pi-clock">${esc(fmtTime(at))}</div>
+        <div class="pi-glyph" title="${esc(type.label)}">${type.glyph}</div>
+        <div class="pi-main">
+          <div class="pi-name">${idx+1}. ${esc(it.title)}</div>
+          <div class="pi-meta">${meta || `<span>${esc(type.label)}</span>`}</div>
+        </div>
+        <div class="pi-dur">${Number(it.duration)||0}m</div>
+        <div class="pi-actions">
+          ${it.songId ? `<button data-act="chart" title="Open chart in Chart Builder">♪</button>` : ''}
+          <button data-act="edit" title="Edit element">✎</button>
+          <button data-act="del" class="del" title="Remove">✕</button>
+        </div>
+      </div>
+      ${lead ? `<div class="pi-lead"><span class="avatar sm" style="background:${avatarColor(lead.id)}">${esc(initials(lead.name))}</span>${esc(lead.name)}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  wirePlanItems(svc, list);
+
+  const end = addMinutes(svc.startTime, totalMinutes(svc));
+  $('planTotal').innerHTML = `<span>${svc.items.length} elements</span><span>·</span>
+    <span>${fmtDuration(totalMinutes(svc))}</span><span>·</span>
+    <span>${esc(fmtTime(svc.startTime))} → ${esc(fmtTime(end))}</span>`;
+}
+
+function wirePlanItems(svc, list){
+  list.querySelectorAll('.pitem').forEach(card => {
+    const id = card.dataset.item;
+
+    card.addEventListener('click', e => {
+      if(e.target.closest('[data-act]')) return;
+      State.selectedItemId = id;
+      State.assignTab = 'element';
+      renderPlanList(svc);
+      renderAssign(svc);
+    });
+
+    card.querySelector('[data-act="edit"]').addEventListener('click', () => openItemModal(svc, id));
+    card.querySelector('[data-act="del"]').addEventListener('click', () => {
+      svc.items = svc.items.filter(i => i.id !== id);
+      if(State.selectedItemId === id){ State.selectedItemId = null; State.assignTab = 'team'; }
+      saveService(svc);
+      renderPlanList(svc); renderAssign(svc); renderStatus();
+    });
+    const chartBtn = card.querySelector('[data-act="chart"]');
+    if(chartBtn){
+      chartBtn.addEventListener('click', () => {
+        const item = svc.items.find(i => i.id === id);
+        openChart(item.songId);
+      });
+    }
+
+    card.addEventListener('dragstart', e => {
+      startDrag(e, {kind:'move', itemId:id});
+      card.classList.add('dragging');
+    });
+    card.addEventListener('dragend', () => card.classList.remove('dragging'));
+  });
+}
+
+/* Insertion point is whichever card half the cursor is over; dropping past the
+   last card appends.
+
+   Wired ONCE at boot, not per render: #planList itself survives every render
+   (only its children are replaced), so re-attaching here would stack a new set
+   of handlers on every redraw and fire the drop logic repeatedly. The service
+   is read live rather than captured for the same reason. */
+function initPlanDrop(){
+  const list = $('planList');
+
+  function clearMarks(){
+    list.querySelectorAll('.drop-before,.drop-after').forEach(el => el.classList.remove('drop-before','drop-after'));
+    const empty = $('emptyDrop');
+    if(empty) empty.classList.remove('over');
+  }
+  function targetIndex(e){
+    const cards = [...list.querySelectorAll('.pitem')];
+    if(!cards.length) return 0;
+    for(let i = 0; i < cards.length; i++){
+      const r = cards[i].getBoundingClientRect();
+      if(e.clientY < r.top + r.height / 2){
+        cards[i].classList.add('drop-before');
+        return i;
+      }
+    }
+    cards[cards.length-1].classList.add('drop-after');
+    return cards.length;
+  }
+
+  list.addEventListener('dragover', e => {
+    if(!dragPayload || dragPayload.kind === 'person') return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = dragPayload.kind === 'move' ? 'move' : 'copy';
+    clearMarks();
+    const empty = $('emptyDrop');
+    if(empty) empty.classList.add('over'); else targetIndex(e);
+  });
+  list.addEventListener('dragleave', e => { if(!list.contains(e.relatedTarget)) clearMarks(); });
+
+  list.addEventListener('drop', async e => {
+    if(!dragPayload || dragPayload.kind === 'person') return;
+    e.preventDefault();
+    const svc = currentService();
+    if(!svc) return;
+    const idx = targetIndex(e);
+    clearMarks();
+
+    if(dragPayload.kind === 'move'){
+      const from = svc.items.findIndex(i => i.id === dragPayload.itemId);
+      if(from === -1) return;
+      const [moved] = svc.items.splice(from, 1);
+      /* Removing the dragged row first shifts every later index down by one. */
+      svc.items.splice(from < idx ? idx - 1 : idx, 0, moved);
+    } else {
+      svc.items.splice(idx, 0, buildItem(dragPayload));
+    }
+    endDrag();
+    await saveService(svc);
+    renderPlanList(svc); renderAssign(svc); renderStatus();
+  });
+}
+
+function buildItem(payload){
+  if(payload.kind === 'song'){
+    const song = ChartLibrary.byId(payload.songId);
+    return {
+      id: uid(), type:'song',
+      title: song ? song.title : 'Song',
+      duration: 5,
+      songId: payload.songId,
+      songKey: song && song.keys.length ? song.keys[0] : '',
+      note: song && song.artist ? song.artist : '',
+      leadPersonId: null,
+      teamNotes: {}
+    };
+  }
+  const type = TYPE_BY_KEY[payload.type] || TYPE_BY_KEY.other;
+  return {
+    id: uid(), type: type.key, title: type.label, duration: type.dur,
+    songId: null, songKey: '', note: '', leadPersonId: null, teamNotes: {}
+  };
+}
+
+/* ---- assignment panel --------------------------------------------------- */
+function renderAssign(svc){
+  const item = svc.items.find(i => i.id === State.selectedItemId) || null;
+  $('asgElementTab').disabled = !item;
+  if(!item && State.assignTab === 'element') State.assignTab = 'team';
+  document.querySelectorAll('#asgSeg button').forEach(b => b.classList.toggle('active', b.dataset.asg === State.assignTab));
+
+  if(State.assignTab === 'team') renderTeamAssign(svc);
+  else renderElementAssign(svc, item);
+}
+
+function renderTeamAssign(svc){
+  const body = $('asgBody');
+  body.innerHTML = TEAM_ORDER.map(team => {
+    const meta = TEAM_META[team];
+    const slots = svc.team[team] || [];
+    const cov = teamCoverage(svc, team);
+    const rows = slots.length ? slots.map(slot => {
+      const warns = slotWarnings(svc, team, slot);
+      const options = eligibleFor(team, slot.position);
+      /* An already-assigned person who no longer qualifies still needs to
+         appear in their own dropdown, or selecting anything else would be the
+         only way to see who is currently in the slot. */
+      const assigned = slot.personId ? personById(slot.personId) : null;
+      if(assigned && !options.some(p => p.id === assigned.id)) options.unshift(assigned);
+      return `<div class="slot" data-team="${team}" data-slot="${slot.id}">
+        <span class="slot-pos" title="${esc(slot.position)}" style="color:${meta.color}">${esc(slot.position)}</span>
+        <select data-team="${team}" data-slot="${slot.id}">
+          <option value="">— open —</option>
+          ${options.map(p => `<option value="${p.id}" ${slot.personId === p.id ? 'selected' : ''}>${esc(p.name)}${p.isGuest ? ' (guest)' : ''}</option>`).join('')}
+        </select>
+        ${warns.length ? `<span class="warn" title="${esc(warns.join(' · '))}">⚠</span>` : ''}
+        <button class="rm" data-rm="${slot.id}" data-team="${team}" title="Remove this position">✕</button>
+      </div>`;
+    }).join('') : `<div class="lane-empty">no positions on this team</div>`;
+
+    return `<div class="lane">
+      <div class="lane-head">
+        <span class="lane-dot" style="background:${meta.color}"></span>
+        <span class="lane-name" style="color:${meta.color}">${meta.label}</span>
+        <span class="lane-count">${cov.filled}/${cov.total}</span>
+      </div>
+      ${rows}
+      <div style="margin-top:5px">
+        <select class="lane-add-sel" data-team="${team}" style="width:100%; font-size:11.5px; padding:4px 6px;">
+          <option value="">+ add position…</option>
+          ${positionsFor(team).map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('')}
+        </select>
+      </div>
+    </div>`;
+  }).join('');
+
+  /* assignment via dropdown */
+  body.querySelectorAll('.slot select').forEach(sel => {
+    sel.addEventListener('change', () => {
+      const slot = (svc.team[sel.dataset.team] || []).find(s => s.id === sel.dataset.slot);
+      slot.personId = sel.value || null;
+      saveService(svc);
+      renderTeamAssign(svc); renderStatus();
+    });
+  });
+  /* remove a slot */
+  body.querySelectorAll('[data-rm]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const team = btn.dataset.team;
+      svc.team[team] = svc.team[team].filter(s => s.id !== btn.dataset.rm);
+      saveService(svc);
+      renderTeamAssign(svc); renderStatus();
+    });
+  });
+  /* add a slot */
+  body.querySelectorAll('.lane-add-sel').forEach(sel => {
+    sel.addEventListener('change', () => {
+      if(!sel.value) return;
+      svc.team[sel.dataset.team].push({id: uid(), position: sel.value, personId: null});
+      saveService(svc);
+      renderTeamAssign(svc); renderStatus();
+    });
+  });
+  /* drop a person onto a slot */
+  body.querySelectorAll('.slot').forEach(el => {
+    const team = el.dataset.team;
+    el.addEventListener('dragover', e => {
+      if(!dragPayload || dragPayload.kind !== 'person') return;
+      e.preventDefault();
+      const person = personById(dragPayload.personId);
+      const ok = person && person.teams.includes(team);
+      e.dataTransfer.dropEffect = ok ? 'copy' : 'none';
+      el.classList.toggle('over', ok);
+      el.classList.toggle('reject', !ok);
+    });
+    el.addEventListener('dragleave', () => el.classList.remove('over','reject'));
+    el.addEventListener('drop', async e => {
+      if(!dragPayload || dragPayload.kind !== 'person') return;
+      e.preventDefault();
+      const person = personById(dragPayload.personId);
+      el.classList.remove('over','reject');
+      if(!person || !person.teams.includes(team)){
+        toast(`${person ? person.name : 'That person'} isn't on the ${TEAM_META[team].label} team`);
+        return;
+      }
+      const slot = svc.team[team].find(s => s.id === el.dataset.slot);
+      slot.personId = person.id;
+      endDrag();
+      await saveService(svc);
+      renderTeamAssign(svc); renderStatus();
+      const warns = slotWarnings(svc, team, slot);
+      toast(warns.length ? `${person.name} → ${slot.position} · ${warns[0]}` : `${person.name} → ${slot.position}`);
+    });
+  });
+}
+
+function renderElementAssign(svc, item){
+  const body = $('asgBody');
+  if(!item){ body.innerHTML = `<div class="empty">Select an element in the order of service.</div>`; return; }
+  const type = TYPE_BY_KEY[item.type] || TYPE_BY_KEY.other;
+  const song = item.songId ? ChartLibrary.byId(item.songId) : null;
+
+  /* The lead can only be someone already scheduled on this service — that's
+     the point of assigning the team first. */
+  const leadTeam = type.lead;
+  const onService = leadTeam
+    ? (svc.team[leadTeam] || []).filter(s => s.personId).map(s => personById(s.personId)).filter(Boolean)
+    : [];
+  const uniqueOnService = [...new Map(onService.map(p => [p.id, p])).values()];
+
+  body.innerHTML = `
+    <div class="field"><label>Title</label><input id="eaTitle" value="${esc(item.title)}"></div>
+    <div class="row2">
+      <div class="field"><label>Type</label>
+        <select id="eaType">${ELEMENT_TYPES.map(t => `<option value="${t.key}" ${t.key === item.type ? 'selected' : ''}>${t.label}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label>Minutes</label><input type="number" min="1" id="eaDur" value="${Number(item.duration)||0}"></div>
+    </div>
+    ${item.type === 'song' ? `
+      <div class="field"><label>Key for this service</label><input id="eaKey" value="${esc(item.songKey)}" placeholder="e.g. G"></div>
+      <div class="field">
+        <label>Chart</label>
+        ${song
+          ? `<button id="eaChart" style="width:100%">♪ Open “${esc(song.title)}” in Chart Builder</button>`
+          : `<div class="faint" style="font-size:12px">Not linked to a chart. Drag this song in from the Songs palette to link it.</div>`}
+      </div>` : ''}
+    ${leadTeam ? `
+      <div class="field"><label>Lead — ${TEAM_META[leadTeam].label}</label>
+        <select id="eaLead">
+          <option value="">— none —</option>
+          ${uniqueOnService.map(p => `<option value="${p.id}" ${item.leadPersonId === p.id ? 'selected' : ''}>${esc(p.name)}</option>`).join('')}
+        </select>
+        ${uniqueOnService.length ? '' : `<div class="faint" style="font-size:11.5px;margin-top:4px">Nobody scheduled on ${TEAM_META[leadTeam].label} yet — assign the service team first.</div>`}
+      </div>` : ''}
+    <div class="field"><label>Description</label><textarea id="eaNote" placeholder="What happens here…">${esc(item.note)}</textarea></div>
+    <div class="field"><label>Notes for a team</label>
+      ${TEAM_ORDER.map(t => `<div class="teamnote">
+        <label><span class="lane-dot" style="background:${TEAM_META[t].color}"></span>${TEAM_META[t].label}</label>
+        <textarea data-teamnote="${t}" placeholder="—">${esc((item.teamNotes || {})[t] || '')}</textarea>
+      </div>`).join('')}
+    </div>`;
+
+  const bind = (id, apply) => { const el = $(id); if(el) el.addEventListener('input', () => { apply(el.value); saveServiceDebounced(svc); renderPlanList(svc); }); };
+  bind('eaTitle', v => item.title = v);
+  bind('eaDur',   v => item.duration = Math.max(0, Number(v) || 0));
+  bind('eaKey',   v => item.songKey = v);
+  bind('eaNote',  v => item.note = v);
+
+  const typeSel = $('eaType');
+  if(typeSel) typeSel.addEventListener('change', () => {
+    item.type = typeSel.value;
+    saveService(svc);
+    renderPlanList(svc); renderAssign(svc);
+  });
+  const leadSel = $('eaLead');
+  if(leadSel) leadSel.addEventListener('change', () => {
+    item.leadPersonId = leadSel.value || null;
+    saveService(svc);
+    renderPlanList(svc);
+  });
+  const chartBtn = $('eaChart');
+  if(chartBtn) chartBtn.addEventListener('click', () => openChart(item.songId));
+
+  body.querySelectorAll('[data-teamnote]').forEach(ta => {
+    ta.addEventListener('input', () => {
+      item.teamNotes = item.teamNotes || {};
+      item.teamNotes[ta.dataset.teamnote] = ta.value;
+      saveServiceDebounced(svc);
+    });
+  });
+}
+
+/* ---- auto-fill ---------------------------------------------------------- */
+/* Fills only OPEN slots, never reassigns a filled one, and prefers whoever has
+   gone longest without serving so the same handful of people don't carry every
+   week. Blocked-out and already-used-this-service people are skipped.
+
+   Slots are filled MOST-CONSTRAINED FIRST. Taken in plain lane order, a slot
+   with lots of candidates can consume the one person who could have covered a
+   specialist slot further down (the only acoustic guitarist getting spent on
+   vocals), leaving a hole that didn't need to exist. */
+function autoFill(svc){
+  const used = new Set(allSlots(svc).map(s => s.slot.personId).filter(Boolean));
+  let filled = 0, skipped = 0;
+
+  const available = (team, position) => eligibleFor(team, position)
+    .filter(p => !used.has(p.id))
+    .filter(p => State.settings.respectBlockouts ? !(p.blockouts || []).includes(svc.date) : true)
+    .filter(p => State.settings.autoFillGuests ? true : !p.isGuest);
+
+  const open = TEAM_ORDER.flatMap(team =>
+    (svc.team[team] || []).filter(s => !s.personId).map(slot => ({team, slot})));
+
+  /* Scarcity is measured once up front, before anyone is taken, so the order
+     reflects how hard each slot is to fill rather than the order we happen to
+     be filling them in. */
+  open.forEach(o => o.depth = available(o.team, o.slot.position).length);
+  open.sort((a,b) => a.depth - b.depth);
+
+  open.forEach(({team, slot}) => {
+    const candidates = available(team, slot.position)
+      .sort((a,b) => {
+        const la = servingStats(a.id).last || '';
+        const lb = servingStats(b.id).last || '';
+        return la.localeCompare(lb);            // never-served ('') sorts first
+      });
+    if(candidates.length){
+      slot.personId = candidates[0].id;
+      used.add(candidates[0].id);
+      filled++;
+    } else skipped++;
+  });
+
+  saveService(svc);
+  renderTeamAssign(svc); renderStatus();
+  if(!filled && !skipped) toast('Every position is already filled');
+  else toast(`Filled ${filled} position${filled === 1 ? '' : 's'}${skipped ? ` · ${skipped} had nobody available` : ''}`);
+}
+
+/* ---- element modal (used by the ✎ action) -------------------------------- */
+function openItemModal(svc, itemId){
+  State.editingItemId = itemId;
+  const item = svc.items.find(i => i.id === itemId);
+  $('itemTitle').textContent = 'Edit element';
+  $('iType').innerHTML = ELEMENT_TYPES.map(t => `<option value="${t.key}">${t.label}</option>`).join('');
+  $('iType').value = item.type;
+  $('iName').value = item.title;
+  $('iDur').value = Number(item.duration) || 0;
+  $('iKey').value = item.songKey || '';
+  $('iNote').value = item.note || '';
+  openModal('itemBackdrop');
+}
+$('btnSaveItem').addEventListener('click', async () => {
+  const svc = currentService();
+  const item = svc.items.find(i => i.id === State.editingItemId);
+  if(!item) return closeModal('itemBackdrop');
+  item.type = $('iType').value;
+  item.title = $('iName').value.trim() || TYPE_BY_KEY[item.type].label;
+  item.duration = Math.max(0, Number($('iDur').value) || 0);
+  item.songKey = $('iKey').value.trim();
+  item.note = $('iNote').value.trim();
+  await saveService(svc);
+  closeModal('itemBackdrop');
+  renderPlanList(svc); renderAssign(svc); renderStatus();
+});
+
+/* ---------------------------------------------------------------------------
+   12. PEOPLE VIEW
+--------------------------------------------------------------------------- */
+function renderPeople(){
+  const filters = $('peopleFilters');
+  filters.innerHTML = [`<div class="chip ${State.peopleTeamFilter === 'all' ? 'active' : ''}" data-team="all">All</div>`]
+    .concat(TEAM_ORDER.map(t => {
+      const active = State.peopleTeamFilter === t;
+      const style = active ? `style="background:${TEAM_META[t].color};border-color:${TEAM_META[t].color}"` : `style="border-color:${TEAM_META[t].color}44;color:${TEAM_META[t].color}"`;
+      return `<div class="chip team ${active ? 'active' : ''}" data-team="${t}" ${style}>${TEAM_META[t].label}</div>`;
+    })).join('');
+  filters.querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    State.peopleTeamFilter = c.dataset.team;
+    renderPeople();
+  }));
+
+  const q = State.peopleQuery.trim().toLowerCase();
+  const matches = p => !q || p.name.toLowerCase().includes(q) ||
+    p.positions.some(pos => pos.toLowerCase().includes(q)) ||
+    (p.email || '').toLowerCase().includes(q);
+
+  const list = State.people
+    .filter(p => State.peopleTeamFilter === 'all' || p.teams.includes(State.peopleTeamFilter))
+    .filter(p => (p.isGuest && !q) ? false : matches(p))   // guests stay out of the way until searched
+    .sort((a,b) => a.name.localeCompare(b.name));
+
+  const hiddenGuests = q ? 0 : State.people.filter(p => p.isGuest).length;
+  $('peopleCount').textContent = `${list.length} shown${hiddenGuests ? ` · ${hiddenGuests} guest${hiddenGuests === 1 ? '' : 's'} hidden` : ''}`;
+
+  const grid = $('peopleGrid');
+  if(!list.length){
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1">No one matches.</div>`;
+    return;
+  }
+
+  grid.innerHTML = list.map(p => {
+    const stats = servingStats(p.id);
+    const posBadges = (p.positions.length ? p.positions.slice(0,4) : p.teams.map(t => TEAM_META[t].label))
+      .map(pos => {
+        const team = p.teams.find(t => positionsFor(t).includes(pos));
+        const color = team ? TEAM_META[team].color : 'var(--text-faint)';
+        return `<span class="pos-badge" style="color:${color};border-color:${color}55">${esc(pos)}</span>`;
+      }).join('');
+    return `<div class="pcard ${p.inactive ? 'inactive' : ''}" draggable="true" data-person="${p.id}">
+      <div class="avatar" style="background:${avatarColor(p.id)}">${esc(initials(p.name))}</div>
+      <div class="pc-body">
+        <div class="pc-name">${esc(p.name)}
+          ${p.isGuest ? '<span class="tag-guest">Guest</span>' : ''}
+          ${p.inactive ? '<span class="tag-guest" style="color:var(--text-faint);border-color:var(--border)">Inactive</span>' : ''}
+        </div>
+        <div class="pc-contact">${esc(p.email || p.phone || '—')}</div>
+        <div class="pc-pos">${posBadges}</div>
+        <div class="pc-contact" style="margin-top:6px">
+          ${stats.last ? `Last served ${esc(fmtDate(stats.last, {month:'short', day:'numeric'}))}` : 'Never served'}
+          ${stats.upcoming ? ` · ${stats.upcoming} upcoming` : ''}
+        </div>
+      </div>
+      <button class="pc-edit" data-edit="${p.id}" title="Edit profile">✎</button>
+    </div>`;
+  }).join('');
+
+  grid.querySelectorAll('[data-edit]').forEach(b => b.addEventListener('click', e => {
+    e.stopPropagation();
+    openPersonModal(b.dataset.edit);
+  }));
+  grid.querySelectorAll('.pcard').forEach(card => {
+    card.addEventListener('click', () => openPersonModal(card.dataset.person));
+    card.addEventListener('dragstart', e => startDrag(e, {kind:'person', personId: card.dataset.person}));
+  });
+}
+
+/* ---- person modal ------------------------------------------------------- */
+const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+const DAYS_IN_MONTH = [31,29,31,30,31,30,31,31,30,31,30,31];   // Feb allows 29; no year is stored
+
+function fillMonth(sel){
+  sel.innerHTML = '<option value="">Month</option>' + MONTHS.map((m,i) => `<option value="${i+1}">${m}</option>`).join('');
+}
+function fillDay(sel, month, keep){
+  const max = month ? DAYS_IN_MONTH[month-1] : 31;
+  let html = '<option value="">Day</option>';
+  for(let d = 1; d <= max; d++) html += `<option value="${d}">${d}</option>`;
+  sel.innerHTML = html;
+  if(keep && keep <= max) sel.value = keep;
+}
+function wireMonthDay(mId, dId){
+  fillMonth($(mId)); fillDay($(dId), null);
+  $(mId).addEventListener('change', () => fillDay($(dId), Number($(mId).value) || null, Number($(dId).value) || null));
+}
+function setMonthDay(mId, dId, mmdd){
+  if(!mmdd){ $(mId).value = ''; fillDay($(dId), null); return; }
+  const [mm, dd] = mmdd.split('-').map(Number);
+  $(mId).value = mm || '';
+  fillDay($(dId), mm || null, dd || null);
+}
+function getMonthDay(mId, dId){
+  const m = $(mId).value, d = $(dId).value;
+  return (m && d) ? `${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}` : '';
+}
+wireMonthDay('pBMonth','pBDay');
+wireMonthDay('pAMonth','pADay');
+
+function renderPersonTeamChips(){
+  $('pTeams').innerHTML = TEAM_ORDER.map(t => {
+    const active = State.personTeams.includes(t);
+    const style = active
+      ? `style="background:${TEAM_META[t].color};border-color:${TEAM_META[t].color};color:#12141a"`
+      : `style="border-color:${TEAM_META[t].color}44;color:${TEAM_META[t].color}"`;
+    return `<div class="chip team ${active ? 'active' : ''}" data-team="${t}" ${style}>${TEAM_META[t].label}</div>`;
+  }).join('');
+  $('pTeams').querySelectorAll('.chip').forEach(c => c.addEventListener('click', () => {
+    const t = c.dataset.team;
+    State.personTeams = State.personTeams.includes(t)
+      ? State.personTeams.filter(x => x !== t)
+      : [...State.personTeams, t];
+    renderPersonTeamChips();
+    renderPersonPositionChips();
+  }));
+}
+function renderPersonPositionChips(){
+  const wrap = $('pPositions');
+  if(!State.personTeams.length){
+    wrap.innerHTML = `<span class="faint" style="font-size:12px">Pick a team first — positions come from the team.</span>`;
+    State.personPositions = [];
+    return;
+  }
+  /* Drop qualifications that belong to a team the person is no longer on. */
+  const valid = new Set(State.personTeams.flatMap(t => positionsFor(t)));
+  State.personPositions = State.personPositions.filter(p => valid.has(p));
+
+  const seen = new Set();
+  let html = '';
+  State.personTeams.forEach(t => {
+    positionsFor(t).forEach(pos => {
+      if(seen.has(pos)) return;
+      seen.add(pos);
+      const active = State.personPositions.includes(pos);
+      const style = active
+        ? `style="background:${TEAM_META[t].color};border-color:${TEAM_META[t].color};color:#12141a"`
+        : '';
+      html += `<div class="chip ${active ? 'active' : ''}" data-pos="${esc(pos)}" ${style}>${esc(pos)}</div>`;
+    });
+  });
+  wrap.innerHTML = html;
+  wrap.querySelectorAll('[data-pos]').forEach(c => c.addEventListener('click', () => {
+    const pos = c.dataset.pos;
+    State.personPositions = State.personPositions.includes(pos)
+      ? State.personPositions.filter(x => x !== pos)
+      : [...State.personPositions, pos];
+    renderPersonPositionChips();
+  }));
+}
+function renderBlockoutChips(){
+  $('pBlockList').innerHTML = State.personBlockouts.length
+    ? State.personBlockouts.sort().map(d =>
+        `<span class="date-chip">${esc(fmtDate(d, {month:'short', day:'numeric', year:'numeric'}))}<button data-block="${esc(d)}">✕</button></span>`).join('')
+    : `<span class="faint" style="font-size:11.5px">None</span>`;
+  $('pBlockList').querySelectorAll('[data-block]').forEach(b => b.addEventListener('click', () => {
+    State.personBlockouts = State.personBlockouts.filter(d => d !== b.dataset.block);
+    renderBlockoutChips();
+  }));
+}
+
+function openPersonModal(id){
+  State.editingPersonId = id || null;
+  const p = id ? personById(id) : null;
+  $('personTitle').textContent = p ? 'Edit person' : 'Add person';
+  $('btnDeletePerson').classList.toggle('hidden', !p);
+  $('pName').value = p ? p.name : '';
+  $('pEmail').value = p ? (p.email || '') : '';
+  $('pPhone').value = p ? (p.phone || '') : '';
+  $('pNotes').value = p ? (p.notes || '') : '';
+  $('pGuest').checked = !!(p && p.isGuest);
+  $('pInactive').checked = !!(p && p.inactive);
+  setMonthDay('pBMonth','pBDay', p ? p.birthday : '');
+  setMonthDay('pAMonth','pADay', p ? p.anniversary : '');
+  State.personTeams = p ? [...p.teams] : [];
+  State.personPositions = p ? [...p.positions] : [];
+  State.personBlockouts = p ? [...(p.blockouts || [])] : [];
+  renderPersonTeamChips();
+  renderPersonPositionChips();
+  renderBlockoutChips();
+  openModal('personBackdrop');
+}
+
+$('btnAddPerson').addEventListener('click', () => openPersonModal(null));
+$('btnAddBlock').addEventListener('click', () => {
+  const v = $('pBlockDate').value;
+  if(!v) return;
+  if(!State.personBlockouts.includes(v)) State.personBlockouts.push(v);
+  $('pBlockDate').value = '';
+  renderBlockoutChips();
+});
+$('btnSavePerson').addEventListener('click', async () => {
+  const name = $('pName').value.trim();
+  if(!name){ toast('A name is required'); return; }
+  const data = {
+    name,
+    teams: [...State.personTeams],
+    positions: [...State.personPositions],
+    email: $('pEmail').value.trim(),
+    phone: $('pPhone').value.trim(),
+    birthday: getMonthDay('pBMonth','pBDay'),
+    anniversary: getMonthDay('pAMonth','pADay'),
+    blockouts: [...State.personBlockouts],
+    notes: $('pNotes').value.trim(),
+    isGuest: $('pGuest').checked,
+    inactive: $('pInactive').checked
+  };
+  if(State.editingPersonId){
+    Object.assign(personById(State.editingPersonId), data);
+    await savePerson(personById(State.editingPersonId));
+    toast('Profile updated');
+  } else {
+    const person = Object.assign({id: uid(), createdAt: Date.now()}, data);
+    State.people.push(person);
+    await savePerson(person);
+    toast(`${person.name} added`);
+  }
+  closeModal('personBackdrop');
+  render();
+});
+$('btnDeletePerson').addEventListener('click', () => {
+  const p = personById(State.editingPersonId);
+  if(!p) return;
+  const scheduled = State.services.filter(s => allSlots(s).some(x => x.slot.personId === p.id)).length;
+  confirmAction('Remove person?',
+    `${p.name} will be removed${scheduled ? ` and unassigned from ${scheduled} service${scheduled === 1 ? '' : 's'}` : ''}.`,
+    async () => {
+      State.people = State.people.filter(x => x.id !== p.id);
+      await DB.del('people', p.id);
+      /* Vacate every slot and lead they held so no service keeps a dead id. */
+      for(const svc of State.services){
+        let touched = false;
+        allSlots(svc).forEach(({slot}) => { if(slot.personId === p.id){ slot.personId = null; touched = true; } });
+        svc.items.forEach(i => { if(i.leadPersonId === p.id){ i.leadPersonId = null; touched = true; } });
+        if(touched) await saveService(svc);
+      }
+      closeModal('personBackdrop');
+      render();
+      toast('Person removed');
+    });
+});
+
+/* ---------------------------------------------------------------------------
+   13. TEAMS VIEW
+--------------------------------------------------------------------------- */
+function renderTeams(){
+  const wrap = $('teamsList');
+  wrap.innerHTML = TEAM_ORDER.map(team => {
+    const meta = TEAM_META[team];
+    const members = State.people.filter(p => p.teams.includes(team) && !p.isGuest);
+    const rows = positionsFor(team).map(pos => {
+      const bench = members.filter(p => !p.positions.length || p.positions.includes(pos));
+      return `<div class="pos-row">
+        <span class="lane-dot" style="background:${meta.color}"></span>
+        <span class="pname">${esc(pos)}</span>
+        <span class="bench ${bench.length ? '' : 'none'}">${bench.length} qualified</span>
+        <button class="rm" data-team="${team}" data-pos="${esc(pos)}" title="Remove position">✕</button>
+      </div>`;
+    }).join('');
+
+    return `<div class="team-block">
+      <div class="tb-head">
+        <span class="lane-dot" style="background:${meta.color}; width:10px; height:10px"></span>
+        <h3 style="color:${meta.color}">${meta.label}</h3>
+        <span class="count">${members.length} on team · ${positionsFor(team).length} positions</span>
+      </div>
+      <div class="pos-table">${rows || '<div class="lane-empty">No positions defined yet.</div>'}</div>
+      <div style="display:flex; gap:6px; margin-top:10px">
+        <input type="text" data-newpos="${team}" placeholder="Add a position to ${meta.label}…" style="flex:1">
+        <button data-addpos="${team}">Add</button>
+      </div>
+      <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:12px">
+        ${members.length ? members.map(p => `<span class="date-chip" style="padding-left:3px">
+          <span class="avatar sm" style="background:${avatarColor(p.id)}">${esc(initials(p.name))}</span>${esc(p.name)}</span>`).join('')
+          : '<span class="faint" style="font-size:12px">Nobody on this team yet.</span>'}
+      </div>
+    </div>`;
+  }).join('');
+
+  wrap.querySelectorAll('[data-addpos]').forEach(btn => {
+    const team = btn.dataset.addpos;
+    const input = wrap.querySelector(`[data-newpos="${team}"]`);
+    const add = async () => {
+      const val = input.value.trim();
+      if(!val) return;
+      if(positionsFor(team).includes(val)){ toast('That position already exists'); return; }
+      State.positions[team] = [...positionsFor(team), val];
+      await DB.setPref('positions', State.positions);
+      renderTeams();
+      toast(`"${val}" added to ${TEAM_META[team].label}`);
+    };
+    btn.addEventListener('click', add);
+    input.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); add(); } });
+  });
+
+  wrap.querySelectorAll('[data-pos]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const {team, pos} = btn.dataset;
+      const inUse = State.services.reduce((n, s) => n + (s.team[team] || []).filter(x => x.position === pos).length, 0);
+      confirmAction('Remove position?',
+        `"${pos}" will be removed from ${TEAM_META[team].label}.` +
+        (inUse ? ` It is used in ${inUse} scheduled slot${inUse === 1 ? '' : 's'}, which will stay as-is.` : ''),
+        async () => {
+          State.positions[team] = positionsFor(team).filter(p => p !== pos);
+          await DB.setPref('positions', State.positions);
+          renderTeams();
+          toast('Position removed');
+        });
+    });
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   14. SONGS VIEW
+--------------------------------------------------------------------------- */
+function renderSongs(){
+  const lib = ChartLibrary.get();
+  const banner = $('songBanner');
+
+  const BANNERS = {
+    live:        {dot:'var(--good)',   text:`Live from Chart Builder — ${lib.songs.length} songs. Edits made there show up here on refresh.`},
+    empty:       {dot:'var(--warn)', text:'Chart Builder is connected but has no songs yet. Create one in the Chart Builder tab, or import a chart export here.'},
+    absent:      {dot:'var(--text-faint)', text:'No Chart Builder library here yet. Open the Chart Builder tab and save a song, then hit Refresh — it will appear automatically.'},
+    unreachable: {dot:'var(--danger)', text:'Chart Builder’s database isn’t readable from this page (that happens when the two apps aren’t on the same origin). Import chart exports here instead — everything else works the same.'},
+    unknown:     {dot:'var(--text-faint)', text:'Checking for the Chart Builder library…'}
+  };
+  const b = BANNERS[lib.status] || BANNERS.unknown;
+  banner.innerHTML = `<div class="banner"><span class="dot" style="background:${b.dot}"></span><span>${b.text}</span></div>`;
+
+  const q = State.songQuery.trim().toLowerCase();
+  const songs = lib.songs
+    .filter(s => !q || s.title.toLowerCase().includes(q) || s.artist.toLowerCase().includes(q) || s.tags.some(t => t.toLowerCase().includes(q)))
+    .sort((a,b2) => a.title.localeCompare(b2.title));
+
+  $('songCount').textContent = songs.length ? `${songs.length} song${songs.length === 1 ? '' : 's'}` : '';
+
+  const wrap = $('songTableWrap');
+  if(!songs.length){
+    wrap.innerHTML = `<div class="empty">No songs in the library.<br>
+      Build charts in <strong>Chart Builder</strong>, or import a <strong>.json</strong> export from it.</div>`;
+    return;
+  }
+
+  wrap.innerHTML = `<table class="song-table">
+    <thead><tr><th>Title</th><th>Artist</th><th>Keys</th><th>CCLI</th><th>Tags</th><th></th></tr></thead>
+    <tbody>${songs.map(s => `<tr>
+      <td class="st-title">${esc(s.title)}</td>
+      <td class="muted">${esc(s.artist || '—')}</td>
+      <td class="mono">${esc(s.keys.join(', ') || '—')}</td>
+      <td class="mono faint">${esc(s.ccli || '—')}</td>
+      <td class="faint">${esc(s.tags.slice(0,3).join(', ') || '—')}</td>
+      <td class="st-actions">
+        <button data-add-song="${esc(s.id)}">+ Add to service</button>
+        <button data-open-song="${esc(s.id)}">Open chart</button>
+      </td>
+    </tr>`).join('')}</tbody></table>`;
+
+  wrap.querySelectorAll('[data-open-song]').forEach(b2 =>
+    b2.addEventListener('click', () => openChart(b2.dataset.openSong)));
+
+  wrap.querySelectorAll('[data-add-song]').forEach(b2 =>
+    b2.addEventListener('click', async () => {
+      const svc = currentService() || upcomingFirst()[0];
+      if(!svc){ toast('Create a service first'); return; }
+      State.currentServiceId = svc.id;
+      svc.items.push(buildItem({kind:'song', songId: b2.dataset.addSong}));
+      await saveService(svc);
+      toast(`Added to "${svc.title}"`);
+    }));
+}
+
+async function refreshSongs(){
+  await ChartLibrary.refresh();
+  if(State.route === 'songs') renderSongs();
+  if(State.route === 'plan' && State.paletteTab === 'songs') renderPalette();
+}
+
+/* Fallback path: pull songs out of Chart Builder's own JSON export format. */
+$('btnImportSongs').addEventListener('click', () => $('songFile').click());
+$('songFile').addEventListener('change', async e => {
+  const files = [...e.target.files];
+  e.target.value = '';
+  let imported = 0;
+  for(const file of files){
+    try{
+      const parsed = JSON.parse(await file.text());
+      const songs = Array.isArray(parsed) ? parsed : (Array.isArray(parsed.songs) ? parsed.songs : [parsed]);
+      for(const s of songs){
+        if(!s || !s.title) continue;
+        await DB.put('songs', Object.assign({}, s, {id: s.id != null ? `imp-${s.id}` : `imp-${uid()}`}));
+        imported++;
+      }
+    }catch(err){
+      toast(`Couldn't read ${file.name}`);
+    }
+  }
+  await refreshSongs();
+  toast(imported ? `Imported ${imported} song${imported === 1 ? '' : 's'}` : 'Nothing imported');
+});
+$('btnRefreshSongs').addEventListener('click', async () => { await refreshSongs(); toast('Library refreshed'); });
+
+/* ---------------------------------------------------------------------------
+   15. CHART BUILDER EMBED
+   The iframe is loaded lazily and only reloaded when the requested song
+   changes, so switching tabs doesn't throw away editor state.
+--------------------------------------------------------------------------- */
+let pendingChartSong = null;
+
+function openChart(songId){
+  pendingChartSong = songId != null ? String(songId) : null;
+  go('chart');
+}
+function renderChart(){
+  const frame = $('chartFrame');
+  /* Imported songs carry an 'imp-' prefixed id that Chart Builder knows
+     nothing about, so only real library ids are deep-linked. */
+  const deepLink = pendingChartSong && !String(pendingChartSong).startsWith('imp-')
+    ? `chart-builder/index.html?song=${encodeURIComponent(pendingChartSong)}`
+    : 'chart-builder/index.html';
+  if(frame.dataset.src !== deepLink){
+    frame.dataset.src = deepLink;
+    frame.src = deepLink;
+  }
+  pendingChartSong = null;
+}
+$('btnChartNewTab').addEventListener('click', () => window.open($('chartFrame').dataset.src || 'chart-builder/index.html', '_blank'));
+
+/* ---------------------------------------------------------------------------
+   16. EXPORT / PRINT
+--------------------------------------------------------------------------- */
+$('btnExportSvc').addEventListener('click', () => {
+  const svc = currentService();
+  if(!svc) return;
+  const payload = {
+    exportedAt: new Date().toISOString(),
+    org: State.settings.orgName,
+    service: svc,
+    people: State.people.filter(p => allSlots(svc).some(s => s.slot.personId === p.id))
+  };
+  const blob = new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${svc.title.replace(/[^\w]+/g,'-').toLowerCase()}-${svc.date}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast('Service exported');
+});
+
+$('btnPrintSheet').addEventListener('click', () => {
+  const svc = currentService();
+  if(!svc) return;
+  let clock = svc.startTime;
+  const rows = svc.items.map((it, i) => {
+    const at = clock;
+    clock = addMinutes(clock, Number(it.duration) || 0);
+    const lead = it.leadPersonId ? personById(it.leadPersonId) : null;
+    const notes = TEAM_ORDER
+      .filter(t => (it.teamNotes || {})[t])
+      .map(t => `${TEAM_META[t].label}: ${esc(it.teamNotes[t])}`)
+      .join(' — ');
+    return `<tr>
+      <td>${esc(fmtTime(at))}</td>
+      <td>${i+1}. <strong>${esc(it.title)}</strong>${it.songKey ? ` (${esc(it.songKey)})` : ''}
+        ${it.note ? `<div class="pnote">${esc(it.note)}</div>` : ''}
+        ${notes ? `<div class="pnote">${notes}</div>` : ''}</td>
+      <td>${esc(lead ? lead.name : '')}</td>
+      <td>${Number(it.duration)||0}m</td>
+    </tr>`;
+  }).join('');
+
+  const teamTables = TEAM_ORDER.map(t => {
+    const slots = (svc.team[t] || []).filter(s => s.personId);
+    if(!slots.length) return '';
+    return `<h2>${TEAM_META[t].label}</h2><table><tbody>${slots.map(s =>
+      `<tr><td style="width:40%">${esc(s.position)}</td><td>${esc((personById(s.personId) || {}).name || '')}</td></tr>`).join('')}</tbody></table>`;
+  }).join('');
+
+  $('printArea').innerHTML = `
+    <h1>${esc(svc.title)}</h1>
+    <div class="ph-sub">${esc(fmtDate(svc.date))} · ${esc(fmtTime(svc.startTime))}
+      ${svc.venue ? ` · ${esc(svc.venue)}` : ''}${svc.series ? ` · ${esc(svc.series)}` : ''} — ${fmtDuration(totalMinutes(svc))}</div>
+    <table><thead><tr><th>Time</th><th>Element</th><th>Lead</th><th>Len</th></tr></thead><tbody>${rows}</tbody></table>
+    ${teamTables}`;
+  window.print();
+});
+
+/* ---------------------------------------------------------------------------
+   16b. SETTINGS DRAWER
+   Same right-side drawer Chart Builder uses, and the same three-part shape:
+   preferences, then data, then the destructive stuff at the bottom.
+--------------------------------------------------------------------------- */
+const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+
+async function saveSettings(){
+  await DB.setPref('settings', State.settings);
+}
+
+/* Two lines per type: identity + schedule on the first, the text defaults on
+   the second. Rendered as a string so the whole list can be redrawn after an
+   add, remove or default change without tracking individual rows. */
+function typeRowsHtml(){
+  return State.types.map(t => {
+    const isDefault = State.settings.defaultTypeId === t.id;
+    return `<div class="type-row" data-type="${esc(t.id)}">
+      <div class="tr-line">
+        <i class="type-dot" style="background:${typeColor(t)}"></i>
+        <input class="tr-name" value="${esc(t.name)}" placeholder="Type name" aria-label="Type name">
+        <select class="tr-day" aria-label="Weekday">${WEEKDAYS.map((d,i) => `<option value="${i}" ${Number(t.day) === i ? 'selected' : ''}>${d.slice(0,3)}</option>`).join('')}</select>
+        <input class="tr-time" type="time" value="${esc(t.time)}" aria-label="Start time">
+        <button class="tr-star ${isDefault ? 'on' : ''}" title="${isDefault ? 'Default for new services' : 'Make default for new services'}">${isDefault ? '★' : '☆'}</button>
+        <button class="tr-del" title="Remove this type">✕</button>
+      </div>
+      <div class="tr-line">
+        <input class="tr-title" value="${esc(t.title)}" placeholder="Default title" aria-label="Default title">
+        <input class="tr-venue" value="${esc(t.venue)}" placeholder="Venue" aria-label="Venue">
+      </div>
+      <div class="tr-swatches" role="group" aria-label="Colour for ${esc(t.name)}">
+        ${TYPE_COLORS.map(c => `<button class="sw ${c === t.color ? 'on' : ''}" data-color="${c}" style="background:${c}" title="${c}" aria-label="Colour ${c}"></button>`).join('')}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function wireTypeRows(drawer){
+  const list = drawer.querySelector('#setTypeList');
+  const redraw = () => { list.innerHTML = typeRowsHtml(); wireTypeRows(drawer); render(); };
+
+  list.querySelectorAll('.type-row').forEach(row => {
+    const type = typeById(row.dataset.type);
+    if(!type) return;
+    const field = (sel, key, transform) => {
+      const el = row.querySelector(sel);
+      el.addEventListener('change', async () => {
+        type[key] = transform ? transform(el.value) : el.value.trim();
+        await saveTypes();
+        render();
+      });
+    };
+    field('.tr-name','name');
+    field('.tr-title','title');
+    field('.tr-venue','venue');
+    field('.tr-time','time', v => v);
+    field('.tr-day','day', v => Number(v));
+
+    row.querySelectorAll('.sw').forEach(sw => {
+      sw.addEventListener('click', async () => {
+        type.color = sw.dataset.color;
+        await saveTypes();
+        redraw();
+      });
+    });
+
+    row.querySelector('.tr-star').addEventListener('click', async () => {
+      State.settings.defaultTypeId = type.id;
+      await saveSettings();
+      redraw();
+    });
+
+    row.querySelector('.tr-del').addEventListener('click', () => {
+      if(State.types.length === 1){ toast('Keep at least one service type'); return; }
+      const affected = State.services.filter(s => s.typeId === type.id);
+      confirmAction('Remove service type?',
+        `"${type.name}" will be removed.` +
+        (affected.length
+          ? ` Its ${affected.length} service${affected.length === 1 ? ' moves' : 's move'} to "${State.types.find(t => t.id !== type.id).name}" rather than being deleted.`
+          : ''),
+        async () => {
+          State.types = State.types.filter(t => t.id !== type.id);
+          const fallback = State.types[0];
+          for(const svc of affected){ svc.typeId = fallback.id; await saveService(svc); }
+          if(State.settings.defaultTypeId === type.id){
+            State.settings.defaultTypeId = fallback.id;
+            await saveSettings();
+          }
+          await saveTypes();
+          redraw();
+          toast(`"${type.name}" removed`);
+        });
+    });
+  });
+}
+
+function openDrawer(title, bodyHtml, onMount){
+  const backdrop = document.createElement('div');
+  backdrop.className = 'drawer-backdrop';
+  backdrop.innerHTML = `
+    <div class="drawer">
+      <div class="drawer-head"><h3>${esc(title)}</h3><button class="icon ghost" data-drawer-close>✕</button></div>
+      <div class="drawer-body">${bodyHtml}</div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  const close = () => backdrop.remove();
+  backdrop.addEventListener('click', e => { if(e.target === backdrop) close(); });
+  backdrop.querySelector('[data-drawer-close]').addEventListener('click', close);
+  document.addEventListener('keydown', function onEsc(e){
+    if(e.key === 'Escape'){ close(); document.removeEventListener('keydown', onEsc); }
+  });
+  if(onMount) onMount(backdrop, close);
+  return backdrop;
+}
+
+function openSettings(){
+  const s = State.settings;
+  const lib = ChartLibrary.get();
+  const LIB_LABEL = {
+    live: `Connected — ${lib.songs.length} songs`,
+    empty: 'Connected, but Chart Builder has no songs yet',
+    absent: 'No Chart Builder library on this origin yet',
+    unreachable: 'Not readable from this page — serve both apps over http://',
+    unknown: 'Checking…'
+  };
+  const check = (id, on, label) =>
+    `<label class="check-row"><input type="checkbox" id="${id}" ${on ? 'checked' : ''}><span>${label}</span></label>`;
+
+  const body = `
+    <h4>Organization</h4>
+    <div class="form-row">
+      <label>Name <span class="faint">— shown beside the logo</span></label>
+      <input id="setOrg" value="${esc(s.orgName)}" placeholder="Grace Community Church">
+    </div>
+
+    <h4>Service types</h4>
+    <div id="setTypeList">${typeRowsHtml()}</div>
+    <div class="form-row inline"><button id="setAddType">+ Add service type</button></div>
+    <div class="note">Services are grouped by type on the Services tab, and a new one inherits its type's day, time, title and venue. ★ marks the type used when you hit “New service”.</div>
+
+    <h4>Scheduling</h4>
+    ${check('setGuests', s.autoFillGuests, 'Let auto-fill schedule guests. Off by default — guests are one-offs you invite deliberately.')}
+    ${check('setBlockouts', s.respectBlockouts, 'Auto-fill skips anyone blocked out on the service date.')}
+    ${check('setDoubleBook', s.warnDoubleBooked, 'Warn when someone holds two positions in one service.')}
+    <div class="note">These change who auto-fill offers and what it flags. They never move anyone already scheduled.</div>
+
+    <h4>Song library</h4>
+    <div class="form-row"><label>Chart Builder</label><div class="faint" style="font-size:12px" id="setLibStatus">${esc(LIB_LABEL[lib.status] || LIB_LABEL.unknown)}</div></div>
+    <div class="form-row inline"><button id="setRefreshLib">↻ Refresh library</button></div>
+
+    <h4>Data</h4>
+    <div class="form-row inline">
+      <button id="setBackup">Export backup</button>
+      <button id="setRestore">Restore…</button>
+    </div>
+    <div class="note">A backup is one .json holding every person, service, team position and preference — everything except the charts, which live in Chart Builder and back up from there.</div>
+    <div class="form-row inline" style="margin-top:14px">
+      <button id="setWipe" style="border-color:var(--danger); color:var(--danger);">Clear local database</button>
+    </div>
+    <div class="note">Erases Greenroom's data in this browser and reloads with the sample roster. Chart Builder is untouched.</div>`;
+
+  openDrawer('Settings', body, (drawer, close) => {
+    /* Text/select settings save on change and take effect immediately. */
+    const bind = (id, key, transform) => {
+      const el = drawer.querySelector(`#${id}`);
+      el.addEventListener('change', async () => {
+        State.settings[key] = transform ? transform(el.value) : el.value;
+        await saveSettings();
+        render();
+      });
+    };
+    bind('setOrg','orgName');
+
+    wireTypeRows(drawer);
+    drawer.querySelector('#setAddType').addEventListener('click', async () => {
+      State.types.push({
+        id: uid(), name: 'New type', day: 0, time: '10:00', title: 'New service', venue: '',
+        color: nextTypeColor()
+      });
+      await saveTypes();
+      const list = drawer.querySelector('#setTypeList');
+      list.innerHTML = typeRowsHtml();
+      wireTypeRows(drawer);
+      render();
+      /* Land the caret in the new row's name so it can be typed over. */
+      const fresh = list.querySelector('.type-row:last-child .tr-name');
+      if(fresh){ fresh.focus(); fresh.select(); }
+    });
+
+    [['setGuests','autoFillGuests'], ['setBlockouts','respectBlockouts'], ['setDoubleBook','warnDoubleBooked']]
+      .forEach(([id, key]) => {
+        const el = drawer.querySelector(`#${id}`);
+        el.addEventListener('change', async () => {
+          State.settings[key] = el.checked;
+          await saveSettings();
+          render();
+        });
+      });
+
+    drawer.querySelector('#setRefreshLib').addEventListener('click', async () => {
+      await refreshSongs();
+      drawer.querySelector('#setLibStatus').textContent = LIB_LABEL[ChartLibrary.get().status] || LIB_LABEL.unknown;
+      toast('Library refreshed');
+    });
+
+    drawer.querySelector('#setBackup').addEventListener('click', () => {
+      const payload = {
+        app: 'Greenroom', version: 1, exportedAt: new Date().toISOString(),
+        settings: State.settings, positions: State.positions, types: State.types,
+        people: State.people, services: State.services
+      };
+      const url = URL.createObjectURL(new Blob([JSON.stringify(payload, null, 2)], {type:'application/json'}));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `greenroom-backup-${todayISO()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Backup exported');
+    });
+
+    drawer.querySelector('#setRestore').addEventListener('click', () => {
+      const picker = document.createElement('input');
+      picker.type = 'file';
+      picker.accept = '.json';
+      picker.addEventListener('change', async () => {
+        const file = picker.files[0];
+        if(!file) return;
+        let data;
+        try{ data = JSON.parse(await file.text()); }
+        catch(e){ toast(`Couldn't read ${file.name}`); return; }
+        if(!data || !Array.isArray(data.people) || !Array.isArray(data.services)){
+          toast('That file isn’t a Greenroom backup');
+          return;
+        }
+        confirmAction('Restore backup?',
+          `This replaces all ${State.people.length} people and ${State.services.length} services with ${data.people.length} and ${data.services.length} from the file.`,
+          async () => {
+            for(const p of State.people)   await DB.del('people', p.id);
+            for(const v of State.services) await DB.del('services', v.id);
+            State.people = data.people;
+            State.services = data.services;
+            State.settings = Object.assign({}, DEFAULT_SETTINGS, data.settings || {});
+            State.positions = data.positions || State.positions;
+            State.types = (Array.isArray(data.types) && data.types.length) ? data.types : State.types;
+            /* A backup from before types, or one whose default was dropped,
+               still has to land every service under a real heading. */
+            State.services.forEach(v => { if(!typeById(v.typeId)) v.typeId = defaultType().id; });
+            State.currentServiceId = null;
+            for(const p of State.people)   await DB.put('people', p);
+            for(const v of State.services) await DB.put('services', v);
+            await saveSettings();
+            await saveTypes();
+            await DB.setPref('positions', State.positions);
+            close();
+            go('services');
+            toast('Backup restored');
+          });
+      });
+      picker.click();
+    });
+
+    drawer.querySelector('#setWipe').addEventListener('click', () => {
+      confirmAction('Clear local database?',
+        'Every person, service and preference in Greenroom is erased and the sample roster comes back. This cannot be undone — export a backup first if you might want any of it. Chart Builder is not affected.',
+        async () => {
+          for(const p of State.people)   await DB.del('people', p.id);
+          for(const v of State.services) await DB.del('services', v.id);
+          for(const s2 of await DB.all('songs')) await DB.del('songs', s2.id);
+          /* Delete the pref rows rather than blanking them, so the next load
+             falls back to defaults instead of reading a stored null. */
+          for(const key of ['seeded','positions','settings','serviceTypes']) await DB.del('prefs', key);
+          close();
+          location.reload();
+        });
+    });
+  });
+}
+
+/* ---------------------------------------------------------------------------
+   17. GLOBAL WIRING
+--------------------------------------------------------------------------- */
+$('btnSettings').addEventListener('click', openSettings);
+document.querySelectorAll('#nav button').forEach(b => b.addEventListener('click', () => go(b.dataset.route)));
+document.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', () => closeModal(b.dataset.close)));
+document.querySelectorAll('.backdrop').forEach(bd => bd.addEventListener('click', e => { if(e.target === bd) bd.classList.remove('show'); }));
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape') document.querySelectorAll('.backdrop.show').forEach(bd => bd.classList.remove('show'));
+});
+
+document.querySelectorAll('#palSeg button').forEach(b => b.addEventListener('click', () => {
+  State.paletteTab = b.dataset.pal;
+  State.paletteQuery = '';
+  $('palSearch').value = '';
+  renderPalette();
+}));
+$('palSearch').addEventListener('input', e => { State.paletteQuery = e.target.value; renderPalette(); });
+
+document.querySelectorAll('#asgSeg button').forEach(b => b.addEventListener('click', () => {
+  if(b.disabled) return;
+  State.assignTab = b.dataset.asg;
+  renderAssign(currentService());
+}));
+
+$('peopleSearch').addEventListener('input', e => { State.peopleQuery = e.target.value; renderPeople(); });
+$('songSearch').addEventListener('input', e => { State.songQuery = e.target.value; renderSongs(); });
+
+/* Prefills every field from the chosen type's template. Called on open and
+   again whenever the Type dropdown changes — this is a "new" dialog, so
+   switching type is a switch of intent, not an edit to preserve. */
+function applyTypeToServiceModal(typeId){
+  const type = typeById(typeId) || defaultType();
+  $('sType').value = type.id;
+  $('sTitle').value = type.title;
+  $('sDate').value = nextServiceDate(type.day);
+  $('sTime').value = type.time;
+  $('sVenue').value = type.venue;
+}
+function openServiceModal(typeId){
+  $('serviceTitle').textContent = 'New service';
+  $('sType').innerHTML = State.types.map(t => `<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');
+  applyTypeToServiceModal(typeId || State.settings.defaultTypeId);
+  $('sSeries').value = '';
+  $('sNotes').value = '';
+  openModal('serviceBackdrop');
+}
+$('sType').addEventListener('change', () => applyTypeToServiceModal($('sType').value));
+$('btnNewService').addEventListener('click', () => openServiceModal(null));
+
+$('btnSaveService').addEventListener('click', async () => {
+  const typeId = $('sType').value;
+  const type = typeById(typeId) || defaultType();
+  const svc = newServiceObject({
+    typeId: type.id,
+    title: $('sTitle').value.trim() || 'Untitled service',
+    date: $('sDate').value || nextServiceDate(type.day),
+    startTime: $('sTime').value || type.time,
+    series: $('sSeries').value.trim(),
+    venue: $('sVenue').value.trim(),
+    notes: $('sNotes').value.trim()
+  });
+  State.services.push(svc);
+  await saveService(svc);
+  closeModal('serviceBackdrop');
+  go('plan', svc.id);
+  toast('Service created — drag in elements to build the plan');
+});
+
+window.addEventListener('hashchange', () => {
+  const route = readHash();
+  if(route !== State.route || route === 'plan'){ State.route = route; render(); }
+});
+
+/* ---------------------------------------------------------------------------
+   18. FIRST-RUN SEED
+   A realistic starting roster and one planned service, so the app explains
+   itself on first open. Seeded exactly once — the flag lives in prefs, so
+   deleting the demo data doesn't bring it back.
+--------------------------------------------------------------------------- */
+const SEED_PEOPLE = [
+  {name:'Pastor Danny Reyes', teams:['preacher'], positions:['Speaker','Prayer'], email:'danny@church.org', phone:'(555) 201-1190', birthday:'06-24', anniversary:'09-02'},
+  {name:'Alicia Barnes', teams:['preacher'], positions:['Liturgist','Scripture Reader','Host / MC'], email:'alicia@church.org', phone:'(555) 201-2210', birthday:'02-11'},
+  {name:'Elena Cho', teams:['worship'], positions:['Worship Leader','Vocals','Keys'], email:'elena@church.org', phone:'(555) 201-3344', birthday:'03-12'},
+  {name:'Marcus Webb', teams:['worship'], positions:['Acoustic Guitar','Vocals'], email:'marcus@church.org', phone:'(555) 201-8827', birthday:'11-02', anniversary:'06-14'},
+  {name:'Owen Blake', teams:['worship'], positions:['Drums','Percussion'], email:'owen@church.org', phone:'(555) 201-9012', birthday:'04-08'},
+  {name:'Tasha Ford', teams:['worship'], positions:['Bass'], email:'tasha@church.org', phone:'(555) 201-7781', birthday:'08-30'},
+  {name:'Jonah Pike', teams:['worship'], positions:['Electric Guitar'], email:'jonah@church.org', phone:'(555) 201-6650', birthday:'05-19'},
+  {name:'Grace Lindqvist', teams:['worship'], positions:['Vocals','Keys'], email:'grace@church.org', phone:'(555) 201-4408', birthday:'12-03'},
+  {name:'Sam Whitfield', teams:['audio'], positions:['FOH Engineer','Monitor Engineer'], email:'sam@church.org', phone:'(555) 201-6602', birthday:'01-30'},
+  {name:'Dev Raman', teams:['audio','tech'], positions:['Monitor Engineer','A2 / Stage Tech','Playback / Tracks'], email:'dev@church.org', phone:'(555) 201-5519', birthday:'07-22'},
+  {name:'Priya Nair', teams:['visual','tech'], positions:['Lyrics / Slides','Presentation Computer'], email:'priya@church.org', phone:'(555) 201-4471', birthday:'09-15'},
+  {name:'Rae Simmons', teams:['visual','streaming'], positions:['Camera 1','Video Director','Stream Director'], email:'rae@church.org', phone:'(555) 201-3357', birthday:'12-19'},
+  {name:'Miles Okafor', teams:['visual'], positions:['Lighting','Camera 2'], email:'miles@church.org', phone:'(555) 201-2284', birthday:'10-07'},
+  {name:'Hannah Vu', teams:['streaming'], positions:['Chat Host','Stream Audio'], email:'hannah@church.org', phone:'(555) 201-1136', birthday:'04-25'},
+  {name:'Caleb Ortiz', teams:['tech'], positions:['Stage Manager','Setup / Teardown'], email:'caleb@church.org', phone:'(555) 201-9903', birthday:'03-28'},
+  {name:'Nora Feldman', teams:['streaming','tech'], positions:['Encoder Tech','Presentation Computer'], email:'nora@church.org', phone:'(555) 201-8845', birthday:'06-02'}
+];
+
+const SEED_ITEMS = [
+  {type:'welcome',      title:'Welcome & Call to Worship', duration:4},
+  {type:'song',         title:'Opening Song',              duration:5},
+  {type:'song',         title:'Worship Set',               duration:12},
+  {type:'announcement', title:'Announcements',             duration:4},
+  {type:'offering',     title:'Offering & Prayer',         duration:5},
+  {type:'scripture',    title:'Scripture Reading',         duration:3},
+  {type:'sermon',       title:'Sermon',                    duration:32},
+  {type:'song',         title:'Response Song',             duration:5},
+  {type:'prayer',       title:'Benediction',               duration:2}
+];
+
+async function seedIfEmpty(){
+  if(await DB.getPref('seeded', false)) return;
+
+  for(const s of SEED_PEOPLE){
+    const person = Object.assign({
+      id: uid(), blockouts: [], notes: '', isGuest: false, inactive: false,
+      anniversary: '', createdAt: Date.now()
+    }, s);
+    State.people.push(person);
+    await DB.put('people', person);
+  }
+
+  const svc = newServiceObject({
+    title: 'Sunday Gathering',
+    series: 'Rooted',
+    venue: 'Main Auditorium',
+    notes: 'Communion first Sunday next month — plan an extra 8 minutes.'
+  });
+  svc.items = SEED_ITEMS.map(i => Object.assign({
+    id: uid(), songId: null, songKey: '', note: '', leadPersonId: null, teamNotes: {}
+  }, i));
+  State.services.push(svc);
+  await saveService(svc);
+  await DB.setPref('seeded', true);
+}
+
+/* ---------------------------------------------------------------------------
+   19. BOOT
+--------------------------------------------------------------------------- */
+async function init(){
+  try{
+    State.people   = await DB.all('people');
+    State.services = await DB.all('services');
+    /* `|| fallback` rather than getPref's default, so a stored null from an
+       older build can't leave these undefined. */
+    State.positions = (await DB.getPref('positions', null)) || State.positions;
+    State.settings  = Object.assign({}, DEFAULT_SETTINGS, (await DB.getPref('settings', null)) || {});
+
+    /* Service types arrived after the flat "new service defaults" settings, so
+       on the first load with types the old values become the Sunday type
+       rather than being dropped on the floor. */
+    const storedTypes = await DB.getPref('serviceTypes', null);
+    if(Array.isArray(storedTypes) && storedTypes.length){
+      State.types = storedTypes;
+      /* Types created before colours existed get one from the palette, by
+         position, so they come back distinct rather than all grey. */
+      State.types.forEach((t, i) => { if(!t.color) t.color = TYPE_COLORS[i % TYPE_COLORS.length]; });
+    } else {
+      const s = State.settings;
+      State.types = [{
+        id: 'sunday',
+        name: 'Sunday',
+        day: s.serviceDay != null ? Number(s.serviceDay) : 0,
+        time: s.serviceTime || '10:00',
+        title: s.serviceTitle || 'Sunday Gathering',
+        venue: s.serviceVenue || '',
+        color: TYPE_COLORS[0]
+      }];
+      State.settings.defaultTypeId = 'sunday';
+      await saveTypes();
+      await saveSettings();
+    }
+    await seedIfEmpty();
+  }catch(e){
+    /* A browser that walls off IndexedDB shouldn't leave a blank page — the
+       app still runs, it just can't remember anything between reloads. */
+    console.warn('Storage unavailable, running in memory only:', e);
+    toast('Storage unavailable — changes won’t persist in this browser');
+  }
+
+  /* Older records predate some fields; normalise once on load rather than
+     defending against undefined at every read site. */
+  State.people.forEach(p => {
+    p.teams = p.teams || []; p.positions = p.positions || []; p.blockouts = p.blockouts || [];
+  });
+  State.services.forEach(s => {
+    /* Services created before types existed get filed under the default. */
+    if(!s.typeId) s.typeId = defaultType().id;
+    s.items = s.items || [];
+    s.team = s.team || {};
+    TEAM_ORDER.forEach(t => { s.team[t] = s.team[t] || []; });
+    s.items.forEach(i => { i.teamNotes = i.teamNotes || {}; });
+  });
+
+  await ChartLibrary.refresh();
+  initPlanDrop();
+
+  const route = readHash();
+  State.route = route;
+  if(route === 'plan' && !currentService()){
+    State.currentServiceId = (upcomingFirst()[0] || {}).id || null;
+    if(!State.currentServiceId) State.route = 'services';
+  }
+  if(State.route !== 'plan' && !State.currentServiceId){
+    State.currentServiceId = (upcomingFirst()[0] || {}).id || null;
+  }
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
