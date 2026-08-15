@@ -79,6 +79,24 @@ small{color:var(--text-faint);}
 }
 #sidebar .sb-head{padding:10px; display:flex; flex-direction:column; gap:6px; border-bottom:1px solid var(--border-soft);}
 #sidebar .sb-head input{width:100%;}
+/* Assigns the CURRENTLY OPEN song to one or more Libraries — an
+   organizational action, so it lives here in the library/sidebar section
+   rather than mixed into the song's own metadata fields. Distinct from the
+   #libraryFilters row below (that one filters the whole list; this one
+   edits one song), styled like the meta-bar's key chips (removable, with
+   an explicit add step) rather than the plain filter-chip look. */
+#currentSongLibraries{padding:8px 10px; border-bottom:1px solid var(--border-soft);}
+.csl-label{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:5px;}
+.csl-chips{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:6px;}
+.csl-chip{font-size:10.5px; font-weight:600; padding:2px 4px 2px 8px; border-radius:4px; background:var(--accent-dim); color:var(--accent); display:inline-flex; align-items:center; gap:3px;}
+.csl-chip button{flex-shrink:0; background:none; border:none; color:var(--accent); opacity:.6; cursor:pointer; font-size:11px; line-height:1; padding:0;}
+.csl-chip button:hover{opacity:1; color:var(--danger);}
+.csl-empty{font-size:10.5px; font-style:italic; color:var(--text-faint);}
+.csl-add-row{display:flex; gap:4px;}
+.csl-add-row input{flex:1; min-width:0; font-size:11px; padding:4px 6px;}
+.csl-add-row button{font-size:11px; padding:4px 8px; white-space:nowrap;}
+#libraryFilters{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border-soft);}
+#keyFilters{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border-soft);}
 #tagFilters{display:flex; flex-wrap:wrap; gap:4px; padding:8px 10px; border-bottom:1px solid var(--border-soft);}
 .tag-chip{font-size:11px; padding:3px 8px; border-radius:12px; background:var(--bg-input); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; white-space:nowrap;}
 .tag-chip.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
@@ -91,6 +109,9 @@ small{color:var(--text-faint);}
 .song-item .si-tags{display:flex; gap:4px; flex-wrap:wrap; margin-top:4px;}
 .si-tag{font-size:10px; background:var(--bg-input); color:var(--text-dim); padding:1px 6px; border-radius:8px;}
 #sidebar .sb-empty{padding:20px 14px; color:var(--text-faint); font-size:12.5px; line-height:1.5;}
+#sidebar .sb-empty p{margin:0 0 12px;}
+#sidebar .sb-empty p:last-child{margin-bottom:0;}
+#sidebar .sb-empty strong{color:var(--text-dim);}
 
 #main{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;}
 
@@ -116,6 +137,8 @@ small{color:var(--text-faint);}
 .collapse-handle.collapsed span{transform:rotate(180deg);}
 #metaBar.collapsed .meta-collapsible{display:none;}
 #tagFilters.collapsed{display:none;}
+#keyFilters.collapsed{display:none;}
+#libraryFilters.collapsed{display:none;}
 .meta-row{display:flex; flex-wrap:wrap; align-items:flex-start; gap:10px 14px;}
 #metaBar .field{flex:1 1 120px; min-width:110px;}
 #metaBar .field label{display:block; font-size:10.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); margin-bottom:3px;}
@@ -328,6 +351,17 @@ small{color:var(--text-faint);}
 #keyChangePopup .kc-row{display:flex; gap:6px; justify-content:flex-end;}
 #keyChangePopup button{font-size:12px; padding:5px 10px;}
 
+/* Library-assign popup (right-click a song in the sidebar list) — toggle
+   which libraries that song belongs to without opening it first. */
+#libraryAssignPopup{position:fixed; z-index:80; width:220px; background:var(--bg-panel); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 34px rgba(0,0,0,.5); padding:10px; font-size:12px;}
+#libraryAssignPopup .lap-label{font-size:10.5px; color:var(--text-dim); margin-bottom:8px; line-height:1.3;}
+#libraryAssignPopup .lap-chips{display:flex; flex-wrap:wrap; gap:4px; margin-bottom:8px;}
+#libraryAssignPopup .lap-chip{font-size:11px; padding:3px 8px; border-radius:12px; background:var(--bg-input); border:1px solid var(--border); color:var(--text-dim); cursor:pointer;}
+#libraryAssignPopup .lap-chip.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+#libraryAssignPopup .lap-add-row{display:flex; gap:4px;}
+#libraryAssignPopup .lap-add-row input{flex:1; min-width:0; font-size:11px; padding:4px 6px;}
+#libraryAssignPopup .lap-add-row button{font-size:11px; padding:4px 8px; white-space:nowrap;}
+
 /* PRINT — A4, fixed 0.25in margins */
 @page{ size: A4; margin: 0.25in; }
 @media print{
@@ -388,9 +422,22 @@ small{color:var(--text-faint);}
 <div id="app">
   <!-- SIDEBAR: song library -->
   <div id="sidebar">
+    <div id="currentSongLibraries" class="hidden">
+      <div class="csl-label">Libraries</div>
+      <div class="csl-chips" id="currentSongLibraryChips"></div>
+      <div class="csl-add-row">
+        <input type="text" id="currentSongLibraryInput" placeholder="Add to a library…" list="libraryNamesDatalist">
+        <button type="button" id="btnAddCurrentSongLibrary">+ Add</button>
+      </div>
+    </div>
+    <datalist id="libraryNamesDatalist"></datalist>
+    <div id="libraryFilters"></div>
+    <button type="button" id="btnToggleLibraries" class="collapse-handle hidden" title="Hide library filters"><span>▲</span><span>▲</span><span>▲</span></button>
     <div class="sb-head">
       <input type="text" id="searchBox" placeholder="Search title, artist, lyrics…">
     </div>
+    <div id="keyFilters"></div>
+    <button type="button" id="btnToggleKeyFilters" class="collapse-handle hidden" title="Hide key filters"><span>▲</span><span>▲</span><span>▲</span></button>
     <div id="tagFilters"></div>
     <button type="button" id="btnToggleTags" class="collapse-handle hidden" title="Hide tag filters"><span>▲</span><span>▲</span><span>▲</span></button>
     <div id="songList"></div>
@@ -560,6 +607,7 @@ Was [6m]blind but [5]now I [1]see
 <div id="chordPopup" class="hidden"></div>
 <div id="notePopup" class="hidden"></div>
 <div id="keyChangePopup" class="hidden"></div>
+<div id="libraryAssignPopup" class="hidden"></div>
 
 <div id="nnIntroBackdrop" class="hidden">
   <div id="nnIntroModal">
@@ -671,6 +719,22 @@ const MetaBarCollapseStore = (() => {
 // of tags, that chip row can eat a chunk of the song list's vertical space.
 const TagFilterCollapseStore = (() => {
   const KEY = 'wcb_tagfilters_collapsed';
+  function get(){ return localStorage.getItem(KEY) === 'true'; }
+  function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
+  return { get, set };
+})();
+
+// Same idea, for the sidebar's Preferred Key filter list.
+const KeyFilterCollapseStore = (() => {
+  const KEY = 'wcb_keyfilters_collapsed';
+  function get(){ return localStorage.getItem(KEY) === 'true'; }
+  function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
+  return { get, set };
+})();
+
+// Same idea, for the sidebar's Library filter list.
+const LibraryFilterCollapseStore = (() => {
+  const KEY = 'wcb_libraryfilters_collapsed';
   function get(){ return localStorage.getItem(KEY) === 'true'; }
   function set(val){ localStorage.setItem(KEY, val ? 'true' : 'false'); }
   return { get, set };
@@ -1713,6 +1777,8 @@ const App = (() => {
   let liveKey = null; // key the editor content is CURRENTLY written in (source of truth for transposition)
   let dirty = false;
   let activeTagFilters = new Set(); // library filter: song must have at least one selected tag
+  let activeKeyFilters = new Set(); // library filter: song must have at least one selected preferred key
+  let activeLibraryFilters = new Set(); // library filter: song must belong to at least one selected Library
   let undoStack = [], redoStack = [];
   let undoTimer = null;
 
@@ -1743,6 +1809,27 @@ const App = (() => {
     if(song.preferredKey != null) return {...song, preferredKeys:[song.preferredKey]};
     const legacy = (song.key && song.key !== 'NN') ? song.key : null;
     return {...song, preferredKeys: legacy ? [legacy] : []};
+  }
+
+  // Every song belongs to at least one Library — a broader, "parent" grouping
+  // above Tags/Preferred Keys (e.g. separating repertoire between two
+  // different bands the same person plays in), multi-select since a song can
+  // be shared by more than one. New/imported songs land in STARTING_LIBRARY
+  // by default (or a folder name, for Import Folder — see handleImportFiles);
+  // this is the read-time fallback for songs saved before this field existed.
+  const STARTING_LIBRARY = 'Full Catalog';
+  // Renamed from "Library" — songs already saved under the old default name
+  // get folded over to the new one here too (deduped, in case a song
+  // somehow already carries both), same read-time-only migration pattern as
+  // the rest of this fallback.
+  const OLD_STARTING_LIBRARY = 'Library';
+  // Every song — imported, created, whatever — always carries STARTING_LIBRARY
+  // alongside anything else it's filed under; it's the "everything" bucket,
+  // not just a placeholder that clears once a real library is assigned.
+  function withLibrariesFallback(song){
+    let libs = Array.isArray(song.libraries) ? song.libraries.map(l => l === OLD_STARTING_LIBRARY ? STARTING_LIBRARY : l) : [];
+    if(!libs.includes(STARTING_LIBRARY)) libs = [STARTING_LIBRARY, ...libs];
+    return {...song, libraries: [...new Set(libs)]};
   }
 
   /* ---------------------------------------------------------------------------
@@ -1877,7 +1964,7 @@ const App = (() => {
     // nothing extra to set up here.
     currentSong = {
       title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
-      tags:[], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
+      tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
     loadIntoForm();
@@ -1958,6 +2045,7 @@ const App = (() => {
     const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? ((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C') : wantsKey;
     el('mDisplayKey').value = usableKey;
     el('mTags').value = (currentSong.tags || []).join(', ');
+    renderCurrentSongLibraries();
     // Canonical-NN storage but landing on a real key (either NN Mode is off,
     // or the song was last displaying a letter key) — reflow into that
     // key's letters. Otherwise the editor just shows content verbatim,
@@ -2135,9 +2223,130 @@ const App = (() => {
 
   /* ---------------- Library / persistence ---------------- */
   async function refreshLibrary(){
-    songs = (await DB.getAllSongs()).map(withPreferredKeysFallback);
+    songs = (await DB.getAllSongs()).map(withPreferredKeysFallback).map(withLibrariesFallback);
+    renderLibraryFilters();
+    renderKeyFilters();
     renderTagFilters();
     renderSongList();
+  }
+
+  // Libraries are the "parent" filter — broader than Tags/Preferred Keys,
+  // e.g. separating repertoire between two bands. Only shown once there's
+  // actually more than one Library to choose between (everyone starts in
+  // STARTING_LIBRARY, so a single-band user never sees this row at all).
+  function renderLibraryFilters(){
+    const librarySet = new Set();
+    songs.forEach(s => (s.libraries||[]).forEach(l => librarySet.add(l)));
+    const box = el('libraryFilters');
+    box.innerHTML = '';
+    if(librarySet.size <= 1){ box.classList.add('hidden'); el('btnToggleLibraries').classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    el('btnToggleLibraries').classList.remove('hidden');
+    [...librarySet].sort().forEach(lib => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip' + (activeLibraryFilters.has(lib) ? ' active' : '');
+      chip.textContent = lib;
+      chip.onclick = () => {
+        // STARTING_LIBRARY ("Full Catalog") matches every song, so combining
+        // it with a real filter via OR would silently defeat that filter —
+        // the two are mutually exclusive here instead: picking one clears
+        // the other rather than letting them stack.
+        if(lib === STARTING_LIBRARY){
+          if(activeLibraryFilters.has(lib)) activeLibraryFilters.delete(lib);
+          else { activeLibraryFilters.clear(); activeLibraryFilters.add(lib); }
+        } else {
+          activeLibraryFilters.delete(STARTING_LIBRARY);
+          if(activeLibraryFilters.has(lib)) activeLibraryFilters.delete(lib); else activeLibraryFilters.add(lib);
+        }
+        renderLibraryFilters(); renderSongList();
+      };
+      box.appendChild(chip);
+    });
+    if(activeLibraryFilters.size){
+      const clearChip = document.createElement('span');
+      clearChip.className = 'tag-chip';
+      clearChip.style.color = 'var(--danger)';
+      clearChip.style.borderColor = 'var(--danger)';
+      clearChip.textContent = '✕ Clear';
+      clearChip.onclick = () => { activeLibraryFilters.clear(); renderLibraryFilters(); renderSongList(); };
+      box.appendChild(clearChip);
+    }
+  }
+
+  // Assigns the CURRENTLY OPEN song to one or more Libraries — an
+  // organizational action, so it's edited here in the sidebar's library
+  // section rather than mixed into the song's own metadata fields (compare
+  // renderLibraryFilters above, which filters the whole list instead).
+  // Mutates currentSong.libraries directly, same pattern as the Preferred
+  // Key(s) chips (see keyPickerAddClick/keyPickerRemoveChip).
+  function renderCurrentSongLibraries(){
+    const box = el('currentSongLibraries');
+    if(!currentSong){ box.classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    const libs = currentSong.libraries || [];
+    // STARTING_LIBRARY ("Full Catalog") is a permanent membership every song
+    // carries — no remove button, since it can't be manually taken out.
+    el('currentSongLibraryChips').innerHTML = libs.length ? libs.map(l => `
+      <span class="csl-chip" data-lib="${Renderer.escapeHtml(l)}">${Renderer.escapeHtml(l)}${l === STARTING_LIBRARY ? '' : '<button type="button" title="Remove">✕</button>'}</span>
+    `).join('') : `<span class="csl-empty">Not in any library</span>`;
+    // Autocomplete suggestions drawn from every distinct library already in
+    // use, so adding a song to an existing library doesn't require retyping
+    // its exact name.
+    const allLibs = new Set();
+    songs.forEach(s => (s.libraries||[]).forEach(l => allLibs.add(l)));
+    el('libraryNamesDatalist').innerHTML = [...allLibs].sort().map(l => `<option value="${Renderer.escapeHtml(l)}">`).join('');
+  }
+
+  function addCurrentSongLibrary(){
+    if(!currentSong) return;
+    const input = el('currentSongLibraryInput');
+    const val = input.value.trim();
+    if(!val) return;
+    currentSong.libraries = currentSong.libraries || [];
+    if(!currentSong.libraries.includes(val)) currentSong.libraries.push(val);
+    input.value = '';
+    dirty = true; updateSaveStatus();
+    renderCurrentSongLibraries();
+  }
+
+  function removeCurrentSongLibrary(lib){
+    if(!currentSong || lib === STARTING_LIBRARY) return;
+    currentSong.libraries = (currentSong.libraries || []).filter(l => l !== lib);
+    dirty = true; updateSaveStatus();
+    renderCurrentSongLibraries();
+  }
+
+  // Same multi-select-OR pattern as the tag filters below, over every
+  // distinct Preferred Key(s) value in the library — labeled the same way
+  // the meta-bar chips are ("D maj" / "F# min") rather than the raw stored
+  // string, so the modifier reads the same everywhere.
+  function renderKeyFilters(){
+    const keySet = new Set();
+    songs.forEach(s => (s.preferredKeys||[]).forEach(k => keySet.add(k)));
+    const box = el('keyFilters');
+    box.innerHTML = '';
+    if(keySet.size === 0){ box.classList.add('hidden'); el('btnToggleKeyFilters').classList.add('hidden'); return; }
+    box.classList.remove('hidden');
+    el('btnToggleKeyFilters').classList.remove('hidden');
+    [...keySet].sort().forEach(key => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip' + (activeKeyFilters.has(key) ? ' active' : '');
+      chip.textContent = formatPreferredKeyLabel(key);
+      chip.onclick = () => {
+        if(activeKeyFilters.has(key)) activeKeyFilters.delete(key); else activeKeyFilters.add(key);
+        renderKeyFilters(); renderSongList();
+      };
+      box.appendChild(chip);
+    });
+    if(activeKeyFilters.size){
+      const clearChip = document.createElement('span');
+      clearChip.className = 'tag-chip';
+      clearChip.style.color = 'var(--danger)';
+      clearChip.style.borderColor = 'var(--danger)';
+      clearChip.textContent = '✕ Clear';
+      clearChip.onclick = () => { activeKeyFilters.clear(); renderKeyFilters(); renderSongList(); };
+      box.appendChild(clearChip);
+    }
   }
 
   // Tags are multi-select: song matches if it has ANY selected tag (OR).
@@ -2177,13 +2386,26 @@ const App = (() => {
     const q = el('searchBox').value.trim().toLowerCase();
     const list = el('songList');
     let filtered = songs.filter(s => {
+      if(activeLibraryFilters.size && !(s.libraries||[]).some(l => activeLibraryFilters.has(l))) return false;
       if(activeTagFilters.size && !(s.tags||[]).some(t => activeTagFilters.has(t))) return false;
+      if(activeKeyFilters.size && !(s.preferredKeys||[]).some(k => activeKeyFilters.has(k))) return false;
       if(!q) return true;
       return (s.title||'').toLowerCase().includes(q) ||
              (s.artist||'').toLowerCase().includes(q) ||
              (s.content||'').toLowerCase().includes(q) ||
+             (s.preferredKeys||[]).some(k=>k.toLowerCase().includes(q)) ||
              (s.tags||[]).some(t=>t.toLowerCase().includes(q));
     });
+    if(songs.length===0){
+      list.innerHTML = `<div class="sb-empty">
+        <p><strong>Welcome to Chart Builder!</strong> Songs you save will show up in this list.</p>
+        <p>Click <strong>＋ New</strong> up top to start your first chart — the editor fills in with a quick example to show you how the markup works.</p>
+        <p>Already have charts? Click <strong>Import</strong> (or <strong>Import Folder</strong> for a whole batch at once) to bring in ChordPro, plain text, or previously-exported files.</p>
+        <p>Once you've saved a song or two: click any song below to open it, and add tags (in the song's Tags field) to filter this list by theme.</p>
+        <p>The search box above checks everything at once — Title, Artist, Lyrics, Preferred Keys, and Tags — so typing a word, a key, or a theme all work.</p>
+      </div>`;
+      return;
+    }
     if(filtered.length===0){
       list.innerHTML = `<div class="sb-empty">No songs found. Click "＋ New" to start writing, or Import an existing chart.</div>`;
       return;
@@ -2192,14 +2414,121 @@ const App = (() => {
     filtered.forEach(s => {
       const item = document.createElement('div');
       item.className = 'song-item' + (currentSong && currentSong.id===s.id ? ' active' : '');
+      item.title = 'Right-click to add this song to a library';
       item.innerHTML = `
         <div class="si-title">${Renderer.escapeHtml(s.title || 'Untitled')}</div>
         <div class="si-meta"><span>${Renderer.escapeHtml(s.artist||'')}</span>${(s.preferredKeys&&s.preferredKeys.length)?`<span>· Key${s.preferredKeys.length>1?'s':''} ${Renderer.escapeHtml(s.preferredKeys.join(', '))}</span>`:''}${s.ccli?`<span>· CCLI ${Renderer.escapeHtml(s.ccli)}</span>`:''}</div>
         ${ (s.tags&&s.tags.length) ? `<div class="si-tags">${s.tags.map(t=>`<span class="si-tag">${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}
       `;
       item.onclick = () => selectSong(s.id);
+      item.oncontextmenu = (e) => openLibraryAssignPopup(e, s.id);
       list.appendChild(item);
     });
+  }
+
+  /* ---------------- Library-assign popup (right-click a song) ---------------- */
+  // Toggles which libraries a song belongs to without having to open it
+  // first — mirrors the editor's right-click note-popup pattern. Distinct
+  // from #currentSongLibraries, which only ever edits the song currently
+  // loaded into the editor.
+  let libraryAssignSongId = null;
+
+  function openLibraryAssignPopup(e, songId){
+    e.preventDefault();
+    libraryAssignSongId = songId;
+    const popup = el('libraryAssignPopup');
+    popup.classList.remove('hidden');
+    renderLibraryAssignPopup();
+    const margin = 8;
+    let left = e.clientX, top = e.clientY;
+    popup.style.left = left + 'px';
+    popup.style.top = top + 'px';
+    requestAnimationFrame(() => {
+      const rect = popup.getBoundingClientRect();
+      if(rect.right > window.innerWidth - margin) left -= (rect.right - (window.innerWidth - margin));
+      if(rect.bottom > window.innerHeight - margin) top -= (rect.bottom - (window.innerHeight - margin));
+      if(left < margin) left = margin;
+      if(top < margin) top = margin;
+      popup.style.left = left + 'px';
+      popup.style.top = top + 'px';
+    });
+    setTimeout(() => {
+      document.addEventListener('mousedown', libraryAssignOutsideClick, true);
+      document.addEventListener('keydown', libraryAssignEscClose, true);
+    }, 0);
+  }
+
+  function renderLibraryAssignPopup(){
+    const song = songs.find(s => s.id === libraryAssignSongId);
+    if(!song) return;
+    const popup = el('libraryAssignPopup');
+    const allLibs = new Set();
+    songs.forEach(s => (s.libraries||[]).forEach(l => allLibs.add(l)));
+    const memberOf = new Set(song.libraries || []);
+    popup.innerHTML = `
+      <div class="lap-label">Add "${Renderer.escapeHtml(song.title || 'Untitled')}" to a library</div>
+      <div class="lap-chips">
+        ${[...allLibs].sort().map(l => `<button type="button" class="lap-chip${memberOf.has(l)?' active':''}" data-lib="${Renderer.escapeHtml(l)}" ${l===STARTING_LIBRARY?'disabled title="Every song stays in Full Catalog"':''}>${Renderer.escapeHtml(l)}</button>`).join('')}
+      </div>
+      <div class="lap-add-row">
+        <input type="text" id="lapInput" placeholder="New library…">
+        <button type="button" id="lapAdd">+ Add</button>
+      </div>
+    `;
+    popup.querySelectorAll('.lap-chip').forEach(btn => {
+      btn.onclick = () => toggleSongLibraryMembership(btn.dataset.lib);
+    });
+    popup.querySelector('#lapAdd').onclick = addNewLibraryToSong;
+    popup.querySelector('#lapInput').addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){ e.preventDefault(); addNewLibraryToSong(); }
+    });
+  }
+
+  async function toggleSongLibraryMembership(lib){
+    if(lib === STARTING_LIBRARY) return;
+    const song = songs.find(s => s.id === libraryAssignSongId);
+    if(!song) return;
+    song.libraries = song.libraries || [];
+    if(song.libraries.includes(lib)) song.libraries = song.libraries.filter(l => l !== lib);
+    else song.libraries.push(lib);
+    await persistLibraryAssignChange(song);
+  }
+
+  async function addNewLibraryToSong(){
+    const song = songs.find(s => s.id === libraryAssignSongId);
+    if(!song) return;
+    const input = el('lapInput');
+    const val = input.value.trim();
+    if(!val) return;
+    song.libraries = song.libraries || [];
+    if(!song.libraries.includes(val)) song.libraries.push(val);
+    await persistLibraryAssignChange(song);
+  }
+
+  async function persistLibraryAssignChange(song){
+    await DB.putSong(song);
+    if(currentSong && currentSong.id === song.id){
+      currentSong.libraries = song.libraries;
+      renderCurrentSongLibraries();
+    }
+    await refreshLibrary();
+    if(!el('libraryAssignPopup').classList.contains('hidden')) renderLibraryAssignPopup();
+  }
+
+  function closeLibraryAssignPopup(){
+    const popup = el('libraryAssignPopup');
+    popup.classList.add('hidden');
+    popup.innerHTML = '';
+    libraryAssignSongId = null;
+    document.removeEventListener('mousedown', libraryAssignOutsideClick, true);
+    document.removeEventListener('keydown', libraryAssignEscClose, true);
+  }
+  function libraryAssignOutsideClick(e){
+    const popup = el('libraryAssignPopup');
+    if(!popup.contains(e.target)) closeLibraryAssignPopup();
+  }
+  function libraryAssignEscClose(e){
+    if(e.key === 'Escape') closeLibraryAssignPopup();
   }
 
   function selectSong(id){
@@ -2235,6 +2564,9 @@ const App = (() => {
     // place that sets it now, so a manual pick there survives regardless of
     // whatever key happens to be showing when Save is hit.
     currentSong.tags = el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+    // currentSong.libraries is kept live by the sidebar's "This song's
+    // libraries" widget (add/remove mutate it directly, like Preferred
+    // Key(s)) — nothing to read back from a form field here.
     currentSong.content = resolveCanonicalContent();
     currentSong.titleAlign = currentSong.titleAlign || DefaultAlignStore.get();
     currentSong.updatedAt = Date.now();
@@ -3081,7 +3413,13 @@ const App = (() => {
   // the sidebar right away (previously import only staged a single song into
   // the editor as an unsaved draft, so nothing appeared until a manual Save —
   // and only one file could be picked at all).
-  async function handleImportFiles(fileList){
+  // libraryName: when set (Import Folder — see wire()), every song in this
+  // batch is tagged with it, auto-creating a Library named after the folder
+  // so someone keeping separate folders per band gets separate Libraries for
+  // free. Left unset for regular Import, which falls back to whatever the
+  // file itself carries (a JSON re-import may already have `libraries`) or
+  // STARTING_LIBRARY otherwise.
+  async function handleImportFiles(fileList, libraryName){
     const files = Array.from(fileList);
     let imported = 0;
     const failures = [];
@@ -3113,10 +3451,19 @@ const App = (() => {
           else if(song.preferredKey != null) importedPreferredKeys = [song.preferredKey];
           else importedPreferredKeys = importedKey !== 'NN' ? [importedKey] : [];
         }
+        // A folder import always assigns the derived Library name (that's
+        // the whole point — one folder in, one Library out). Otherwise
+        // preserve an existing `libraries` array from a JSON re-import. Every
+        // import lands in STARTING_LIBRARY too, alongside whatever else —
+        // it's the "everything" bucket, not just an empty-case fallback.
+        const importedLibraries = [...new Set([
+          STARTING_LIBRARY,
+          ...(libraryName ? [libraryName] : (Array.isArray(song.libraries) ? song.libraries : []))
+        ])];
         const toSave = {
           title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
           copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
-          tags: song.tags||[], content: importedContent,
+          tags: song.tags||[], libraries: importedLibraries, content: importedContent,
           versions: song.versions||[],
           createdAt: Date.now(), updatedAt: Date.now()
         };
@@ -3150,6 +3497,7 @@ const App = (() => {
       capo: el('mCapo').value,
       titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
       tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
+      libraries: (currentSong && currentSong.libraries) || [],
       content: el('editor').value
     };
   }
@@ -3934,6 +4282,28 @@ const App = (() => {
     applyTagFilterCollapse(collapsed);
   }
 
+  function applyKeyFilterCollapse(collapsed){
+    el('keyFilters').classList.toggle('collapsed', collapsed);
+    el('btnToggleKeyFilters').classList.toggle('collapsed', collapsed);
+    el('btnToggleKeyFilters').title = collapsed ? 'Show key filters' : 'Hide key filters';
+  }
+  function toggleKeyFilterCollapse(){
+    const collapsed = !KeyFilterCollapseStore.get();
+    KeyFilterCollapseStore.set(collapsed);
+    applyKeyFilterCollapse(collapsed);
+  }
+
+  function applyLibraryFilterCollapse(collapsed){
+    el('libraryFilters').classList.toggle('collapsed', collapsed);
+    el('btnToggleLibraries').classList.toggle('collapsed', collapsed);
+    el('btnToggleLibraries').title = collapsed ? 'Show library filters' : 'Hide library filters';
+  }
+  function toggleLibraryFilterCollapse(){
+    const collapsed = !LibraryFilterCollapseStore.get();
+    LibraryFilterCollapseStore.set(collapsed);
+    applyLibraryFilterCollapse(collapsed);
+  }
+
   /* ---------------- Intro popup ---------------- */
   function maybeShowNNIntro(force=false){
     if(!force && (!NNModeStore.isEnabled() || NNModeStore.introDismissed())) return;
@@ -3982,7 +4352,13 @@ const App = (() => {
       // unrelated files (.DS_Store, images, etc.) — only hand chart-shaped
       // extensions to the importer instead of surfacing them as failures.
       const supported = Array.from(e.target.files).filter(f => /\.(json|txt|chordpro|cho|pro|xml)$/i.test(f.name));
-      if(supported.length) handleImportFiles(supported);
+      if(supported.length){
+        // webkitRelativePath is "TopFolderName/.../file.ext" — the browser
+        // never exposes a real filesystem path, but the top-level folder
+        // name the user picked is enough to auto-name a Library after it.
+        const folderName = supported[0].webkitRelativePath.split('/')[0] || 'Imported Folder';
+        handleImportFiles(supported, folderName);
+      }
       else toast('No supported chart files (.json/.txt/.chordpro/.cho/.pro/.xml) found in that folder');
       e.target.value='';
     };
@@ -3998,6 +4374,17 @@ const App = (() => {
     el('btnNNMode').onclick = toggleNNMode;
     el('btnToggleMeta').onclick = toggleMetaBarCollapse;
     el('btnToggleTags').onclick = toggleTagFilterCollapse;
+    el('btnToggleKeyFilters').onclick = toggleKeyFilterCollapse;
+    el('btnToggleLibraries').onclick = toggleLibraryFilterCollapse;
+    el('btnAddCurrentSongLibrary').onclick = addCurrentSongLibrary;
+    el('currentSongLibraryInput').addEventListener('keydown', (e) => {
+      if(e.key === 'Enter'){ e.preventDefault(); addCurrentSongLibrary(); }
+    });
+    el('currentSongLibraryChips').addEventListener('click', (e) => {
+      const btn = e.target.closest('button');
+      if(!btn) return;
+      removeCurrentSongLibrary(btn.closest('.csl-chip').dataset.lib);
+    });
     el('btnRomanNumerals').onclick = toggleNotationStyle;
 
     ['mTitle','mArtist','mCCLI','mCopyright','mChurchCCLI','mTags'].forEach(id => {
@@ -4116,6 +4503,8 @@ const App = (() => {
     FontScaleStore.apply(FontScaleStore.get());
     applyMetaBarCollapse(MetaBarCollapseStore.get());
     applyTagFilterCollapse(TagFilterCollapseStore.get());
+    applyKeyFilterCollapse(KeyFilterCollapseStore.get());
+    applyLibraryFilterCollapse(LibraryFilterCollapseStore.get());
     await refreshLibrary();
     if(songs.length){ selectSong(songs[0].id); }
     else { newSong(); }
