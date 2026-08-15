@@ -3703,6 +3703,52 @@ const App = (() => {
   // free. Left unset for regular Import, which falls back to whatever the
   // file itself carries (a JSON re-import may already have `libraries`) or
   // STARTING_LIBRARY otherwise.
+  // Normalizes one already-parsed song (from IO.detectAndParse) and saves it
+  // to the DB. Shared by handleImportFiles (real file picks) and
+  // seedDemoSongsIfNeeded (fetched sample-data JSON) so both paths get the
+  // exact same key-conversion and library-tagging behavior.
+  async function importParsedSong(song, libraryName){
+    // ChordPro/OpenSong/plain-text parsers leave key:'' when no key tag
+    // is present in the file — a real, explicit tonic we can safely
+    // convert against, vs. genuinely unstated. JSON re-imports carry
+    // whatever this app already saved (a real key, 'NN', or unset).
+    const statedKey = song.key || null;
+    let importedKey, importedContent, importedPreferredKeys;
+    if(statedKey && statedKey !== 'NN'){
+      // Known tonic — auto-convert to canonical Nashville Numbers, no
+      // guessing involved (a stated key is a fact, not a detection).
+      importedContent = NashvilleSystem.contentToNumbers(song.content||'', statedKey.replace(/m$/,''));
+      importedKey = 'NN';
+      importedPreferredKeys = [statedKey];
+    } else {
+      // No stated key, or already NN (JSON round-trip) — leave as-is.
+      // An unstated key lands as a legacy letter-key song, same as any
+      // pre-Phase-2 library song, convertible later via "Convert to
+      // Nashville Numbers" rather than guessed at now.
+      importedKey = statedKey || 'C';
+      importedContent = song.content || '';
+      if(Array.isArray(song.preferredKeys)) importedPreferredKeys = song.preferredKeys;
+      else if(song.preferredKey != null) importedPreferredKeys = [song.preferredKey];
+      else importedPreferredKeys = importedKey !== 'NN' ? [importedKey] : [];
+    }
+    // A folder import always assigns the derived Library name (that's
+    // the whole point — one folder in, one Library out). Otherwise
+    // preserve an existing `libraries` array from a JSON re-import;
+    // normalizeLibraries falls back to STARTING_LIBRARY if neither
+    // applies.
+    const importedLibraries = normalizeLibraries(libraryName ? [libraryName] : song.libraries);
+    const toSave = {
+      title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
+      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
+      tags: song.tags||[], libraries: importedLibraries, content: importedContent,
+      versions: song.versions||[],
+      createdAt: Date.now(), updatedAt: Date.now()
+    };
+    const id = await DB.putSong(toSave);
+    toSave.id = id;
+    return toSave;
+  }
+
   async function handleImportFiles(fileList, libraryName){
     const files = Array.from(fileList);
     let imported = 0;
@@ -3712,45 +3758,7 @@ const App = (() => {
       try{
         const text = await readFileAsText(file);
         const {song} = IO.detectAndParse(file.name, text);
-        // ChordPro/OpenSong/plain-text parsers leave key:'' when no key tag
-        // is present in the file — a real, explicit tonic we can safely
-        // convert against, vs. genuinely unstated. JSON re-imports carry
-        // whatever this app already saved (a real key, 'NN', or unset).
-        const statedKey = song.key || null;
-        let importedKey, importedContent, importedPreferredKeys;
-        if(statedKey && statedKey !== 'NN'){
-          // Known tonic — auto-convert to canonical Nashville Numbers, no
-          // guessing involved (a stated key is a fact, not a detection).
-          importedContent = NashvilleSystem.contentToNumbers(song.content||'', statedKey.replace(/m$/,''));
-          importedKey = 'NN';
-          importedPreferredKeys = [statedKey];
-        } else {
-          // No stated key, or already NN (JSON round-trip) — leave as-is.
-          // An unstated key lands as a legacy letter-key song, same as any
-          // pre-Phase-2 library song, convertible later via "Convert to
-          // Nashville Numbers" rather than guessed at now.
-          importedKey = statedKey || 'C';
-          importedContent = song.content || '';
-          if(Array.isArray(song.preferredKeys)) importedPreferredKeys = song.preferredKeys;
-          else if(song.preferredKey != null) importedPreferredKeys = [song.preferredKey];
-          else importedPreferredKeys = importedKey !== 'NN' ? [importedKey] : [];
-        }
-        // A folder import always assigns the derived Library name (that's
-        // the whole point — one folder in, one Library out). Otherwise
-        // preserve an existing `libraries` array from a JSON re-import;
-        // normalizeLibraries falls back to STARTING_LIBRARY if neither
-        // applies.
-        const importedLibraries = normalizeLibraries(libraryName ? [libraryName] : song.libraries);
-        const toSave = {
-          title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-          copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
-          tags: song.tags||[], libraries: importedLibraries, content: importedContent,
-          versions: song.versions||[],
-          createdAt: Date.now(), updatedAt: Date.now()
-        };
-        const id = await DB.putSong(toSave);
-        toSave.id = id;
-        lastSong = toSave;
+        lastSong = await importParsedSong(song, libraryName);
         imported++;
       }catch(err){
         failures.push(file.name);
@@ -3769,6 +3777,41 @@ const App = (() => {
     if(imported && !failures.length) toast(`Imported ${imported} song${imported===1?'':'s'}`);
     else if(imported && failures.length) toast(`Imported ${imported}, failed: ${failures.join(', ')}`);
     else toast('Import failed: ' + failures.join(', '));
+  }
+
+  // First-run demo seeding: fetches chart-builder/sample-data/manifest.json
+  // (a plain filename list — fetch can't browse a folder itself) and imports
+  // each listed song via the same path a real Import uses, tagged into a
+  // "Demo Songs" library so they're obviously distinct and easy to bulk-
+  // remove later. Only ever runs once per browser: the localStorage flag is
+  // set whether seeding succeeds, fails, or was skipped because the library
+  // already had songs, so it never re-adds demo songs after someone
+  // intentionally deletes them, and never overwrites a real library that
+  // existed before this feature shipped. Fails silently (console.warn only)
+  // on file:// or offline, since demo seeding is a nice-to-have, not
+  // something that should ever block the app from loading.
+  const DEMO_SEEDED_KEY = 'wcb_demo_seeded_v1';
+  const DEMO_LIBRARY_NAME = 'Demo Songs';
+  async function seedDemoSongsIfNeeded(){
+    if(localStorage.getItem(DEMO_SEEDED_KEY)) return;
+    if(songs.length){ localStorage.setItem(DEMO_SEEDED_KEY, 'true'); return; }
+    try{
+      const manifestRes = await fetch('sample-data/manifest.json');
+      if(!manifestRes.ok) throw new Error('manifest fetch failed: ' + manifestRes.status);
+      const filenames = await manifestRes.json();
+      for(const filename of filenames){
+        const res = await fetch('sample-data/' + filename);
+        if(!res.ok){ console.warn('Demo song fetch failed', filename, res.status); continue; }
+        const text = await res.text();
+        const {song} = IO.detectAndParse(filename, text);
+        await importParsedSong(song, DEMO_LIBRARY_NAME);
+      }
+      await refreshLibrary();
+    }catch(err){
+      console.warn('Demo song seeding skipped:', err.message);
+    }finally{
+      localStorage.setItem(DEMO_SEEDED_KEY, 'true');
+    }
   }
 
   function currentSongSnapshot(){
@@ -5019,6 +5062,7 @@ const App = (() => {
     applyTagFilterCollapse(TagFilterCollapseStore.get());
     applyKeyFilterCollapse(KeyFilterCollapseStore.get());
     await refreshLibrary();
+    await seedDemoSongsIfNeeded();
     // ?song=<id> deep link — how the Greenroom parent app opens a specific
     // chart (from a service plan or the song library) straight into the editor.
     // Falls through to the normal "most recent song" behaviour if the id isn't
