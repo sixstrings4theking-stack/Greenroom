@@ -562,7 +562,6 @@ small{color:var(--text-faint);}
             <option>C</option><option>C#</option><option>Db</option><option>D</option><option>Eb</option>
             <option>E</option><option>F</option><option>F#</option><option>Gb</option><option>G</option>
             <option>Ab</option><option>A</option><option>Bb</option><option>B</option>
-            <option>Am</option><option>Bm</option><option>Cm</option><option>Dm</option><option>Em</option><option>Fm</option><option>Gm</option>
           </select>
           <button id="btnTransUp" class="icon" title="Transpose up">+</button>
           <small id="origKeyNote"></small>
@@ -649,9 +648,11 @@ Was [6m]blind but [5]now I [1]see
 
 <div id="nnIntroBackdrop" class="hidden">
   <div id="nnIntroModal">
-    <h3>Nashville Number Mode is ON by default</h3>
-    <p>New charts start in the Nashville Number System — chords are entered as scale-degree numbers (1–7) that stay the same no matter what key you play in. Pick a Key above to preview or print it as letter chords.</p>
-    <p>Prefer working directly in letter keys (C, G, D…) instead? Turn it off any time with the <b>NN Mode</b> button in the top bar.</p>
+    <h3>Charts are always stored as Nashville Numbers</h3>
+    <p>Every chart's underlying content is the Nashville Number System — chords are scale-degree numbers (1–7) that never change no matter what key you're viewing. That's the canonical format; it's not something you turn on or off.</p>
+    <p>Prefer to write or read in letter chords instead? Pick a <b>Display Key</b> up top any time — the chart reflows to that key instantly, and you can switch back to Nashville Numbers (or a different key) whenever you like, since nothing about the underlying content changes when you do.</p>
+    <p>The <b>NN Mode</b> button in the top bar sets the starting point for brand-new charts. It's also remembered per song: save a chart while NN Mode is off, and reopening it later defaults straight to its <i>first</i> Preferred Key (a song can have more than one — the first one wins as the default) instead of Nashville Numbers, even if NN Mode is back on for everything else by then.</p>
+    <p>Minor keys aren't in the Display Key list — pick the relative major instead (e.g. Am → C) for the same chords, one less mode to maintain.</p>
     <div class="nn-intro-actions">
       <button id="nnIntroDismiss" class="primary">Got it</button>
     </div>
@@ -679,7 +680,7 @@ Was [6m]blind but [5]now I [1]see
 --------------------------------------------------------------------------- */
 const NNModeStore = (() => {
   const MODE_KEY = 'wcb_nn_mode_enabled';
-  const DISMISS_KEY = 'wcb_nn_intro_dismissed';
+  const DISMISS_KEY = 'wcb_nn_intro_dismissed_v4'; // bumped when the intro copy changes substantively, so a prior dismissal doesn't hide the corrected wording
   function isEnabled(){
     const raw = localStorage.getItem(MODE_KEY);
     return raw === null ? true : raw === 'true'; // ON by default
@@ -970,8 +971,16 @@ const Transposer = (() => {
     return d;
   }
 
+  // The relative major of a minor key sits a minor third (3 semitones) above
+  // its tonic (Am -> C, Dm -> F, ...) — used to redirect a minor key into the
+  // Display Key dropdown's major-only key list (see App.toDisplayableKey).
+  function relativeMajor(minorKey){
+    const root = minorKey.replace(/m$/, '');
+    return transposeRoot(root, 3, FLAT_KEYS.has(minorKey));
+  }
+
   return {
-    transposeChord, transposeText, semitoneDelta, FLAT_KEYS, SHARP_SCALE, FLAT_SCALE,
+    transposeChord, transposeText, semitoneDelta, relativeMajor, FLAT_KEYS, SHARP_SCALE, FLAT_SCALE,
     noteIndex: (n) => NOTE_TO_INDEX[n],
     noteAtIndex: (i, preferFlat) => (preferFlat ? FLAT_SCALE : SHARP_SCALE)[((i%12)+12)%12],
   };
@@ -2122,6 +2131,17 @@ const App = (() => {
     toast(currentSong.notationStyle === 'roman' ? 'Roman numeral notation ON' : 'Roman numeral notation OFF');
   }
 
+  // The Display Key dropdown is major-only (see #mDisplayKey) — minor keys
+  // are handled via their relative major for simplicity, rather than
+  // maintaining a separate minor-key transposition path. Any minor key
+  // reaching the dropdown (a legacy song's stored key, or a preferred key
+  // picked with the meta-bar's Minor modifier) gets redirected to its
+  // relative major so it always lands on a real, selectable option.
+  function toDisplayableKey(key){
+    if(!key || key === 'NN') return key;
+    return /m$/.test(key) ? Transposer.relativeMajor(key) : key;
+  }
+
   function loadIntoForm(){
     el('mTitle').value = currentSong.title || '';
     el('mArtist').value = currentSong.artist || '';
@@ -2130,12 +2150,16 @@ const App = (() => {
     el('mChurchCCLI').value = currentSong.churchCcli || '';
     el('mCapo').value = currentSong.capo || '';
     setCopyrightMode(currentSong.copyrightMode || '©', false);
-    // Guard: a song stored with key 'NN' can't be selected if NN Mode is
-    // currently OFF (that dropdown option won't exist) — fall back to the
-    // song's first remembered preferred key (or C) so the Key selector
-    // always lands on a real, selectable value.
+    // Guard: a canonical-NN song can't default to showing 'NN' if either (a)
+    // NN Mode is currently OFF — that dropdown option won't exist — or (b)
+    // THIS song was itself last saved with NN Mode off (see saveCurrent's
+    // nnModeOffAtSave), so it remembers wanting to open in letters even if
+    // NN Mode has since been switched back on for other songs. Either way,
+    // fall back to the song's first remembered preferred key (or C) so the
+    // Key selector always lands on a real, selectable value.
     const wantsKey = currentSong.key || 'C';
-    const usableKey = (wantsKey === 'NN' && !NNModeStore.isEnabled()) ? ((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C') : wantsKey;
+    const wantsPreferredKeyDefault = wantsKey === 'NN' && (!NNModeStore.isEnabled() || currentSong.nnModeOffAtSave);
+    const usableKey = toDisplayableKey(wantsPreferredKeyDefault ? ((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C') : wantsKey);
     el('mDisplayKey').value = usableKey;
     el('mTags').value = (currentSong.tags || []).join(', ');
     renderCurrentSongLibraries();
@@ -2680,6 +2704,11 @@ const App = (() => {
     // songs keep the original pre-migration behavior, where the dropdown
     // value IS the storage key.
     if(currentSong.key !== 'NN') currentSong.key = el('mDisplayKey').value;
+    // Remembers whether THIS song was saved with NN Mode off, independent of
+    // whatever NN Mode is currently set to elsewhere — so reopening it later
+    // defaults to its preferred key (see loadIntoForm) even if NN Mode has
+    // since been switched back on for other songs in the meantime.
+    currentSong.nnModeOffAtSave = !NNModeStore.isEnabled();
     // preferredKey is no longer derived from Display Key on save — the
     // meta-bar picker (see keyPickerLetterClick etc.) is the one explicit
     // place that sets it now, so a manual pick there survives regardless of
@@ -2715,11 +2744,12 @@ const App = (() => {
     const newContent = Transposer.transposeText(el('editor').value, semis, preferFlat);
     el('editor').value = newContent;
     syncUndoBaseline();
-    const toKeyIdx = ((Transposer.SHARP_SCALE.indexOf(fromKey.replace('m','')) + semis) % 12 + 12) % 12;
-    const isMinor = fromKey.endsWith('m');
+    // fromKey is always major now (Display Key is major-only — see
+    // toDisplayableKey), so no minor-suffix bookkeeping needed here.
+    const toKeyIdx = ((Transposer.SHARP_SCALE.indexOf(fromKey) + semis) % 12 + 12) % 12;
     const scale = preferFlat ? Transposer.FLAT_SCALE : Transposer.SHARP_SCALE;
-    const newKey = scale[toKeyIdx] + (isMinor?'m':'');
-    if([...el('mDisplayKey').options].some(o=>o.value===newKey)) el('mDisplayKey').value = newKey;
+    const newKey = scale[toKeyIdx];
+    el('mDisplayKey').value = newKey;
     liveKey = el('mDisplayKey').value;
     updateCapoNote();
     onEditorInput();
@@ -3747,7 +3777,7 @@ const App = (() => {
           <button type="button" class="align-btn" data-align="right" title="Right">⟹ Right</button>
         </div>
       </div>
-      <div class="form-row"><button id="replayIntroBtn">Show "NN Mode is ON by default" intro again</button></div>
+      <div class="form-row"><button id="replayIntroBtn">Show "Charts are always stored as Nashville Numbers" intro again</button></div>
       <h4>Data</h4>
       <div class="form-row"><button id="exportAllBtn">Export entire library (JSON)</button></div>
       <div class="form-row"><button id="wipeBtn" style="border-color:var(--danger); color:var(--danger);">Clear local database</button></div>
@@ -4296,7 +4326,7 @@ const App = (() => {
           const v = currentSong.versions[Number(btn.dataset.restore)];
           el('editor').value = v.content;
           syncUndoBaseline();
-          el('mDisplayKey').value = v.key || el('mDisplayKey').value;
+          el('mDisplayKey').value = toDisplayableKey(v.key) || el('mDisplayKey').value;
           onEditorInput();
           toast('Version restored (unsaved — click Save to keep)');
           drawer.remove();
@@ -4352,7 +4382,7 @@ const App = (() => {
           // would silently un-mark it as canonical even though its content
           // is still literally numeric). Falls back through the song's
           // remembered preferred key before a hardcoded default.
-          const fallbackKey = (currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C';
+          const fallbackKey = toDisplayableKey((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C');
           select.value = fallbackKey;
           if(currentSong.key === 'NN'){
             const preferFlat = Transposer.FLAT_KEYS.has(fallbackKey);
