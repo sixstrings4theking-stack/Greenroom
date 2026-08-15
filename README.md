@@ -4,7 +4,6 @@ Client-side web apps for running a church service. No build step, no backend —
 
 - [`index.html`](index.html) — **Greenroom**, the parent app. People profiles, teams and positions, services, order-of-service planning by drag-and-drop, and team scheduling. Embeds Chart Builder as a tab.
 - [`chart-builder/`](chart-builder/index.html) — chord/lyric chart editor with Nashville Number System support, transposition, and PDF/print export. Sample song exports live in `chart-builder/sample-data/`.
-- [`service-planner/`](service-planner/index.html) — an earlier standalone cue-sheet prototype, superseded by Greenroom. Kept only for reference.
 
 ## How the two main apps relate
 
