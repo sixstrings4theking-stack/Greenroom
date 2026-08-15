@@ -56,9 +56,6 @@ small{color:var(--text-faint);}
 .tb-group:last-child{border-right:none;}
 #topbar .spacer{flex:1;}
 #saveStatus{font-size:12px; color:var(--text-faint); white-space:nowrap;}
-#btnNNMode{font-size:12px; padding:5px 10px; border-radius:14px; white-space:nowrap;}
-#btnNNMode.on{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
-#btnNNMode.off{background:var(--bg-input); color:var(--text-dim);}
 .circle-btn{background:linear-gradient(135deg,#8b6ef2,#6a4fd8); color:#fff; border:1px solid #7a5ce8; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
 .circle-btn:hover{filter:brightness(1.1); border-color:#8b6ef2;}
 
@@ -249,6 +246,11 @@ small{color:var(--text-faint);}
 .capo-control{display:flex; align-items:center; gap:6px; flex-shrink:0;}
 #btnRomanNumerals{font-size:12px; padding:5px 10px; border-radius:14px;}
 #btnRomanNumerals.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+/* Greyed out (not hidden) when Display Key isn't NN — stays visible so it's
+   discoverable as you play with Display Key, rather than mysteriously
+   appearing/disappearing. */
+#btnRomanNumerals:disabled{opacity:.4; cursor:default; color:var(--text-faint);}
+#btnRomanNumerals:disabled:hover{background:var(--bg-input);}
 .capo-control select{padding:5px 8px; font-size:12px;}
 
 /* Split pane */
@@ -443,7 +445,6 @@ small{color:var(--text-faint);}
   </div>
   <div class="spacer"></div>
   <button id="btnCircle" class="circle-btn" title="Open Circle of Fifths chord wheel in a new window">⭘ Circle of 5ths</button>
-  <button id="btnNNMode" class="ghost" title="Toggle Nashville Number System mode">NN Mode: ON</button>
   <span id="saveStatus">No song loaded</span>
   <div class="tb-group" style="border-right:none;">
     <button id="btnCCLI" title="CCLI metadata lookup (mock)">CCLI Lookup</button>
@@ -458,7 +459,7 @@ small{color:var(--text-faint);}
   <!-- SIDEBAR: song library -->
   <div id="sidebar">
     <div id="currentSongLibraries" class="hidden">
-      <div class="csl-label">Add to a new library</div>
+      <div class="csl-label">Libraries</div>
       <div class="csl-add-row">
         <input type="text" id="currentSongLibraryInput" placeholder="New library name…">
         <button type="button" id="btnAddCurrentSongLibrary">+ Add</button>
@@ -566,7 +567,7 @@ small{color:var(--text-faint);}
           <button id="btnTransUp" class="icon" title="Transpose up">+</button>
           <small id="origKeyNote"></small>
         </div>
-        <button type="button" id="btnRomanNumerals" class="hidden" title="Display and enter chords as Roman numerals (I, ii, IV...) instead of Nashville Numbers">RN</button>
+        <button type="button" id="btnRomanNumerals" title="Display and enter chords as Roman numerals (I, ii, IV...) instead of Nashville Numbers">RN</button>
         <div class="capo-control">
           <label class="lbl" style="margin:0;">Capo:</label>
           <select id="mCapo">
@@ -651,7 +652,7 @@ Was [6m]blind but [5]now I [1]see
     <h3>Charts are always stored as Nashville Numbers</h3>
     <p>Every chart's underlying content is the Nashville Number System — chords are scale-degree numbers (1–7) that never change no matter what key you're viewing. That's the canonical format; it's not something you turn on or off.</p>
     <p>Prefer to write or read in letter chords instead? Pick a <b>Display Key</b> up top any time — the chart reflows to that key instantly, and you can switch back to Nashville Numbers (or a different key) whenever you like, since nothing about the underlying content changes when you do.</p>
-    <p>The <b>NN Mode</b> button in the top bar sets the starting point for brand-new charts. It's also remembered per song: save a chart while NN Mode is off, and reopening it later defaults straight to its <i>first</i> Preferred Key (a song can have more than one — the first one wins as the default) instead of Nashville Numbers, even if NN Mode is back on for everything else by then.</p>
+    <p>Each chart just remembers what it was showing when you last saved it: save while looking at Nashville Numbers, and it reopens in Nashville Numbers. Save while looking at a letter key, and it reopens on the song's <i>first</i> Preferred Key instead (a song can have more than one — the first one wins as the default), not the literal letter you left it on, just a sensible starting point to write or read from.</p>
     <p>Minor keys aren't in the Display Key list — pick the relative major instead (e.g. Am → C) for the same chords, one less mode to maintain.</p>
     <div class="nn-intro-actions">
       <button id="nnIntroDismiss" class="primary">Got it</button>
@@ -671,25 +672,19 @@ Was [6m]blind but [5]now I [1]see
    ============================================================================ */
 
 /* ---------------------------------------------------------------------------
-   0b. NN MODE STORE  [PARAMETER-HOOK]
-   Persists whether Nashville Number System mode is the app's default starting
-   point (ON) or whether the Key selector should behave like a conventional
-   letter-key transposer for musicians building charts the older way (OFF).
-   Also tracks whether the one-time "NN is on by default" intro popup has
-   already been dismissed, so it doesn't nag returning users.
+   0b. NN INTRO DISMISS STORE  [PARAMETER-HOOK]
+   There's no more global "NN Mode" toggle — storage is unconditionally
+   Nashville Numbers, and each song just remembers what it was last saved
+   showing (see saveCurrent's lastDisplayedNN / loadIntoForm). This store is
+   only for the one-time explainer popup: has it already been dismissed, so
+   it doesn't nag returning users.
 --------------------------------------------------------------------------- */
-const NNModeStore = (() => {
-  const MODE_KEY = 'wcb_nn_mode_enabled';
-  const DISMISS_KEY = 'wcb_nn_intro_dismissed_v4'; // bumped when the intro copy changes substantively, so a prior dismissal doesn't hide the corrected wording
-  function isEnabled(){
-    const raw = localStorage.getItem(MODE_KEY);
-    return raw === null ? true : raw === 'true'; // ON by default
-  }
-  function setEnabled(val){ localStorage.setItem(MODE_KEY, val ? 'true' : 'false'); }
-  function introDismissed(){ return localStorage.getItem(DISMISS_KEY) === 'true'; }
-  function dismissIntro(){ localStorage.setItem(DISMISS_KEY, 'true'); }
-  function resetIntro(){ localStorage.removeItem(DISMISS_KEY); }
-  return { isEnabled, setEnabled, introDismissed, dismissIntro, resetIntro };
+const NNIntroStore = (() => {
+  const DISMISS_KEY = 'wcb_nn_intro_dismissed_v5'; // bumped when the intro copy changes substantively, so a prior dismissal doesn't hide the corrected wording
+  function dismissed(){ return localStorage.getItem(DISMISS_KEY) === 'true'; }
+  function dismiss(){ localStorage.setItem(DISMISS_KEY, 'true'); }
+  function reset(){ localStorage.removeItem(DISMISS_KEY); }
+  return { dismissed, dismiss, reset };
 })();
 
 // Persisted user preference for which alignment new songs start with
@@ -2058,12 +2053,10 @@ const App = (() => {
   }
 
   function newSong(){
-    // New songs are always canonical Nashville Numbers now — `key` stays
-    // 'NN' permanently (see saveCurrent). NN Mode just controls what the Key
-    // selector defaults to showing for a fresh song: loadIntoForm already
-    // derives that (and originalKey/liveKey) from currentSong.key +
-    // NNModeStore the same way it does for every other song load, so there's
-    // nothing extra to set up here.
+    // New songs are always canonical Nashville Numbers — `key` stays 'NN'
+    // permanently (see saveCurrent), and with no lastDisplayedNN recorded
+    // yet, loadIntoForm's default-key logic just shows NN, same as any
+    // other song that's never been saved with a letter key showing.
     currentSong = {
       title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'arabic', titleAlign:DefaultAlignStore.get(),
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
@@ -2150,25 +2143,21 @@ const App = (() => {
     el('mChurchCCLI').value = currentSong.churchCcli || '';
     el('mCapo').value = currentSong.capo || '';
     setCopyrightMode(currentSong.copyrightMode || '©', false);
-    // Guard: a canonical-NN song can't default to showing 'NN' if either (a)
-    // NN Mode is currently OFF — that dropdown option won't exist — or (b)
-    // THIS song was itself last saved with NN Mode off (see saveCurrent's
-    // nnModeOffAtSave), so it remembers wanting to open in letters even if
-    // NN Mode has since been switched back on for other songs. Either way,
-    // fall back to the song's first remembered preferred key (or C) so the
-    // Key selector always lands on a real, selectable value.
+    // A song opens showing whatever it was last saved showing: NN if NN was
+    // showing at save (see saveCurrent's lastDisplayedNN), or its first
+    // remembered Preferred Key (or C) if a letter key was showing — not the
+    // literal letter it was left on, just a sensible starting point.
     const wantsKey = currentSong.key || 'C';
-    const wantsPreferredKeyDefault = wantsKey === 'NN' && (!NNModeStore.isEnabled() || currentSong.nnModeOffAtSave);
+    const wantsPreferredKeyDefault = wantsKey === 'NN' && currentSong.lastDisplayedNN === false;
     const usableKey = toDisplayableKey(wantsPreferredKeyDefault ? ((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C') : wantsKey);
     el('mDisplayKey').value = usableKey;
     el('mTags').value = (currentSong.tags || []).join(', ');
     renderCurrentSongLibraries();
     renderLibraryFilters();
-    // Canonical-NN storage but landing on a real key (either NN Mode is off,
-    // or the song was last displaying a letter key) — reflow into that
-    // key's letters. Otherwise the editor just shows content verbatim,
-    // exactly as before this song ever went through Nashville Number
-    // migration.
+    // Canonical-NN storage but landing on a real key (the song was last
+    // displaying a letter key) — reflow into that key's letters. Otherwise
+    // the editor just shows content verbatim, exactly as before this song
+    // ever went through Nashville Number migration.
     if(currentSong.key === 'NN' && usableKey !== 'NN'){
       const preferFlat = Transposer.FLAT_KEYS.has(usableKey);
       el('editor').value = NashvilleSystem.contentToLetters(currentSong.content || '', usableKey.replace(/m$/, ''), preferFlat);
@@ -2181,6 +2170,7 @@ const App = (() => {
     originalKey = usableKey;
     liveKey = usableKey;
     el('origKeyNote').textContent = '';
+    updateRomanButtonVisibility();
     updateTransposeButtonsState();
     stagedKey = {letter:null, accidental:'', minor:false};
     renderPreferredKeyPicker();
@@ -2704,11 +2694,11 @@ const App = (() => {
     // songs keep the original pre-migration behavior, where the dropdown
     // value IS the storage key.
     if(currentSong.key !== 'NN') currentSong.key = el('mDisplayKey').value;
-    // Remembers whether THIS song was saved with NN Mode off, independent of
-    // whatever NN Mode is currently set to elsewhere — so reopening it later
-    // defaults to its preferred key (see loadIntoForm) even if NN Mode has
-    // since been switched back on for other songs in the meantime.
-    currentSong.nnModeOffAtSave = !NNModeStore.isEnabled();
+    // Remembers exactly what this song was showing at save time, so
+    // reopening it later defaults to the same thing (see loadIntoForm) —
+    // NN if NN was showing, or the song's first Preferred Key if a letter
+    // key was showing.
+    currentSong.lastDisplayedNN = el('mDisplayKey').value === 'NN';
     // preferredKey is no longer derived from Display Key on save — the
     // meta-bar picker (see keyPickerLetterClick etc.) is the one explicit
     // place that sets it now, so a manual pick there survives regardless of
@@ -2768,6 +2758,7 @@ const App = (() => {
   function handleKeySelectChange(){
     if(!currentSong) return;
     const newKey = el('mDisplayKey').value;
+    updateRomanButtonVisibility();
     if(newKey === liveKey){ updateCapoNote(); dirty=true; updateSaveStatus(); renderPreview(); return; }
 
     if(currentSong.key === 'NN'){
@@ -4335,77 +4326,21 @@ const App = (() => {
     });
   }
 
-  /* ---------------- NN Mode toggle ---------------- */
-  function updateNNModeButton(){
-    const enabled = NNModeStore.isEnabled();
-    const btn = el('btnNNMode');
-    btn.textContent = enabled ? 'NN Mode: ON' : 'NN Mode: OFF';
-    btn.classList.toggle('on', enabled);
-    btn.classList.toggle('off', !enabled);
-  }
-
-  // The RN (Roman numeral) toggle only makes sense as a NN Mode sub-option —
-  // shows/hides it to match, and forces the current song back to arabic
-  // notation (converting any Roman tokens back) if NN Mode gets turned off,
-  // same pattern as the Key dropdown's NN option handling just below.
-  function syncRomanButtonForMode(){
-    const enabled = NNModeStore.isEnabled();
+  // The RN (Roman numeral) toggle only makes sense while Display Key is NN
+  // (Roman numerals and Nashville Numbers are both just notations for the
+  // same key-relative scale degrees — meaningless once you're looking at
+  // literal letter chords) — greys it out (not hidden) to match, so it stays
+  // discoverable rather than mysteriously appearing/disappearing as you play
+  // with Display Key. Forces the current song back to arabic notation
+  // (converting any Roman tokens back) if Display Key moves off NN. Call
+  // after anything that changes Display Key: loadIntoForm, handleKeySelectChange.
+  function updateRomanButtonVisibility(){
+    const isNN = el('mDisplayKey').value === 'NN';
     const btn = el('btnRomanNumerals');
-    btn.classList.toggle('hidden', !enabled);
-    if(!enabled && currentSong && currentSong.notationStyle === 'roman'){
+    btn.disabled = !isNN;
+    if(!isNN && currentSong && currentSong.notationStyle === 'roman'){
       setNotationStyle('arabic');
     }
-  }
-
-  // Shows/hides the "Nashville Numbers (NN)" option in the Key dropdown to match
-  // the current mode. When mode is turned OFF, NN is no longer selectable —
-  // if the current song's key is NN, it's switched to a real key (C) so the
-  // Key selector immediately behaves like a conventional letter transposer.
-  function syncKeyDropdownForMode(){
-    const enabled = NNModeStore.isEnabled();
-    const select = el('mDisplayKey');
-    let nnOption = select.querySelector('option[value="NN"]');
-    if(enabled){
-      if(!nnOption){
-        nnOption = document.createElement('option');
-        nnOption.value = 'NN';
-        nnOption.textContent = 'Nashville #s (NN)';
-        select.insertBefore(nnOption, select.firstChild);
-      }
-    } else {
-      if(nnOption){
-        const wasNN = select.value === 'NN';
-        nnOption.remove();
-        if(wasNN && currentSong){
-          // For a canonical-NN song, storage format must stay 'NN' — only
-          // reflow what's displayed, don't relabel currentSong.key (that
-          // would silently un-mark it as canonical even though its content
-          // is still literally numeric). Falls back through the song's
-          // remembered preferred key before a hardcoded default.
-          const fallbackKey = toDisplayableKey((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C');
-          select.value = fallbackKey;
-          if(currentSong.key === 'NN'){
-            const preferFlat = Transposer.FLAT_KEYS.has(fallbackKey);
-            el('editor').value = NashvilleSystem.contentToLetters(el('editor').value, fallbackKey.replace(/m$/, ''), preferFlat);
-            syncUndoBaseline();
-          } else {
-            currentSong.key = fallbackKey;
-          }
-          liveKey = fallbackKey;
-          originalKey = originalKey === 'NN' ? fallbackKey : originalKey;
-          updateCapoNote();
-          dirty = true; updateSaveStatus(); renderPreview();
-        }
-      }
-    }
-  }
-
-  function toggleNNMode(){
-    NNModeStore.setEnabled(!NNModeStore.isEnabled());
-    updateNNModeButton();
-    syncKeyDropdownForMode();
-    syncRomanButtonForMode();
-    toast(NNModeStore.isEnabled() ? 'Nashville Number mode ON' : 'Nashville Number mode OFF — Key now transposes letter chords directly');
   }
 
   function applySidebarCollapse(collapsed){
@@ -4454,11 +4389,11 @@ const App = (() => {
 
   /* ---------------- Intro popup ---------------- */
   function maybeShowNNIntro(force=false){
-    if(!force && (!NNModeStore.isEnabled() || NNModeStore.introDismissed())) return;
+    if(!force && NNIntroStore.dismissed()) return;
     const backdrop = el('nnIntroBackdrop');
     backdrop.classList.remove('hidden');
     function dismiss(){
-      NNModeStore.dismissIntro();
+      NNIntroStore.dismiss();
       backdrop.classList.add('hidden');
     }
     el('nnIntroDismiss').onclick = dismiss;
@@ -4519,7 +4454,6 @@ const App = (() => {
     el('btnKeyChange').onclick = openKeyChangePopup;
     el('btnVersions').onclick = openVersions;
     el('btnSettings').onclick = openSettings;
-    el('btnNNMode').onclick = toggleNNMode;
     el('btnToggleSidebar').onclick = toggleSidebarCollapse;
     el('btnToggleMeta').onclick = toggleMetaBarCollapse;
     el('btnToggleTags').onclick = toggleTagFilterCollapse;
@@ -4639,9 +4573,7 @@ const App = (() => {
 
   async function init(){
     wire();
-    updateNNModeButton();
-    syncKeyDropdownForMode();
-    syncRomanButtonForMode();
+    updateRomanButtonVisibility();
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
     applySidebarCollapse(SidebarCollapseStore.get());
