@@ -274,7 +274,12 @@ small{color:var(--text-faint);}
 .seg-control button{border:none; border-radius:0; background:var(--bg-input); color:var(--text-dim); padding:5px 10px;}
 .seg-control button + button{border-left:1px solid var(--border);}
 .seg-control button.active{background:#6fe0a0; color:#0d2b1a; font-weight:600;}
-#slideNavControls{gap:6px;}
+/* Cancels .right-controls' margin-left:auto — that push was needed when
+   structBarLyrics was left-aligned, but now the whole bar is already
+   right-justified (see justify-content:flex-end above), so the leftover
+   auto-margin only causes trouble: on a wrapped second line it shoves nav
+   to that line's far right and strands the Theme control alone on the left. */
+#slideNavControls{gap:6px; margin-left:0;}
 #slideNavControls.hidden{display:none;}
 #slideCounter{font-size:12px; color:var(--text-faint); min-width:44px; text-align:center;}
 
