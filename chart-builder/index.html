@@ -1481,12 +1481,32 @@ const Renderer = (() => {
     return `<div class="cs-line"><div class="chord-row">${builtHtml}</div><div class="lyric-row">${escapeHtml(lyricRow) || '&nbsp;'}</div></div>`;
   }
 
+  // A section with an empty body whose label exactly matches (case-
+  // insensitive) an earlier section that DID have content is a repeat
+  // marker — e.g. a second bare "Chorus:" header reprising a chorus already
+  // printed earlier in the chart. Repeats are dropped from the chart body
+  // entirely (no header line, no chords) since the song map badge already
+  // marks where they happen; only a genuinely unique/edited section (a
+  // different label, like "Chorus 2") ever prints its own content.
+  function isRepeatSection(sec, seenLabels){
+    // sec.lines here are already-parsed line objects (see ChordParser.parse),
+    // not raw strings — only the 'blank' type carries no real content.
+    const key = sec.label ? sec.label.trim().toLowerCase() : null;
+    const hasContent = sec.lines.some(l => l.type !== 'blank');
+    if(hasContent){
+      if(key) seenLabels.add(key);
+      return false;
+    }
+    return !!(key && seenLabels.has(key));
+  }
+
   function renderSections(sections, displayKey, capo){
     // Running total of every {Key Change: N} marker encountered so far —
     // persists across section boundaries (a key change isn't scoped to one
     // section) and keeps accumulating until a later marker changes it again.
     let keyChangeSemitones = 0;
-    return sections.map(sec => {
+    const seenLabels = new Set();
+    return sections.filter(sec => !isRepeatSection(sec, seenLabels)).map(sec => {
       // If the section's FIRST content line is chords-only (a lead-in
       // progression, or the entire content for something like a pure-
       // instrumental Outro), render those chords INLINE with the label on
@@ -4562,18 +4582,27 @@ const App = (() => {
   // (paragraph break) starts another one — matches however the song is
   // actually structured to be performed. lyricsContent is already fully
   // stripped (see stripChartToLyrics), so ChordParser.parseSections' own
-  // header-detection works on it directly with nothing left to remove. A
-  // section with no actual lyrics (a pure-instrumental Intro/Outro, or one
-  // that's just a header with nothing under it) is skipped entirely — no
-  // blank slide for it, since there's nothing to display. The section
-  // LABEL itself is kept only as metadata for the UI (slide counter/caption
-  // in Individual view) — never rendered inside the slide box, since that's
-  // the actual exportable content and section names aren't meant to be seen
-  // by the congregation any more than the song-map badges are.
+  // header-detection works on it directly with nothing left to remove.
+  //
+  // A section with no actual lyrics under its header is a REPEAT marker —
+  // e.g. a second bare "Chorus:" header reprising the chorus already written
+  // out earlier — rather than a truly empty section. Repeats reuse the most
+  // recent prior section with the same label (case-insensitive) that did
+  // have lyrics, so the reprise still gets its slide(s) without the lyrics
+  // ever being retyped in the editor or the chart. A label with no earlier
+  // populated match (a genuine one-off instrumental Intro/Outro) still
+  // produces no slide, since there's nothing to fall back to.
+  //
+  // The section LABEL itself is kept only as metadata for the UI (slide
+  // counter/caption in Individual view) — never rendered inside the slide
+  // box, since that's the actual exportable content and section names
+  // aren't meant to be seen by the congregation any more than the song-map
+  // badges are.
   function buildLyricsSlides(){
     if(!currentSong) return [];
     const sections = ChordParser.parseSections(currentSong.lyricsContent || '');
     const slides = [];
+    const paragraphsByLabel = {};
     sections.forEach(sec => {
       const paragraphs = [];
       let current = [];
@@ -4585,7 +4614,15 @@ const App = (() => {
         }
       });
       if(current.length) paragraphs.push(current);
-      paragraphs.forEach(p => slides.push({label: sec.label, lines: p}));
+      const key = sec.label ? sec.label.trim().toLowerCase() : null;
+      let effectiveParagraphs = paragraphs;
+      if(paragraphs.length === 0 && key && paragraphsByLabel[key]){
+        effectiveParagraphs = paragraphsByLabel[key];
+      }
+      if(paragraphs.length > 0 && key){
+        paragraphsByLabel[key] = paragraphs;
+      }
+      effectiveParagraphs.forEach(p => slides.push({label: sec.label, lines: p}));
     });
     return slides;
   }
