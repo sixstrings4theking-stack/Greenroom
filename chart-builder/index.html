@@ -3242,6 +3242,10 @@ const App = (() => {
     popup.querySelector('#cpCustom').addEventListener('keydown', (e) => {
       if(e.key === 'Enter'){ e.preventDefault(); const val = e.target.value.trim(); if(val) cpInsert(val); }
     });
+    // Re-anchor on every render (not just the first) so picking a quality,
+    // toggling the slash-chord bass picker, etc. — anything that changes the
+    // popup's own height — can't make it drift off the chord it's editing.
+    if(cpState.anchor) positionChordPopupAt(cpState.anchor.x, cpState.anchor.top, cpState.anchor.bottom);
   }
 
   function cpUpdatePreview(){
@@ -3308,24 +3312,29 @@ const App = (() => {
     if(e.key === 'Escape') cpClose();
   }
 
-  // Positions the popup near a viewport point, then clamps it so it never
-  // runs off-screen. Shared by both the fresh-insert (click coordinates) and
-  // edit/move (computed caret coordinates) open paths.
-  function positionChordPopupAt(clientX, clientY){
+  // Positions the popup directly below the anchor line (lineTop/lineBottom
+  // are that line's own viewport Y-extent, not the mouse position — see
+  // callers) if it fits there, flipping above only when it doesn't, then
+  // clamps horizontally so it never runs off-screen. Re-run on every
+  // cpRender (via cpState.anchor) so the box stays pinned to the SAME chord
+  // as its content grows/shrinks (picking a quality, toggling the slash-
+  // chord bass picker, ...) instead of drifting from wherever it happened
+  // to render on the previous pass.
+  const CP_GAP = 6;
+  function positionChordPopupAt(anchorX, lineTop, lineBottom){
     const popup = el('chordPopup');
     const margin = 8;
-    let left = clientX, top = clientY;
+    const rect = popup.getBoundingClientRect();
+    const height = rect.height, width = rect.width;
+    const roomBelow = window.innerHeight - lineBottom - CP_GAP - margin;
+    let top = (height <= roomBelow) ? (lineBottom + CP_GAP) : (lineTop - CP_GAP - height);
+    if(top < margin) top = margin;
+    if(top + height > window.innerHeight - margin) top = Math.max(margin, window.innerHeight - margin - height);
+    let left = anchorX;
+    if(left + width > window.innerWidth - margin) left = window.innerWidth - margin - width;
+    if(left < margin) left = margin;
     popup.style.left = left + 'px';
     popup.style.top = top + 'px';
-    requestAnimationFrame(() => {
-      const rect = popup.getBoundingClientRect();
-      if(rect.right > window.innerWidth - margin) left -= (rect.right - (window.innerWidth - margin));
-      if(rect.bottom > window.innerHeight - margin) top -= (rect.bottom - (window.innerHeight - margin));
-      if(left < margin) left = margin;
-      if(top < margin) top = margin;
-      popup.style.left = left + 'px';
-      popup.style.top = top + 'px';
-    });
   }
 
   // Pixel position of a character offset inside a <textarea> — textareas
@@ -3415,9 +3424,9 @@ const App = (() => {
     onEditorInput();
     ta.focus();
     ta.setSelectionRange(newStart, newEnd);
-    cpRender();
     const caret = editorCaretRect(ta, newStart);
-    positionChordPopupAt(caret.left, caret.top + caret.lineHeight + 4);
+    cpState.anchor = { x: caret.left, top: caret.top, bottom: caret.top + caret.lineHeight };
+    cpRender();
   }
 
   function openChordPopupForEdit(tokenMatch, e){
@@ -3438,10 +3447,16 @@ const App = (() => {
       bassRoot: parsed ? parsed.bassRoot : null,
       mainRoot: parsed ? parsed.mainRoot : null
     };
+    // Anchored to the chord token's own position in the text, not the raw
+    // mouse coordinates — a double-click lands anywhere within the token's
+    // width, so mouse Y drifts slightly click to click even on the exact
+    // same chord; anchoring to its actual line keeps the popup landing in
+    // the same place every time.
+    const anchorCaret = editorCaretRect(el('editor'), tokenMatch.start);
+    cpState.anchor = { x: anchorCaret.left, top: anchorCaret.top, bottom: anchorCaret.top + anchorCaret.lineHeight };
     const popup = el('chordPopup');
     popup.classList.remove('hidden');
     cpRender();
-    positionChordPopupAt(e.clientX, e.clientY);
     setTimeout(() => {
       document.addEventListener('mousedown', cpOutsideClick, true);
       document.addEventListener('keydown', cpEscClose, true);
@@ -3491,10 +3506,11 @@ const App = (() => {
       bassRoot: null,
       mainRoot: null
     };
+    const anchorCaret = editorCaretRect(ta, insertIndex);
+    cpState.anchor = { x: anchorCaret.left, top: anchorCaret.top, bottom: anchorCaret.top + anchorCaret.lineHeight };
     const popup = el('chordPopup');
     popup.classList.remove('hidden');
     cpRender();
-    positionChordPopupAt(e.clientX, e.clientY);
     setTimeout(() => {
       document.addEventListener('mousedown', cpOutsideClick, true);
       document.addEventListener('keydown', cpEscClose, true);
