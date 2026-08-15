@@ -239,6 +239,10 @@ small{color:var(--text-faint);}
   display:flex; flex-wrap:wrap; gap:6px; padding:6px 12px; background:var(--bg-panel); border-bottom:1px solid var(--border-soft);
   align-items:center;
 }
+/* Lyrics ribbon has no Insert-Section buttons on the left (structure only
+   ever gets inserted in the chart editor), so its whole control cluster
+   reads better right-justified rather than left-aligned like the chart bar. */
+#structBarLyrics{justify-content:flex-end;}
 #structBar .lbl{font-size:11px; color:var(--text-faint); margin-right:4px; white-space:nowrap;}
 #structBar button{font-size:12px; padding:5px 9px; white-space:nowrap;}
 /* Same purple as Circle of 5ths (.circle-btn), but following this bar's own
