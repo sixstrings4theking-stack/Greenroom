@@ -618,13 +618,13 @@ small{color:var(--text-faint);}
             </div>
             <div id="ccInlineControls" class="cc-inline-controls hidden">
               <div class="cc-btn-group" id="ccMonetizationGroup">
-                <button type="button" data-val="yes" title="Others MAY sell or profit from covers and remixes of this song.">Commercial OK</button>
-                <button type="button" data-val="no" title="Adds NC — others may NOT sell or profit from covers/remixes without your permission.">Non-Commercial</button>
+                <button type="button" data-val="yes" title="Others MAY sell or profit from covers and remixes of this song.">CO</button>
+                <button type="button" data-val="no" title="Adds NC — others may NOT sell or profit from covers/remixes without your permission.">NC</button>
               </div>
               <div class="cc-btn-group hidden" id="ccModificationGroup">
-                <button type="button" data-val="yes_full" title="Others may freely change lyrics, rework the arrangement, or sample this song.">Mods OK</button>
-                <button type="button" data-val="yes_sa" title="Adds SA (ShareAlike) — others may modify it, but their version must carry this exact same license.">ShareAlike</button>
-                <button type="button" data-val="no" title="Adds ND (No Derivatives) — others may not modify, remix, or rearrange this song at all.">No Mods</button>
+                <button type="button" data-val="yes_full" title="Others may freely change lyrics, rework the arrangement, or sample this song.">MO</button>
+                <button type="button" data-val="yes_sa" title="Adds SA (ShareAlike) — others may modify it, but their version must carry this exact same license.">SA</button>
+                <button type="button" data-val="no" title="Adds ND (No Derivatives) — others may not modify, remix, or rearrange this song at all.">NM</button>
               </div>
               <button type="button" id="ccResultBadge" class="cc-result-badge hidden"></button>
             </div>
@@ -1445,8 +1445,12 @@ const Renderer = (() => {
     const field = (song.copyright || '').trim();
     if(mode === 'PD') return 'Public Domain';
     if(mode === 'CC'){
+      // The chart shows the license spelled out ("Creative Commons"), not
+      // abbreviated to "CC", with just the substantive letter modifiers
+      // (NC/SA/ND) appended after it — BY is the CC baseline on every
+      // variant, so it's left off here as redundant rather than shown.
       const cc = computeCCLicense(song.ccLicense);
-      const base = cc ? `Licensed under Creative Commons (${cc.code})` : 'Licensed under Creative Commons';
+      const base = (cc && cc.tags.length) ? `Licensed under Creative Commons ${cc.tags.join('-')}` : 'Licensed under Creative Commons';
       return field ? (base + ': ' + field) : base;
     }
     if(!field) return '';
