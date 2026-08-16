@@ -1439,7 +1439,7 @@ const Renderer = (() => {
   // rather than plain monospace chord text — they're editorial marks, not chords.
   function renderTokenHtml(displayChord){
     if(displayChord.charAt(0) === '*'){
-      return `<sup class="chord-note">${escapeHtml(displayChord.slice(1))}</sup>`;
+      return `<sup class="chord-note">${escapeHtml(displayChord)}</sup>`;
     }
     return escapeHtml(displayChord);
   }
