@@ -193,6 +193,18 @@ small{color:var(--text-faint);}
 #copyrightModeControls button{padding:4px 8px; font-size:11px; line-height:1;}
 #copyrightModeControls button.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
 #copyrightModeControls .copyright-symbol-btn{font-size:19px; font-weight:700; padding:2px 9px;}
+/* CC license picker — appears only when Copyright/Licensing mode is CC
+   (see setCopyrightMode). Reuses the app's general .seg-control shell
+   (same as the Lyrics ribbon's Slide View/Aspect/Theme groups) but with
+   the app's own neutral --accent for the active state instead of that
+   ribbon's mint green, since this section has nothing to do with Lyrics
+   view and shouldn't borrow its branding. */
+.cc-picker{margin-top:8px; padding:8px 10px; border:1px solid var(--border-soft); border-radius:8px; background:var(--bg-input); display:flex; flex-direction:column; gap:8px;}
+.cc-picker-q{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
+.cc-picker-label{font-size:11.5px; color:var(--text-dim);}
+.cc-picker .seg-control button.active{background:var(--accent); color:var(--accent-text); font-weight:600;}
+.cc-picker-result{font-size:12px; color:var(--text-faint); border-top:1px solid var(--border-soft); padding-top:6px; margin-top:2px;}
+.cc-picker-result b{color:var(--text-dim);}
 /* Preferred-key picker (meta bar) — pure metadata, mirrors the chord-popup
    root/accidental button pattern (#chordPopup .cp-root / button.selected)
    rather than inventing new visual language. */
@@ -602,6 +614,24 @@ small{color:var(--text-faint);}
             </div>
             <input id="mCopyright" placeholder="Publisher, year, license details...">
           </div>
+          <div id="ccLicensePicker" class="cc-picker hidden">
+            <div class="cc-picker-q">
+              <span class="cc-picker-label">Allow others to monetize covers/remixes of this song?</span>
+              <div class="seg-control" id="ccMonetizationControl">
+                <button type="button" data-val="yes">Yes</button>
+                <button type="button" data-val="no">No</button>
+              </div>
+            </div>
+            <div class="cc-picker-q">
+              <span class="cc-picker-label">Can others modify it (lyrics, arrangement, samples)?</span>
+              <div class="seg-control" id="ccModificationControl">
+                <button type="button" data-val="yes_full">Yes, fully</button>
+                <button type="button" data-val="yes_sa">Yes, ShareAlike</button>
+                <button type="button" data-val="no">No</button>
+              </div>
+            </div>
+            <div class="cc-picker-result" id="ccPickerResult"></div>
+          </div>
         </div>
         <div class="field"><label>Song CCLI #</label><input id="mCCLI" placeholder="1234567"></div>
         <div class="field"><label>Church CCLI #</label><input id="mChurchCCLI" placeholder="License # (optional)"></div>
@@ -925,6 +955,32 @@ function matchSectionFamily(label){
     }
   }
   return null;
+}
+
+// Resolves the "Musician's Creative Commons License Picker" answers (see
+// the meta bar's #ccLicensePicker) into a concrete CC variant. Returns
+// null until BOTH questions are answered — a song sitting in CC mode with
+// nothing picked yet has no determined license, so callers fall back to
+// the generic "Licensed under Creative Commons" text rather than guessing.
+// tags are pushed NC, then SA-or-ND, which is also the fixed order they're
+// joined in ("CC BY-NC-SA", never "CC BY-SA-NC") — SA and ND can never
+// both appear since they're two answers to the same single question.
+const CC_LICENSE_SUMMARIES = {
+  '': 'Anyone can use, remix, and even sell covers/remixes — they just have to credit you.',
+  'SA': 'Anyone can use, remix, and sell covers/remixes, crediting you — but their version must be released under this same license.',
+  'ND': 'Others can perform, record, and even sell it exactly as written, crediting you — but they can’t change lyrics, arrangement, or remix it.',
+  'NC': 'Anyone can use and remix it non-commercially, crediting you. Selling a cover or remix requires your separate permission.',
+  'NC-SA': 'Anyone can remix it non-commercially, crediting you, if their version carries this same license. No commercial use without your permission.',
+  'NC-ND': 'The most restrictive CC option — others may perform/share it unmodified, non-commercially, with credit. No remixing, no selling.'
+};
+function computeCCLicense(ccLicense){
+  if(!ccLicense || !ccLicense.monetization || !ccLicense.modification) return null;
+  const tags = [];
+  if(ccLicense.monetization === 'no') tags.push('NC');
+  if(ccLicense.modification === 'yes_sa') tags.push('SA');
+  else if(ccLicense.modification === 'no') tags.push('ND');
+  const key = tags.join('-');
+  return { code: 'CC BY' + (tags.length ? '-' + key : ''), tags, summary: CC_LICENSE_SUMMARIES[key] };
 }
 
 // Renders one round section-marker badge as inline SVG — plain black-on-
@@ -1390,7 +1446,11 @@ const Renderer = (() => {
     const mode = song.copyrightMode || '\u00a9';
     const field = (song.copyright || '').trim();
     if(mode === 'PD') return 'Public Domain';
-    if(mode === 'CC') return field ? ('Licensed under Creative Commons: ' + field) : 'Licensed under Creative Commons';
+    if(mode === 'CC'){
+      const cc = computeCCLicense(song.ccLicense);
+      const base = cc ? `Licensed under Creative Commons (${cc.code})` : 'Licensed under Creative Commons';
+      return field ? (base + ': ' + field) : base;
+    }
     if(!field) return '';
     return field.charAt(0) === '\u00a9' ? field : ('\u00a9 ' + field);
   }
@@ -2190,7 +2250,7 @@ const App = (() => {
     // yet, loadIntoForm's default-key logic just shows NN, same as any
     // other song that's never been saved with a letter key showing.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(),
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(),
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
@@ -2207,8 +2267,29 @@ const App = (() => {
       b.classList.toggle('active', b.dataset.mode === mode);
     });
     el('mCopyright').disabled = (mode === 'PD');
+    el('ccLicensePicker').classList.toggle('hidden', mode !== 'CC');
+    if(mode === 'CC') renderCCLicensePicker();
     if(markDirty){ dirty = true; updateSaveStatus(); }
     renderPreview();
+  }
+
+  // Reflects currentSong.ccLicense into the picker's button states and the
+  // live result line (see computeCCLicense) — called whenever CC mode is
+  // shown (setCopyrightMode) or an answer changes.
+  function renderCCLicensePicker(){
+    if(!currentSong) return;
+    const cl = currentSong.ccLicense || { monetization:null, modification:null };
+    document.querySelectorAll('#ccMonetizationControl button').forEach(b => {
+      b.classList.toggle('active', b.dataset.val === cl.monetization);
+    });
+    document.querySelectorAll('#ccModificationControl button').forEach(b => {
+      b.classList.toggle('active', b.dataset.val === cl.modification);
+    });
+    const result = el('ccPickerResult');
+    const cc = computeCCLicense(cl);
+    result.innerHTML = cc
+      ? `<b>${Renderer.escapeHtml(cc.code)}</b> — ${Renderer.escapeHtml(cc.summary)}`
+      : 'Answer both questions above to determine the final license.';
   }
 
   // Converts every chord token in the editor between arabic Nashville
@@ -3755,7 +3836,7 @@ const App = (() => {
     const importedLibraries = normalizeLibraries(libraryName ? [libraryName] : song.libraries);
     const toSave = {
       title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
+      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
       tags: song.tags||[], libraries: importedLibraries, content: importedContent,
       versions: song.versions||[],
       createdAt: Date.now(), updatedAt: Date.now()
@@ -3833,7 +3914,7 @@ const App = (() => {
   function currentSongSnapshot(){
     return {
       title: el('mTitle').value, artist: el('mArtist').value, ccli: el('mCCLI').value,
-      copyright: el('mCopyright').value, copyrightMode: (currentSong && currentSong.copyrightMode) || '©', churchCcli: el('mChurchCCLI').value, key: el('mDisplayKey').value,
+      copyright: el('mCopyright').value, copyrightMode: (currentSong && currentSong.copyrightMode) || '©', ccLicense: (currentSong && currentSong.ccLicense) || {monetization:null, modification:null}, churchCcli: el('mChurchCCLI').value, key: el('mDisplayKey').value,
       notationStyle: (currentSong && currentSong.notationStyle) || 'arabic',
       capo: el('mCapo').value,
       titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
@@ -5098,6 +5179,24 @@ ${versesXml}
     });
     document.querySelectorAll('#copyrightModeControls button').forEach(btn => {
       btn.onclick = () => setCopyrightMode(btn.dataset.mode);
+    });
+    document.querySelectorAll('#ccMonetizationControl button').forEach(btn => {
+      btn.onclick = () => {
+        currentSong.ccLicense = currentSong.ccLicense || {monetization:null, modification:null};
+        currentSong.ccLicense.monetization = btn.dataset.val;
+        renderCCLicensePicker();
+        dirty = true; updateSaveStatus();
+        renderPreview();
+      };
+    });
+    document.querySelectorAll('#ccModificationControl button').forEach(btn => {
+      btn.onclick = () => {
+        currentSong.ccLicense = currentSong.ccLicense || {monetization:null, modification:null};
+        currentSong.ccLicense.modification = btn.dataset.val;
+        renderCCLicensePicker();
+        dirty = true; updateSaveStatus();
+        renderPreview();
+      };
     });
     el('mDisplayKey').addEventListener('change', handleKeySelectChange);
 
