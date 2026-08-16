@@ -65,6 +65,12 @@ small{color:var(--text-faint);}
 .lyrics-btn:hover{background:rgba(111,224,160,.12); border-color:#8de971;}
 .lyrics-btn.active{background:linear-gradient(135deg,#8de971,#4fd68a); color:#0d2b1a; border-color:#6fe0a0;}
 .lyrics-btn.active:hover{filter:brightness(1.05);}
+/* Export flips to the same mint green while Lyrics view is active — its
+   function has changed (OpenLyrics XML from the parsed lyrics view instead
+   of the normal JSON/txt/ChordPro export), so it should read as visibly
+   different, not just have a different result on click. */
+#btnExport.export-lyrics-mode{background:linear-gradient(135deg,#8de971,#4fd68a); color:#0d2b1a; border-color:#6fe0a0; font-weight:600;}
+#btnExport.export-lyrics-mode:hover{filter:brightness(1.05);}
 
 /* Intro popup */
 #nnIntroBackdrop{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:60; display:flex; align-items:center; justify-content:center;}
@@ -3861,6 +3867,140 @@ const App = (() => {
     toast('Exported ' + fmt.toUpperCase());
   }
 
+  // XML-safe escaping for both text content and attribute values — the
+  // same three characters Renderer.escapeHtml handles, plus quotes (needed
+  // wherever this ends up inside a "..." attribute).
+  function xmlEscape(s){
+    return String(s == null ? '' : s)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  const OL_FAMILY_PREFIX = { 'Intro':'i', 'Verse':'v', 'Chorus':'c', 'Bridge':'b', 'Pre-Chorus':'p', 'Tag':'o', 'Interlude':'o', 'Outro':'e' };
+
+  // Maps this song's Lyrics-view sections onto OpenLyrics verse names (see
+  // https://docs.openlyrics.org/en/latest/dataformat.html — lowercase,
+  // single-word, e.g. v1/c2/b) and a verseOrder sequence. Reuses the exact
+  // same repeat convention buildLyricsSlides already relies on: a bare
+  // repeated header (no paragraphs of its own) resolves to whichever
+  // earlier same-labeled section actually defined the content, so a
+  // reprised chorus becomes one <verse> referenced twice in verseOrder,
+  // never a duplicated block — this is what OpenLyrics' verseOrder/verse
+  // split is FOR. A label OpenLyrics has no category for (custom section
+  // names) falls back to the "o" (other) prefix with a running counter —
+  // the one real fidelity loss, since OpenLyrics has no free-text verse
+  // type to preserve the original label in.
+  function buildOpenLyricsVerses(lyricsContent){
+    const sections = ChordParser.parseSections(lyricsContent || '');
+    const verseDefs = [];
+    const verseOrder = [];
+    const nameByLabel = {};
+    const usedNames = new Set();
+    let otherCounter = 0;
+
+    function paragraphsOf(sec){
+      const paragraphs = [];
+      let current = [];
+      (sec.lines || []).forEach(line => {
+        if(line.trim() === ''){ if(current.length){ paragraphs.push(current); current = []; } }
+        else current.push(line);
+      });
+      if(current.length) paragraphs.push(current);
+      return paragraphs;
+    }
+    function uniqueName(base){
+      if(!usedNames.has(base)){ usedNames.add(base); return base; }
+      let n = 2;
+      while(usedNames.has(base + '-' + n)) n++;
+      const name = base + '-' + n;
+      usedNames.add(name);
+      return name;
+    }
+
+    sections.forEach(sec => {
+      if(!sec.label) return;
+      const key = sec.label.trim().toLowerCase();
+      const paragraphs = paragraphsOf(sec);
+      if(paragraphs.length === 0 && nameByLabel[key]){
+        verseOrder.push(nameByLabel[key]); // repeat marker — reuse the earlier definition
+        return;
+      }
+      if(paragraphs.length === 0) return; // genuinely empty (e.g. instrumental-only), nothing to export
+      const match = matchSectionFamily(sec.label);
+      let name;
+      if(match){
+        name = uniqueName((OL_FAMILY_PREFIX[match.family] || 'o') + (match.num || ''));
+      } else {
+        otherCounter++;
+        name = uniqueName('o' + otherCounter);
+      }
+      nameByLabel[key] = name;
+      verseDefs.push({ name, paragraphs });
+      verseOrder.push(name);
+    });
+
+    return { verseDefs, verseOrder };
+  }
+
+  // Builds a full OpenLyrics 0.9 document from the Lyrics view's already-
+  // parsed content — never the raw chart editor text, which carries chord
+  // tokens, chart-markup section headers, and editorial comments the song
+  // leader has already stripped away by the time they're working in Lyrics
+  // view. Each section becomes one <verse>; each paragraph within it
+  // (already a deliberate slide/page break — see stripChartToLyrics /
+  // buildLyricsSlides) becomes its own break="optional" <lines> block, and
+  // individual line breaks become <br/> — so whoever opens this file in
+  // presentation software gets the exact slide boundaries the song leader
+  // already set up, not a re-guess at them.
+  function buildOpenLyricsXml(song, lyricsContent){
+    const { verseDefs, verseOrder } = buildOpenLyricsVerses(lyricsContent);
+
+    const titleXml = `<titles><title>${xmlEscape(song.title || 'Untitled')}</title></titles>`;
+    const authorXml = song.artist ? `<authors><author>${xmlEscape(song.artist)}</author></authors>` : '';
+    const copyrightText = Renderer.buildCopyrightText(song);
+    const copyrightXml = copyrightText ? `<copyright>${xmlEscape(copyrightText)}</copyright>` : '';
+    const ccliNum = parseInt(song.ccli, 10);
+    const ccliXml = (Number.isInteger(ccliNum) && ccliNum > 0) ? `<ccliNo>${ccliNum}</ccliNo>` : '';
+    const realKey = (song.key && song.key !== 'NN') ? song.key : ((song.preferredKeys && song.preferredKeys[0]) || '');
+    const keyXml = realKey ? `<key>${xmlEscape(realKey)}</key>` : '';
+    const verseOrderXml = verseOrder.length ? `<verseOrder>${xmlEscape(verseOrder.join(' '))}</verseOrder>` : '';
+
+    const versesXml = verseDefs.map(v => {
+      const linesBlocks = v.paragraphs.map(p =>
+        `      <lines break="optional">${p.map(l => xmlEscape(l)).join('<br/>')}</lines>`
+      ).join('\n');
+      return `    <verse name="${xmlEscape(v.name)}">\n${linesBlocks}\n    </verse>`;
+    }).join('\n');
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<song xmlns="http://openlyrics.info/namespace/2009/song" version="0.9" createdIn="Chart Builder" modifiedDate="${new Date().toISOString()}">
+  <properties>
+    ${titleXml}
+    ${authorXml}
+    ${copyrightXml}
+    ${ccliXml}
+    ${keyXml}
+    ${verseOrderXml}
+  </properties>
+  <lyrics>
+${versesXml}
+  </lyrics>
+</song>
+`;
+  }
+
+  // Export button's alternate function while Lyrics view is active (see
+  // toggleLyricsOnlyView) — same trigger, different output format,
+  // reflected in the button itself flipping to the Lyrics-view green.
+  function exportOpenLyrics(){
+    if(!currentSong) return;
+    ensureLyricsContentSynced();
+    const snapshot = Object.assign({}, currentSongSnapshot(), { preferredKeys: currentSong.preferredKeys || [] });
+    const xml = buildOpenLyricsXml(snapshot, currentSong.lyricsContent || '');
+    const base = (snapshot.title || 'song').replace(/[^\w\-]+/g,'_');
+    downloadBlob(`${base}.xml`, xml, 'application/xml');
+    toast('Exported OpenLyrics XML');
+  }
+
   /* ---------------- Print / PDF (phrase-aware pagination) ---------------- */
   function buildPrintPages(){
     const song = currentSongSnapshot();
@@ -4520,6 +4660,10 @@ const App = (() => {
     btn.classList.toggle('active', turningOn);
     el('structBarChart').classList.toggle('hidden', turningOn);
     el('structBarLyrics').classList.toggle('hidden', !turningOn);
+    el('btnExport').classList.toggle('export-lyrics-mode', turningOn);
+    el('btnExport').title = turningOn
+      ? 'Export OpenLyrics XML, built from this parsed Lyrics view'
+      : '';
     updateEditorClickHint();
     if(turningOn){
       const regenerated = ensureLyricsContentSynced();
@@ -4555,6 +4699,8 @@ const App = (() => {
     el('editor').readOnly = false;
     el('structBarChart').classList.remove('hidden');
     el('structBarLyrics').classList.add('hidden');
+    el('btnExport').classList.remove('export-lyrics-mode');
+    el('btnExport').title = '';
   }
 
   // Inserts breakStr (a run of '\n's) into currentSong.lyricsContent at
@@ -4910,7 +5056,10 @@ const App = (() => {
       else toast('No supported chart files (.json/.txt/.chordpro/.cho/.pro/.xml) found in that folder');
       e.target.value='';
     };
-    el('btnExport').onclick = exportCurrent;
+    el('btnExport').onclick = () => {
+      if(el('btnLyricsOnly').classList.contains('active')) exportOpenLyrics();
+      else exportCurrent();
+    };
     el('btnPrint').onclick = doPrint;
     el('btnPDF').onclick = doPDF;
     el('btnPP').onclick = openProPresenterMock;
