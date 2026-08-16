@@ -193,18 +193,22 @@ small{color:var(--text-faint);}
 #copyrightModeControls button{padding:4px 8px; font-size:11px; line-height:1;}
 #copyrightModeControls button.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
 #copyrightModeControls .copyright-symbol-btn{font-size:19px; font-weight:700; padding:2px 9px;}
-/* CC license picker — appears only when Copyright/Licensing mode is CC
-   (see setCopyrightMode). Reuses the app's general .seg-control shell
-   (same as the Lyrics ribbon's Slide View/Aspect/Theme groups) but with
-   the app's own neutral --accent for the active state instead of that
-   ribbon's mint green, since this section has nothing to do with Lyrics
-   view and shouldn't borrow its branding. */
-.cc-picker{margin-top:8px; padding:8px 10px; border:1px solid var(--border-soft); border-radius:8px; background:var(--bg-input); display:flex; flex-direction:column; gap:8px;}
-.cc-picker-q{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap;}
-.cc-picker-label{font-size:11.5px; color:var(--text-dim);}
-.cc-picker .seg-control button.active{background:var(--accent); color:var(--accent-text); font-weight:600;}
-.cc-picker-result{font-size:12px; color:var(--text-faint); border-top:1px solid var(--border-soft); padding-top:6px; margin-top:2px;}
-.cc-picker-result b{color:var(--text-dim);}
+/* CC license picker — inline, stacked right after the ©/CC/PD buttons
+   (see setCopyrightMode/renderCCLicensePicker), not a separate panel.
+   Each question's button group is revealed only once the question before
+   it is answered ("Each selection provides you with the next possible
+   selection"), and the mCopyright input's flex:1 (see .copyright-input-row)
+   naturally shrinks to make room as more groups appear — no separate
+   layout math needed. Explanation lives entirely in hover tooltips (native
+   title attributes — the CC button's own title is the full decision tree;
+   every subsequent button's title is what THAT choice specifically allows)
+   rather than visible instructional text, per Matt's "no dropdown box that
+   explains the tree, hover instead" (2026-08-16). */
+.cc-inline-controls{display:flex; align-items:center; gap:5px; flex-shrink:0; flex-wrap:wrap;}
+.cc-btn-group{display:inline-flex; gap:3px;}
+.cc-btn-group button{padding:4px 7px; font-size:11px; line-height:1; white-space:nowrap;}
+.cc-btn-group button.active{background:var(--accent); color:var(--accent-text); font-weight:600;}
+.cc-result-badge{padding:4px 8px; font-size:11px; font-weight:700; line-height:1; white-space:nowrap; background:var(--accent); color:var(--accent-text); border-color:var(--accent); border-radius:10px; cursor:default;}
 /* Preferred-key picker (meta bar) — pure metadata, mirrors the chord-popup
    root/accidental button pattern (#chordPopup .cp-root / button.selected)
    rather than inventing new visual language. */
@@ -609,28 +613,22 @@ small{color:var(--text-faint);}
           <div class="copyright-input-row">
             <div class="copyright-mode-controls" id="copyrightModeControls">
               <button type="button" class="copyright-symbol-btn" data-mode="©" title="Copyright">©</button>
-              <button type="button" data-mode="CC" title="Creative Commons">CC</button>
+              <button type="button" data-mode="CC" title="Creative Commons — a two-step choice:&#10;1) Allow others to monetize covers/remixes? Yes, or No (adds NC).&#10;2) Can others modify it? Fully, ShareAlike (adds SA), or No (adds ND — mutually exclusive with SA).&#10;Result: CC BY, CC BY-NC, CC BY-SA, CC BY-NC-SA, CC BY-ND, or CC BY-NC-ND.">CC</button>
               <button type="button" data-mode="PD" title="Public Domain">PD</button>
             </div>
+            <div id="ccInlineControls" class="cc-inline-controls hidden">
+              <div class="cc-btn-group" id="ccMonetizationGroup">
+                <button type="button" data-val="yes" title="Others MAY sell or profit from covers and remixes of this song.">Commercial OK</button>
+                <button type="button" data-val="no" title="Adds NC — others may NOT sell or profit from covers/remixes without your permission.">Non-Commercial</button>
+              </div>
+              <div class="cc-btn-group hidden" id="ccModificationGroup">
+                <button type="button" data-val="yes_full" title="Others may freely change lyrics, rework the arrangement, or sample this song.">Mods OK</button>
+                <button type="button" data-val="yes_sa" title="Adds SA (ShareAlike) — others may modify it, but their version must carry this exact same license.">ShareAlike</button>
+                <button type="button" data-val="no" title="Adds ND (No Derivatives) — others may not modify, remix, or rearrange this song at all.">No Mods</button>
+              </div>
+              <button type="button" id="ccResultBadge" class="cc-result-badge hidden"></button>
+            </div>
             <input id="mCopyright" placeholder="Publisher, year, license details...">
-          </div>
-          <div id="ccLicensePicker" class="cc-picker hidden">
-            <div class="cc-picker-q">
-              <span class="cc-picker-label">Allow others to monetize covers/remixes of this song?</span>
-              <div class="seg-control" id="ccMonetizationControl">
-                <button type="button" data-val="yes">Yes</button>
-                <button type="button" data-val="no">No</button>
-              </div>
-            </div>
-            <div class="cc-picker-q">
-              <span class="cc-picker-label">Can others modify it (lyrics, arrangement, samples)?</span>
-              <div class="seg-control" id="ccModificationControl">
-                <button type="button" data-val="yes_full">Yes, fully</button>
-                <button type="button" data-val="yes_sa">Yes, ShareAlike</button>
-                <button type="button" data-val="no">No</button>
-              </div>
-            </div>
-            <div class="cc-picker-result" id="ccPickerResult"></div>
           </div>
         </div>
         <div class="field"><label>Song CCLI #</label><input id="mCCLI" placeholder="1234567"></div>
@@ -958,7 +956,7 @@ function matchSectionFamily(label){
 }
 
 // Resolves the "Musician's Creative Commons License Picker" answers (see
-// the meta bar's #ccLicensePicker) into a concrete CC variant. Returns
+// the meta bar's #ccInlineControls) into a concrete CC variant. Returns
 // null until BOTH questions are answered — a song sitting in CC mode with
 // nothing picked yet has no determined license, so callers fall back to
 // the generic "Licensed under Creative Commons" text rather than guessing.
@@ -2267,29 +2265,36 @@ const App = (() => {
       b.classList.toggle('active', b.dataset.mode === mode);
     });
     el('mCopyright').disabled = (mode === 'PD');
-    el('ccLicensePicker').classList.toggle('hidden', mode !== 'CC');
+    el('ccInlineControls').classList.toggle('hidden', mode !== 'CC');
     if(mode === 'CC') renderCCLicensePicker();
     if(markDirty){ dirty = true; updateSaveStatus(); }
     renderPreview();
   }
 
-  // Reflects currentSong.ccLicense into the picker's button states and the
-  // live result line (see computeCCLicense) — called whenever CC mode is
-  // shown (setCopyrightMode) or an answer changes.
+  // Reflects currentSong.ccLicense into the picker's button states, reveals
+  // each subsequent button group only once the question before it is
+  // answered, and shows the resolved-license badge once both are (see
+  // computeCCLicense). No visible explanatory text anywhere here — the CC
+  // button's own hover title carries the full tree, and every button below
+  // it hovers to explain what THAT specific choice allows (2026-08-16).
+  // Called whenever CC mode is shown (setCopyrightMode) or an answer changes.
   function renderCCLicensePicker(){
     if(!currentSong) return;
     const cl = currentSong.ccLicense || { monetization:null, modification:null };
-    document.querySelectorAll('#ccMonetizationControl button').forEach(b => {
+    document.querySelectorAll('#ccMonetizationGroup button').forEach(b => {
       b.classList.toggle('active', b.dataset.val === cl.monetization);
     });
-    document.querySelectorAll('#ccModificationControl button').forEach(b => {
+    document.querySelectorAll('#ccModificationGroup button').forEach(b => {
       b.classList.toggle('active', b.dataset.val === cl.modification);
     });
-    const result = el('ccPickerResult');
+    el('ccModificationGroup').classList.toggle('hidden', !cl.monetization);
+    const badge = el('ccResultBadge');
     const cc = computeCCLicense(cl);
-    result.innerHTML = cc
-      ? `<b>${Renderer.escapeHtml(cc.code)}</b> — ${Renderer.escapeHtml(cc.summary)}`
-      : 'Answer both questions above to determine the final license.';
+    badge.classList.toggle('hidden', !cc);
+    if(cc){
+      badge.textContent = cc.code;
+      badge.title = cc.summary;
+    }
   }
 
   // Converts every chord token in the editor between arabic Nashville
@@ -5180,7 +5185,7 @@ ${versesXml}
     document.querySelectorAll('#copyrightModeControls button').forEach(btn => {
       btn.onclick = () => setCopyrightMode(btn.dataset.mode);
     });
-    document.querySelectorAll('#ccMonetizationControl button').forEach(btn => {
+    document.querySelectorAll('#ccMonetizationGroup button').forEach(btn => {
       btn.onclick = () => {
         currentSong.ccLicense = currentSong.ccLicense || {monetization:null, modification:null};
         currentSong.ccLicense.monetization = btn.dataset.val;
@@ -5189,7 +5194,7 @@ ${versesXml}
         renderPreview();
       };
     });
-    document.querySelectorAll('#ccModificationControl button').forEach(btn => {
+    document.querySelectorAll('#ccModificationGroup button').forEach(btn => {
       btn.onclick = () => {
         currentSong.ccLicense = currentSong.ccLicense || {monetization:null, modification:null};
         currentSong.ccLicense.modification = btn.dataset.val;
