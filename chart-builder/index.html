@@ -2303,6 +2303,10 @@ const App = (() => {
     stagedKey = {letter:null, accidental:'', minor:false};
     renderPreferredKeyPicker();
     renderPreferredKeyChips();
+    // This song's own saved zoom (or the browser default, for a song that
+    // hasn't set one yet) — see setFontScale/currentZoomPct.
+    FontScaleStore.apply(currentZoomPct());
+    updateFontScaleLabel();
     renderPreview();
     renderParseStatus();
     updateDynamicSectionButtons();
@@ -4846,13 +4850,18 @@ const App = (() => {
     backdrop.addEventListener('click', (e) => { if(e.target === backdrop) dismiss(); });
   }
 
+  // The zoom actually in effect right now: the current song's own saved
+  // previewZoom if it has one, else the browser-wide FontScaleStore default
+  // (used for brand-new/legacy songs that haven't set their own yet).
+  function currentZoomPct(){
+    return (currentSong && currentSong.previewZoom) || FontScaleStore.get();
+  }
   // Chart text-size control — shared between the Live Preview pane-head
-  // stepper and the Settings drawer slider so either one stays in sync with
-  // FontScaleStore no matter which UI last changed it. Re-renders the
-  // preview on every change since pagination is measured post-scaling and
-  // can shift page breaks.
+  // stepper and the Settings drawer slider so either one stays in sync no
+  // matter which UI last changed it. Re-renders the preview on every change
+  // since pagination is measured post-scaling and can shift page breaks.
   function updateFontScaleLabel(){
-    const pct = FontScaleStore.get();
+    const pct = currentZoomPct();
     const paneLabel = el('fontScaleValue');
     if(paneLabel) paneLabel.textContent = pct + '%';
     const settingsLabel = document.getElementById('settingsFontScaleValue');
@@ -4860,14 +4869,24 @@ const App = (() => {
     const settingsSlider = document.getElementById('prefFontScale');
     if(settingsSlider) settingsSlider.value = pct;
   }
+  // Saved onto the song itself (previewZoom), not just the browser-wide
+  // default — so when the Greenroom parent app opens this chart, it renders
+  // at the zoom this song was actually framed at, without depending on a
+  // generated PDF to get the sizing right. FontScaleStore is still updated
+  // too, as the starting point for songs that haven't set their own zoom.
   function setFontScale(pct){
     const clamped = Math.max(FontScaleStore.MIN_PCT, Math.min(FontScaleStore.MAX_PCT, pct));
     FontScaleStore.set(clamped);
+    if(currentSong){
+      currentSong.previewZoom = clamped;
+      dirty = true;
+      updateSaveStatus();
+    }
     FontScaleStore.apply(clamped);
     updateFontScaleLabel();
     renderPreview();
   }
-  function bumpFontScale(delta){ setFontScale(FontScaleStore.get() + delta); }
+  function bumpFontScale(delta){ setFontScale(currentZoomPct() + delta); }
 
   /* ---------------- Wiring ---------------- */
   function wire(){
