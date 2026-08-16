@@ -5070,12 +5070,14 @@ const App = (() => {
     await refreshLibrary();
     await seedDemoSongsIfNeeded();
     // ?song=<id> deep link — how the Greenroom parent app opens a specific
-    // chart (from a service plan or the song library) straight into the editor.
-    // Falls through to the normal "most recent song" behaviour if the id isn't
-    // present or no longer exists.
+    // chart (from a service plan or the song library) straight into the
+    // editor. Absent that, every load opens the blank instructional New
+    // Song rather than auto-selecting the most recently edited song — the
+    // library (Romans 11, plus anything a visitor has saved) is still right
+    // there in the sidebar to click into, this just keeps the instructional
+    // starter as the thing everyone actually lands on.
     const requestedId = Number(new URLSearchParams(location.search).get('song'));
     if(requestedId && songs.some(s => s.id === requestedId)){ selectSong(requestedId); }
-    else if(songs.length){ selectSong(songs[0].id); }
     else { newSong(); }
     maybeShowNNIntro();
   }
