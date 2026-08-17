@@ -194,17 +194,15 @@ small{color:var(--text-faint);}
 #copyrightModeControls button.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
 #copyrightModeControls .copyright-symbol-btn{font-size:19px; font-weight:700; padding:2px 9px;}
 /* CC license picker — inline, stacked right after the ©/CC/PD buttons
-   (see setCopyrightMode/renderCCLicensePicker), not a separate panel, and
-   only ONE question's button group is ever visible at a time (never a
-   growing chain) — answering one hides it and reveals the next, and once
-   both are answered BOTH hide, since the result already shows on the
-   chart itself and doesn't need to also linger here ("the selections are
-   self evident" — 2026-08-16). Clicking the (still-active) CC button again
-   resets the answers and re-opens the picker to redo them. Explanation
-   lives entirely in hover tooltips (native title attributes — the CC
-   button's own title is the full decision tree; every subsequent button's
-   title is what THAT choice specifically allows) rather than visible
-   instructional text. */
+   (see setCopyrightMode/renderCCLicensePicker), not a separate panel.
+   Monetization shows as soon as CC mode is on; modification reveals once
+   monetization is answered, and both then stay visible with the picked
+   button highlighted — no collapsing away, no separate result-code badge,
+   since the resolved license text only needs to show on the chart itself
+   (buildCopyrightText), not duplicated here. Explanation lives entirely in
+   hover tooltips (native title attributes — the CC button's own title is
+   the full decision tree; every subsequent button's title is what THAT
+   choice specifically allows) rather than visible instructional text. */
 .cc-inline-controls{display:flex; align-items:center; gap:5px; flex-shrink:0; flex-wrap:wrap;}
 .cc-btn-group{display:inline-flex; gap:3px;}
 .cc-btn-group button{padding:4px 7px; font-size:11px; line-height:1; white-space:nowrap;}
@@ -2066,7 +2064,6 @@ const App = (() => {
   let activeLibraryFilters = new Set(); // library filter: song must be in at least one selected Library
   let undoStack = [], redoStack = [];
   let undoTimer = null;
-  let ccPickerExpanded = false; // CC license picker's question chain is showing (see renderCCLicensePicker) — collapses once both answered
 
   const el = id => document.getElementById(id);
 
@@ -2270,25 +2267,20 @@ const App = (() => {
     });
     el('mCopyright').disabled = (mode === 'PD');
     el('ccInlineControls').classList.toggle('hidden', mode !== 'CC');
-    if(mode === 'CC'){
-      // A song that already has a full answer starts collapsed (the chart
-      // already shows it — nothing to ask); one that doesn't starts expanded.
-      ccPickerExpanded = !computeCCLicense(currentSong.ccLicense);
-      renderCCLicensePicker();
-    }
+    if(mode === 'CC') renderCCLicensePicker();
     if(markDirty){ dirty = true; updateSaveStatus(); }
     renderPreview();
   }
 
-  // Reflects currentSong.ccLicense into the picker's button states. Only
-  // ONE question's button group is ever visible at a time — never a
-  // growing chain — and once both are answered, both hide: the result
-  // already shows on the chart's own copyright line (buildCopyrightText),
-  // so it doesn't need to also linger here ("the selections are self
-  // evident" — 2026-08-16). No visible explanatory text anywhere in this
-  // row either — the CC button's own hover title carries the full
-  // decision tree, and every button below it hovers to explain what THAT
-  // specific choice allows. Called whenever CC mode is shown
+  // Reflects currentSong.ccLicense into the picker's button states.
+  // Monetization is visible as soon as CC mode is on; modification reveals
+  // once monetization is answered and then both stay visible, highlighted
+  // to show what's picked — no collapsing away, no separate result badge.
+  // The chart's own copyright line (buildCopyrightText) is the one place
+  // the resolved license text itself shows; explanation of what each
+  // button means lives entirely in hover tooltips (the CC button's own
+  // title is the full decision tree, every button below it explains what
+  // THAT choice specifically allows). Called whenever CC mode is shown
   // (setCopyrightMode) or an answer changes.
   function renderCCLicensePicker(){
     if(!currentSong) return;
@@ -2299,11 +2291,7 @@ const App = (() => {
     document.querySelectorAll('#ccModificationGroup button').forEach(b => {
       b.classList.toggle('active', b.dataset.val === cl.modification);
     });
-    if(computeCCLicense(cl)) ccPickerExpanded = false; // just became complete — collapse immediately
-    const showMonetization = ccPickerExpanded && !cl.monetization;
-    const showModification = ccPickerExpanded && !!cl.monetization && !cl.modification;
-    el('ccMonetizationGroup').classList.toggle('hidden', !showMonetization);
-    el('ccModificationGroup').classList.toggle('hidden', !showModification);
+    el('ccModificationGroup').classList.toggle('hidden', !cl.monetization);
   }
 
   // Converts every chord token in the editor between arabic Nashville
@@ -5192,21 +5180,7 @@ ${versesXml}
       btn.onclick = () => setTitleAlign(btn.dataset.align);
     });
     document.querySelectorAll('#copyrightModeControls button').forEach(btn => {
-      btn.onclick = () => {
-        // Re-clicking CC while it's already the active mode re-opens the
-        // picker to redo the answers, since a completed answer collapses
-        // out of view (see renderCCLicensePicker) — this is the only re-
-        // entry point back into it.
-        if(btn.dataset.mode === 'CC' && currentSong && currentSong.copyrightMode === 'CC'){
-          currentSong.ccLicense = { monetization:null, modification:null };
-          ccPickerExpanded = true;
-          dirty = true; updateSaveStatus();
-          renderCCLicensePicker();
-          renderPreview();
-          return;
-        }
-        setCopyrightMode(btn.dataset.mode);
-      };
+      btn.onclick = () => setCopyrightMode(btn.dataset.mode);
     });
     document.querySelectorAll('#ccMonetizationGroup button').forEach(btn => {
       btn.onclick = () => {
