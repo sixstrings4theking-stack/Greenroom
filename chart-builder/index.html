@@ -526,14 +526,13 @@ small{color:var(--text-faint);}
 .slb-entry .slb-remove{flex-shrink:0; padding:2px 8px; font-size:12px;}
 .slb-set-list.drag-end-hint{box-shadow:inset 0 -3px 0 0 #79c2ff;}
 
-/* Lyrics export format picker — small centered modal shown whenever a
-   lyrics export is engaged (the Lyrics view's Export button, or the Set
-   List Builder's Export Lyrics), offering the output format. Sits above
-   the Set List modal (z-index 55) since it can be launched from inside it.
-   OpenLyrics is the one working option today; ProPresenter and PowerPoint
-   are visible-but-disabled placeholders (grayed with a "soon" chip, same
-   self-evident-not-hidden convention as the RN button) until each gets
-   built out. */
+/* Export format picker (openFormatPicker) — small centered modal shared by
+   every export path: the Lyrics view's Export / Set List Builder's Export
+   Lyrics (OpenLyrics + placeholders) and the chart-mode Export button
+   (JSON + placeholders). Sits above the Set List modal (z-index 55) since
+   it can be launched from inside it. Not-yet-built formats render as
+   visible-but-disabled options grayed with a "soon" chip — same
+   self-evident-not-hidden convention as the RN button. */
 .lxp-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:65; display:flex; align-items:center; justify-content:center;}
 .lxp-modal{background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; width:min(400px, 92vw); box-shadow:0 12px 40px rgba(0,0,0,.5); padding:14px 16px 16px;}
 .lxp-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
@@ -585,11 +584,6 @@ small{color:var(--text-faint);}
     <input type="file" id="fileImport" accept=".json,.txt,.chordpro,.cho,.pro,.xml" multiple class="hidden">
     <button id="btnImportFolder" title="Import every chart file in a folder">Import Folder</button>
     <input type="file" id="folderImport" webkitdirectory directory multiple class="hidden">
-    <select id="exportFormat">
-      <option value="json">JSON (.json)</option>
-      <option value="txt">Chords-over-Lyrics (.txt)</option>
-      <option value="chordpro">ChordPro (.cho)</option>
-    </select>
     <button id="btnExport">Export</button>
     <button id="btnPDF">PDF</button>
     <button id="btnPrint">Print</button>
@@ -4016,10 +4010,14 @@ const App = (() => {
     URL.revokeObjectURL(url);
   }
 
-  function exportCurrent(){
+  // fmt comes from the chart export picker (see openChartExportPicker) —
+  // the old topbar format dropdown is gone. The txt/chordpro branches (and
+  // their IO converters) are kept intact but currently unreachable from the
+  // UI: the picker lists them as disabled "soon" options until each gets
+  // its own validation pass.
+  function exportCurrent(fmt){
     if(!currentSong) return;
     const song = currentSongSnapshot();
-    const fmt = el('exportFormat').value;
     const base = (song.title || 'song').replace(/[^\w\-]+/g,'_');
     if(fmt === 'json'){
       downloadBlob(`${base}.json`, JSON.stringify(song, null, 2), 'application/json');
@@ -4503,34 +4501,53 @@ ${versesXml}
     toast('Set list PDF exported');
   }
 
-  // Format picker shown whenever a lyrics export is engaged — from the
-  // Lyrics view's Export button (single song) or the Set List Builder's
-  // Export Lyrics (whole set). runOpenLyrics is whichever of those two
-  // actions should fire if the working format is chosen; ProPresenter and
-  // PowerPoint are disabled placeholders until each is built out.
-  function openLyricsExportPicker(runOpenLyrics){
+  // Generic format-picker modal (the .lxp-* styles) shared by every export
+  // path. options = [{name, desc, run}]; an option WITHOUT a run function is
+  // a visible-but-disabled "soon" placeholder — grayed, not hidden, same
+  // self-evident convention as the RN button.
+  function openFormatPicker(title, options){
     const backdrop = document.createElement('div');
     backdrop.className = 'lxp-backdrop';
     backdrop.innerHTML = `
       <div class="lxp-modal">
-        <div class="lxp-head"><h3>Export Lyrics As…</h3><button type="button" class="icon" id="lxpClose">✕</button></div>
-        <button type="button" class="lxp-option" id="lxpOpenLyrics">
-          <span class="lxp-name">OpenLyrics — XML</span>
-          <span class="lxp-desc">The open worship-song XML standard (openlyrics.org). Imports into OpenLP and other presentation software.</span>
-        </button>
-        <button type="button" class="lxp-option" disabled title="Not built yet — coming soon">
-          <span class="lxp-name">ProPresenter<span class="lxp-soon">soon</span></span>
-          <span class="lxp-desc">Native ProPresenter presentation file.</span>
-        </button>
-        <button type="button" class="lxp-option" disabled title="Not built yet — coming soon">
-          <span class="lxp-name">PowerPoint<span class="lxp-soon">soon</span></span>
-          <span class="lxp-desc">Slide deck (.pptx), one slide per lyric block.</span>
-        </button>
+        <div class="lxp-head"><h3>${Renderer.escapeHtml(title)}</h3><button type="button" class="icon" id="lxpClose">✕</button></div>
+        ${options.map((o, i) => `
+          <button type="button" class="lxp-option" data-i="${i}" ${o.run ? '' : 'disabled title="Not built yet — coming soon"'}>
+            <span class="lxp-name">${Renderer.escapeHtml(o.name)}${o.run ? '' : '<span class="lxp-soon">soon</span>'}</span>
+            <span class="lxp-desc">${Renderer.escapeHtml(o.desc)}</span>
+          </button>`).join('')}
       </div>`;
     document.body.appendChild(backdrop);
     backdrop.addEventListener('click', e => { if(e.target === backdrop) backdrop.remove(); });
     backdrop.querySelector('#lxpClose').onclick = () => backdrop.remove();
-    backdrop.querySelector('#lxpOpenLyrics').onclick = () => { backdrop.remove(); runOpenLyrics(); };
+    backdrop.querySelectorAll('.lxp-option:not([disabled])').forEach(btn => {
+      btn.onclick = () => { backdrop.remove(); options[parseInt(btn.dataset.i, 10)].run(); };
+    });
+  }
+
+  // Shown whenever a lyrics export is engaged — from the Lyrics view's
+  // Export button (single song) or the Set List Builder's Export Lyrics
+  // (whole set). runOpenLyrics is whichever of those two actions should
+  // fire if the working format is chosen.
+  function openLyricsExportPicker(runOpenLyrics){
+    openFormatPicker('Export Lyrics As…', [
+      {name:'OpenLyrics — XML', desc:'The open worship-song XML standard (openlyrics.org). Imports into OpenLP and other presentation software.', run: runOpenLyrics},
+      {name:'ProPresenter', desc:'Native ProPresenter presentation file.'},
+      {name:'PowerPoint', desc:'Slide deck (.pptx), one slide per lyric block.'}
+    ]);
+  }
+
+  // Shown by the topbar Export button in normal chart mode (the old format
+  // dropdown next to it is gone). JSON is the working option; the txt and
+  // ChordPro exporters still exist in IO but are gated behind "soon" until
+  // each gets its own validation pass.
+  function openChartExportPicker(){
+    if(!currentSong){ toast('No song loaded'); return; }
+    openFormatPicker('Export Chart As…', [
+      {name:'JSON — Chart Builder file', desc:'This app\'s own full-fidelity format: the whole song, re-importable exactly. The right choice for backups or moving songs between browsers.', run: () => exportCurrent('json')},
+      {name:'Chords-over-Lyrics — .txt', desc:'Plain text with chords above each lyric line, like a handed-out chart.'},
+      {name:'ChordPro — .cho', desc:'The standard [G]bracketed format most other chart software reads.'}
+    ]);
   }
 
   // Read-only twin of ensureLyricsContentSynced for songs that AREN'T open
@@ -5533,7 +5550,7 @@ ${versesXml}
     };
     el('btnExport').onclick = () => {
       if(el('btnLyricsOnly').classList.contains('active')) openLyricsExportPicker(exportOpenLyrics);
-      else exportCurrent();
+      else openChartExportPicker();
     };
     el('btnPrint').onclick = doPrint;
     el('btnPDF').onclick = doPDF;
