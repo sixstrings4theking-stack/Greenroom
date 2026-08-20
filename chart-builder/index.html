@@ -4240,6 +4240,7 @@ ${versesXml}
           <h3>Set List Builder</h3>
           <div class="slb-actions">
             <button type="button" id="slbClear" class="ghost" title="Remove every song from the set">Clear</button>
+            <button type="button" id="slbExportLyrics" class="lyrics-btn" title="Export each song's lyrics as an OpenLyrics XML file (one file per song, numbered in set order) — the same format as the Lyrics view's Export">Export Lyrics</button>
             <button type="button" id="slbPrint" title="Print the whole set in order, each song in its selected key/capo">Print</button>
             <button type="button" id="slbPDF" title="Export the whole set as one PDF, each song in its selected key/capo">PDF</button>
             <button type="button" id="slbClose" class="icon" title="Close (the set is kept for next time)">✕</button>
@@ -4261,6 +4262,7 @@ ${versesXml}
     backdrop.querySelector('#slbClear').onclick = () => { setList = []; slbSave(); renderSlbSet(backdrop); };
     backdrop.querySelector('#slbPrint').onclick = setListPrint;
     backdrop.querySelector('#slbPDF').onclick = setListPDF;
+    backdrop.querySelector('#slbExportLyrics').onclick = setListExportLyrics;
     backdrop.querySelector('#slbSearch').addEventListener('input', () => renderSlbLibrary(backdrop));
     wireSlbSetPane(backdrop);
     renderSlbLibrary(backdrop);
@@ -4461,6 +4463,47 @@ ${versesXml}
     pdf.save(`Set_List_${new Date().toISOString().slice(0,10)}.pdf`);
     area.classList.add('hidden');
     toast('Set list PDF exported');
+  }
+
+  // Read-only twin of ensureLyricsContentSynced for songs that AREN'T open
+  // in the editor: a stored song's hand-parsed lyricsContent (line/paragraph
+  // breaks authored in Lyrics view) is used as long as its snapshot still
+  // matches the chart; a stale or never-derived one falls back to a fresh
+  // strip of the chart. Never mutates or persists anything.
+  function lyricsContentFor(song){
+    const fresh = stripChartToLyrics(song.content || '');
+    if(song.lyricsContent != null && song.lyricsSourceSnapshot === fresh) return song.lyricsContent;
+    return fresh;
+  }
+
+  // OpenLyrics is strictly one <song> per document, so a set exports as one
+  // numbered .xml per entry (01_, 02_, ... — set order preserved in the
+  // filenames) rather than a single combined file. Each file is built by the
+  // same buildOpenLyricsXml the Lyrics view's Export uses, from the same
+  // hand-parsed lyrics source; the entry's picked key rides along as the
+  // <key> property (an NN entry falls back to the song's first Preferred
+  // Key, matching the single-song export). Entries whose songs have no
+  // lyric content are skipped — OpenLyrics requires at least one verse.
+  // Downloads are staggered slightly so the browser doesn't drop any; it
+  // may still ask once for multi-file permission.
+  async function setListExportLyrics(){
+    if(setList.length === 0){ toast('The set list is empty'); return; }
+    let exported = 0, skipped = 0;
+    for(let i = 0; i < setList.length; i++){
+      const entry = setList[i];
+      const stored = songs.find(s => s.id === entry.songId);
+      if(!stored){ skipped++; continue; }
+      const lyrics = lyricsContentFor(stored);
+      if(buildOpenLyricsVerses(lyrics).verseDefs.length === 0){ skipped++; continue; }
+      const xml = buildOpenLyricsXml(Object.assign({}, stored, { key: entry.key || 'NN' }), lyrics);
+      const base = `${String(i+1).padStart(2,'0')}_${(stored.title || 'song').replace(/[^\w\-]+/g,'_')}`;
+      downloadBlob(`${base}.xml`, xml, 'application/xml');
+      exported++;
+      if(i < setList.length - 1) await new Promise(r => setTimeout(r, 200));
+    }
+    toast(skipped
+      ? `Exported ${exported} lyrics file${exported===1?'':'s'} (${skipped} skipped — no lyrics)`
+      : `Exported ${exported} lyrics file${exported===1?'':'s'}`);
   }
 
   /* ---------------- Drawers: Settings / ProPresenter mock / Versions ---------------- */
