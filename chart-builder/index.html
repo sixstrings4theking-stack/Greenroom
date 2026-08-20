@@ -497,6 +497,15 @@ small{color:var(--text-faint);}
    the modal (.drag-before / .drag-end-hint below) share it. */
 #btnSetList{color:#79c2ff; border-color:#79c2ff; font-weight:600;}
 #btnSetList:hover{border-color:#a5d4ff; background:rgba(121,194,255,.12);}
+/* Download Software — yellow, same outline-button family as the purple
+   Circle of 5ths / mint Lyrics / blue Set List (the COF dominant-wedge
+   yellow). .local-copy greys it in downloaded copies (see init /
+   WEB_HOSTED_COPY) — visually muted but deliberately still clickable,
+   kept functional for testing. */
+#btnDownloadApp{color:#e8b45a; border-color:#e8b45a; font-weight:600;}
+#btnDownloadApp:hover{border-color:#f2cd7e; background:rgba(232,180,90,.1);}
+#btnDownloadApp.local-copy{opacity:.45; color:var(--text-faint); border-color:var(--border); font-weight:400;}
+#btnDownloadApp.local-copy:hover{background:var(--bg-input); border-color:var(--border);}
 .slb-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:55; display:flex; align-items:center; justify-content:center;}
 .slb-modal{background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; width:min(1060px, 94vw); height:min(700px, 90vh); box-shadow:0 12px 40px rgba(0,0,0,.5); display:flex; flex-direction:column; overflow:hidden;}
 .slb-head{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border-soft); flex-shrink:0;}
@@ -917,8 +926,9 @@ const ChordSpacingStore = (() => {
 
 // True in the web-hosted parent copy of this file; the Download Software
 // button's save routine rewrites this one line to false in the copy it
-// hands out, and init() hides the button whenever it's false — so local
-// copies never show a download button for something they already are.
+// hands out. init() greys the button out whenever it's false (a local
+// copy doesn't need to download what it already is) — deliberately still
+// clickable for now, kept functional for testing.
 const WEB_HOSTED_COPY = true;
 
 // The church's own CCLI license number (Settings > Church CCLI License
@@ -4605,13 +4615,12 @@ ${versesXml}
     ]);
   }
 
-  // Download Software (web-hosted copies only — see WEB_HOSTED_COPY):
-  // explains what a local copy is, then Proceed fetches this page's own
-  // source, flips the WEB_HOSTED_COPY flag to false in the text (so the
-  // downloaded copy hides this button — it IS the local copy), and saves
-  // it as ChartBuilder.html. The needle is built by concatenation so this
-  // function's own source can never match it; the flag's declaration line
-  // is the only contiguous occurrence in the file.
+  // Download Software: explains what a local copy is, then Proceed fetches
+  // this page's own source, flips the WEB_HOSTED_COPY flag to false in the
+  // text (the downloaded copy greys this button out — it IS the local
+  // copy), and saves it as ChartBuilder.html. The needle is built by
+  // concatenation so this function's own source can never match it; the
+  // flag's declaration line is the only contiguous occurrence in the file.
   function openDownloadAppPopup(){
     const backdrop = document.createElement('div');
     backdrop.className = 'lxp-backdrop';
@@ -5849,14 +5858,12 @@ ${versesXml}
 
   async function init(){
     wire();
-    // Local (downloaded) copies hide the Download Software button — they
-    // already ARE the download. Its group carried the left divider next to
-    // Set List Builder, so that divider moves onto the Set List group.
+    // Local (downloaded) copies grey the Download Software button out —
+    // they already ARE the download — but it stays clickable for now,
+    // deliberately kept functional for testing.
     if(!WEB_HOSTED_COPY){
-      el('downloadAppGroup').classList.add('hidden');
-      const slbGroup = el('btnSetList').closest('.tb-group');
-      slbGroup.style.borderLeft = '1px solid var(--border-soft)';
-      slbGroup.style.paddingLeft = '10px';
+      el('btnDownloadApp').classList.add('local-copy');
+      el('btnDownloadApp').title = 'This is already a local copy — still clickable for testing';
     }
     updateEditorClickHint();
     updateRomanButtonVisibility();
