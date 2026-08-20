@@ -56,12 +56,12 @@ small{color:var(--text-faint);}
 .tb-group:last-child{border-right:none;}
 #topbar .spacer{flex:1;}
 /* The Save button IS the save-state indicator (no separate status text):
-   quiet/neutral "Save" when everything's saved, lighting up amber with the
-   label "Unsaved" when there are changes to save — amber matching the
-   dirty-state color the old text indicator already used. min-width keeps
-   the toolbar from jiggling as the label flips between the two words. */
+   quiet/neutral "Save" when everything's saved, lighting up in the app's
+   muted red (--danger, the existing palette rose) with the label "Unsaved"
+   when there are changes to save. min-width keeps the toolbar from
+   jiggling as the label flips between the two words. */
 #btnSave{min-width:76px;}
-#btnSave.unsaved{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+#btnSave.unsaved{background:var(--danger); color:#2a0e14; border-color:var(--danger); font-weight:600;}
 #btnSave.unsaved:hover{filter:brightness(1.08);}
 .circle-btn{background:linear-gradient(135deg,#8b6ef2,#6a4fd8); color:#fff; border:1px solid #7a5ce8; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
 .circle-btn:hover{filter:brightness(1.1); border-color:#8b6ef2;}
