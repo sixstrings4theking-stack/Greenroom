@@ -544,6 +544,10 @@ small{color:var(--text-faint);}
 .lxp-name{display:block; font-weight:700; font-size:13px; margin-bottom:2px;}
 .lxp-desc{display:block; font-size:11.5px; color:var(--text-faint); line-height:1.4;}
 .lxp-soon{font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--accent); border:1px solid var(--accent-dim); border-radius:8px; padding:1px 6px; margin-left:6px;}
+/* Prose + action row for info-style uses of the .lxp-modal shell (the
+   Download Software popup) — pickers have no <p>/actions, so these are inert there. */
+.lxp-modal p{font-size:12.5px; color:var(--text-dim); line-height:1.55; margin:0 0 10px;}
+.lxp-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:4px;}
 
 /* PRINT — A4, fixed 0.25in margins */
 @page{ size: A4; margin: 0.25in; }
@@ -582,7 +586,10 @@ small{color:var(--text-faint);}
     <input type="file" id="folderImport" webkitdirectory directory multiple class="hidden">
   </div>
   <div class="spacer"></div>
-  <div class="tb-group" style="border-left:1px solid var(--border-soft); padding-left:10px;">
+  <div class="tb-group" id="downloadAppGroup" style="border-left:1px solid var(--border-soft); padding-left:10px;">
+    <button id="btnDownloadApp" title="Save a free local copy of this app — one HTML file that runs in your browser, no install, no account">Download Software</button>
+  </div>
+  <div class="tb-group">
     <button id="btnSetList" title="Build a set list: drag songs in, pick a key and capo for each, then Print or PDF the whole set">Set List Builder</button>
   </div>
   <div class="tb-group">
@@ -907,6 +914,12 @@ const ChordSpacingStore = (() => {
   function apply(px){ document.documentElement.style.setProperty('--chord-lyric-gap', px + 'px'); }
   return { get, set, apply, MIN_PX, MAX_PX, DEFAULT_PX };
 })();
+
+// True in the web-hosted parent copy of this file; the Download Software
+// button's save routine rewrites this one line to false in the copy it
+// hands out, and init() hides the button whenever it's false — so local
+// copies never show a download button for something they already are.
+const WEB_HOSTED_COPY = true;
 
 // The church's own CCLI license number (Settings > Church CCLI License
 // Number) — when set, every NEW song starts with its Church CCLI # field
@@ -1979,12 +1992,12 @@ const IO = (() => {
     let out = `${song.title || 'Untitled'}\n${song.artist || ''}\n`;
     if(song.key) out += `Key: ${song.key}\n`;
     if(song.capo) out += `Capo: ${song.capo}\n`;
-    // Same song map the rendered chart shows, as a header line ("Song Map:
+    // Same song map the rendered chart shows, as a header line ("Order:
     // I V1 C1 V2 ...") — one code per labeled section in order. Derived
     // data: the importer strips it (like Key:/Capo:) rather than reading
     // it, since it regenerates from the sections themselves.
     const mapCodes = roadmapCodes(sections);
-    if(mapCodes.length) out += `Song Map: ${mapCodes.join(' ')}\n`;
+    if(mapCodes.length) out += `Order: ${mapCodes.join(' ')}\n`;
     out += '\n';
     sections.forEach(sec => {
       if(sec.label) out += `${sec.label}:\n`;
@@ -2065,7 +2078,7 @@ const IO = (() => {
       const NN = /^(b|#)?[1-7](m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/(b|#)?[1-7])?$/;
       return tokens.length>0 && tokens.every(t => LETTER.test(t) || NN.test(t));
     }
-    const rest = lines.slice(idx).filter(l => !/^Key:\s*/i.test(l) && !/^Capo:\s*/i.test(l) && !/^Song Map:\s*/i.test(l));
+    const rest = lines.slice(idx).filter(l => !/^Key:\s*/i.test(l) && !/^Capo:\s*/i.test(l) && !/^Order:\s*/i.test(l) && !/^Song Map:\s*/i.test(l));
     let out = [];
     for(let i=0;i<rest.length;i++){
       const line = rest[i];
@@ -4592,6 +4605,48 @@ ${versesXml}
     ]);
   }
 
+  // Download Software (web-hosted copies only — see WEB_HOSTED_COPY):
+  // explains what a local copy is, then Proceed fetches this page's own
+  // source, flips the WEB_HOSTED_COPY flag to false in the text (so the
+  // downloaded copy hides this button — it IS the local copy), and saves
+  // it as ChartBuilder.html. The needle is built by concatenation so this
+  // function's own source can never match it; the flag's declaration line
+  // is the only contiguous occurrence in the file.
+  function openDownloadAppPopup(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'lxp-backdrop';
+    backdrop.innerHTML = `
+      <div class="lxp-modal">
+        <div class="lxp-head"><h3>Download a Local Copy</h3><button type="button" class="icon" id="dlClose">✕</button></div>
+        <p>Chart Builder is one single HTML file — Proceed saves it to your device. Double-click that file and the full app opens in your browser: no install, no account, nothing else to set up. It works offline too (PDF export is the one feature that needs internet, since it loads its converter from the web).</p>
+        <p>Your songs live in your browser's own storage, on your machine — nothing you write ever leaves your device. A fresh local copy starts with its own empty library; use Export and Import to move songs between copies.</p>
+        <p>Chart Builder is completely open source and free to use, licensed <b>Creative Commons BY-NC-SA</b> — use it, share it, build on it non-commercially, keeping this same license.</p>
+        <div class="lxp-actions">
+          <button type="button" class="ghost" id="dlCancel">Cancel</button>
+          <button type="button" class="primary" id="dlProceed">Proceed</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.addEventListener('click', e => { if(e.target === backdrop) close(); });
+    backdrop.querySelector('#dlClose').onclick = close;
+    backdrop.querySelector('#dlCancel').onclick = close;
+    backdrop.querySelector('#dlProceed').onclick = async () => {
+      try{
+        const res = await fetch(location.href, {cache:'no-cache'});
+        if(!res.ok) throw new Error('HTTP ' + res.status);
+        let html = await res.text();
+        const flag = 'const WEB_HOSTED_COPY';
+        html = html.replace(flag + ' = true;', flag + ' = false;');
+        downloadBlob('ChartBuilder.html', html, 'text/html');
+        toast('Local copy saved — double-click the file to run it');
+        close();
+      }catch(err){
+        toast('Could not fetch the app source — this works from the hosted site');
+      }
+    };
+  }
+
   // Read-only twin of ensureLyricsContentSynced for songs that AREN'T open
   // in the editor: a stored song's hand-parsed lyricsContent (line/paragraph
   // breaks authored in Lyrics view) is used as long as its snapshot still
@@ -5612,6 +5667,7 @@ ${versesXml}
     el('btnPrint').onclick = doPrint;
     el('btnPDF').onclick = doPDF;
     el('btnSetList').onclick = openSetListBuilder;
+    el('btnDownloadApp').onclick = openDownloadAppPopup;
     el('btnCircle').onclick = openCircleOfFifths;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
     el('slideViewModeControl').querySelectorAll('button').forEach(btn => {
@@ -5793,6 +5849,15 @@ ${versesXml}
 
   async function init(){
     wire();
+    // Local (downloaded) copies hide the Download Software button — they
+    // already ARE the download. Its group carried the left divider next to
+    // Set List Builder, so that divider moves onto the Set List group.
+    if(!WEB_HOSTED_COPY){
+      el('downloadAppGroup').classList.add('hidden');
+      const slbGroup = el('btnSetList').closest('.tb-group');
+      slbGroup.style.borderLeft = '1px solid var(--border-soft)';
+      slbGroup.style.paddingLeft = '10px';
+    }
     updateEditorClickHint();
     updateRomanButtonVisibility();
     ChordSpacingStore.apply(ChordSpacingStore.get());
