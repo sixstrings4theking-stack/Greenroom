@@ -591,7 +591,6 @@ small{color:var(--text-faint);}
   <button id="btnCircle" class="circle-btn" title="Open Circle of Fifths chord wheel in a new window">⭘ Circle of 5ths</button>
   <button id="btnLyricsOnly" class="lyrics-btn" title="Lyrics-only editor view, for parsing/exporting presentation slides">Lyrics</button>
   <div class="tb-group" style="border-right:none;">
-    <button id="btnVersions" title="Version history">History</button>
     <button id="btnSettings" title="Settings & Parameters">⚙</button>
   </div>
 </div>
@@ -4630,6 +4629,7 @@ ${versesXml}
       </div>
       <div class="form-row"><button id="replayIntroBtn">Show "Charts are always stored as Nashville Numbers" intro again</button></div>
       <h4>Data</h4>
+      <div class="form-row"><button id="versionHistoryBtn" title="Saved versions of the current song — captured on every Save">Version history (current song)…</button></div>
       <div class="form-row"><button id="exportAllBtn">Export entire library (JSON)</button></div>
       <div class="form-row"><button id="wipeBtn" style="border-color:var(--danger); color:var(--danger);">Clear local database</button></div>
       <h4>Local Backup Folder</h4>
@@ -4669,6 +4669,12 @@ ${versesXml}
       drawer.querySelector('#replayIntroBtn').onclick = () => {
         drawer.remove();
         maybeShowNNIntro(true);
+      };
+      // Close Settings before the Version History drawer opens, so the two
+      // drawers never stack on top of each other.
+      drawer.querySelector('#versionHistoryBtn').onclick = () => {
+        drawer.remove();
+        openVersions();
       };
       drawer.querySelector('#exportAllBtn').onclick = async () => {
         const all = await DB.getAllSongs();
@@ -5569,7 +5575,6 @@ ${versesXml}
       btn.onclick = () => { LyricsThemeStore.set(btn.dataset.theme); renderLyricsRibbon(); renderPreview(); };
     });
     el('btnKeyChange').onclick = openKeyChangePopup;
-    el('btnVersions').onclick = openVersions;
     el('btnSettings').onclick = openSettings;
     el('btnToggleSidebar').onclick = toggleSidebarCollapse;
     el('btnToggleMeta').onclick = toggleMetaBarCollapse;
