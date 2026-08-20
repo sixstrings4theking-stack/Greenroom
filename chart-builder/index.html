@@ -479,6 +479,42 @@ small{color:var(--text-faint);}
 #libraryAssignPopup .lap-add-row input{flex:1; min-width:0; font-size:11px; padding:4px 6px;}
 #libraryAssignPopup .lap-add-row button{font-size:11px; padding:4px 8px; white-space:nowrap;}
 
+/* Set List Builder — full-screen two-pane popup (library on the left, the
+   set being built on the right). Library rows drag into the set pane (or
+   click their + button); set entries drag by their handle to reorder. Each
+   entry carries its own Key/Capo selects — those drive what Print/PDF
+   generates, per entry, independent of whatever the editor is showing. */
+#btnSetList{color:var(--accent); border-color:var(--accent-dim); font-weight:600;}
+#btnSetList:hover{border-color:var(--accent); background:rgba(230,167,86,.08);}
+.slb-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:55; display:flex; align-items:center; justify-content:center;}
+.slb-modal{background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; width:min(1060px, 94vw); height:min(700px, 90vh); box-shadow:0 12px 40px rgba(0,0,0,.5); display:flex; flex-direction:column; overflow:hidden;}
+.slb-head{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border-soft); flex-shrink:0;}
+.slb-head h3{margin:0; font-size:15px;}
+.slb-head .slb-actions{display:flex; gap:6px; align-items:center;}
+.slb-body{display:flex; flex:1; min-height:0;}
+.slb-library{width:38%; min-width:260px; border-right:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0;}
+.slb-library .slb-search{padding:10px; border-bottom:1px solid var(--border-soft); flex-shrink:0;}
+.slb-library .slb-search input{width:100%; box-sizing:border-box;}
+.slb-library-list{flex:1; overflow-y:auto; padding:6px;}
+.slb-row{display:flex; align-items:center; gap:8px; padding:7px 9px; border-radius:8px; cursor:grab; border:1px solid transparent;}
+.slb-row:hover{background:var(--bg-input); border-color:var(--border-soft);}
+.slb-row .slb-row-body{flex:1; min-width:0;}
+.slb-row .slb-row-title{font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.slb-row .slb-row-meta{font-size:11px; color:var(--text-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.slb-row .slb-add{flex-shrink:0; padding:3px 9px; font-size:13px;}
+.slb-set{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;}
+.slb-set-list{flex:1; overflow-y:auto; padding:8px;}
+.slb-set-empty{color:var(--text-faint); font-size:12.5px; text-align:center; padding:40px 20px; border:2px dashed var(--border); border-radius:10px; margin:12px;}
+.slb-entry{display:flex; align-items:center; gap:8px; padding:7px 9px; border:1px solid var(--border-soft); border-radius:8px; margin-bottom:6px; background:var(--bg-input);}
+.slb-entry.drag-before{box-shadow:0 -2px 0 0 var(--accent);}
+.slb-entry .slb-handle{cursor:grab; color:var(--text-faint); font-size:14px; padding:0 2px; flex-shrink:0; user-select:none;}
+.slb-entry .slb-idx{font-size:11px; color:var(--text-faint); min-width:18px; text-align:right; flex-shrink:0;}
+.slb-entry .slb-entry-title{flex:1; min-width:0; font-weight:600; font-size:13px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.slb-entry select{padding:4px 6px; font-size:12px; width:auto; flex-shrink:0;}
+.slb-entry .lbl{font-size:10.5px; color:var(--text-faint); flex-shrink:0;}
+.slb-entry .slb-remove{flex-shrink:0; padding:2px 8px; font-size:12px;}
+.slb-set-list.drag-end-hint{box-shadow:inset 0 -3px 0 0 var(--accent);}
+
 /* PRINT — A4, fixed 0.25in margins */
 @page{ size: A4; margin: 0.25in; }
 @media print{
@@ -490,7 +526,7 @@ small{color:var(--text-faint);}
      the actual chart content. */
   body *{visibility:hidden;}
   #printArea, #printArea *{visibility:visible;}
-  #topbar, #app{display:none !important;}
+  #topbar, #app, .slb-backdrop{display:none !important;}
   body{height:auto; overflow:visible;}
   #printArea{position:absolute; top:0; left:0; width:7.77in;}
   .cs-page{page-break-after:always; padding:0;}
@@ -508,6 +544,9 @@ small{color:var(--text-faint);}
     <button id="btnSave" class="primary" title="Save (Ctrl+S)">Save</button>
     <button id="btnUndo" class="icon" title="Undo (Ctrl+Z)">↶</button>
     <button id="btnRedo" class="icon" title="Redo (Ctrl+Shift+Z)">↷</button>
+  </div>
+  <div class="tb-group">
+    <button id="btnSetList" title="Build a set list: drag songs in, pick a key and capo for each, then Print or PDF the whole set">Set List Builder</button>
   </div>
   <div class="spacer"></div>
   <div class="tb-group">
@@ -4085,12 +4124,18 @@ ${versesXml}
   }
 
   /* ---------------- Print / PDF (phrase-aware pagination) ---------------- */
-  function buildPrintPages(){
-    const song = currentSongSnapshot();
+  // Paginates one song object into print pages. fontScalePct (optional)
+  // pins --chart-font-scale for the measurement pass — needed when the song
+  // being paginated is NOT the one currently open in the editor (set list
+  // printing), since the global var on <html> only reflects the open song's
+  // zoom. Left unset, measurement inherits the global var, exactly as the
+  // single-song Print/PDF path always has.
+  function buildPrintPagesFor(song, fontScalePct){
     // Render into an offscreen full-width clone to measure section heights.
     const measureHost = document.createElement('div');
     measureHost.style.position='fixed'; measureHost.style.left='-9999px'; measureHost.style.top='0';
     measureHost.style.width = '7.77in'; // A4 (8.27in) minus 0.25in margins each side
+    if(fontScalePct) measureHost.style.setProperty('--chart-font-scale', fontScalePct / 100);
     measureHost.className = '';
     document.body.appendChild(measureHost);
     const sheet = document.createElement('div');
@@ -4099,7 +4144,12 @@ ${versesXml}
     const PAGE_HEIGHT_PX = 11.19 * 96; // A4 (11.69in) minus 0.25in top+bottom margins, at 96dpi
     const pages = Paginator.paginate(sheet, PAGE_HEIGHT_PX);
     document.body.removeChild(measureHost);
-    return {song, pages};
+    return pages;
+  }
+
+  function buildPrintPages(){
+    const song = currentSongSnapshot();
+    return {song, pages: buildPrintPagesFor(song)};
   }
 
   function renderPrintArea(){
@@ -4148,6 +4198,265 @@ ${versesXml}
     pdf.save(`${(song.title||'song').replace(/[^\w\-]+/g,'_')}.pdf`);
     area.classList.add('hidden');
     toast('PDF exported');
+  }
+
+  /* ---------------- Set List Builder ---------------- */
+  // Set entries: {songId, key, capo}. Duplicates are deliberately legal —
+  // the same song can appear in a set twice (a reprise, a different key for
+  // a later moment in the service), each occurrence carrying its own key
+  // and capo. Persisted to localStorage so closing the popup (or the whole
+  // app) doesn't lose a half-built set; ids pointing at since-deleted songs
+  // are filtered out on open.
+  const SetListStore = (() => {
+    const KEY = 'wcb_setlist_v1';
+    function get(){
+      try{ const v = JSON.parse(localStorage.getItem(KEY)); return Array.isArray(v) ? v : []; }
+      catch(e){ return []; }
+    }
+    function set(v){ localStorage.setItem(KEY, JSON.stringify(v)); }
+    return { get, set };
+  })();
+  let setList = [];
+  let slbDragSongId = null;     // library row being dragged in (add)
+  let slbDragEntryIndex = null; // set entry being dragged (reorder)
+  let slbInsertIndex = null;    // insertion point computed during dragover
+
+  const SLB_KEY_OPTIONS = ['NN','C','C#','Db','D','Eb','E','F','F#','Gb','G','Ab','A','Bb','B'];
+
+  function slbNewEntry(songId){ return { songId, key:'NN', capo:'' }; }
+  function slbSave(){ SetListStore.set(setList); }
+
+  function openSetListBuilder(){
+    setList = SetListStore.get().filter(e => songs.some(s => s.id === e.songId));
+    const backdrop = document.createElement('div');
+    backdrop.className = 'slb-backdrop';
+    backdrop.innerHTML = `
+      <div class="slb-modal">
+        <div class="slb-head">
+          <h3>Set List Builder</h3>
+          <div class="slb-actions">
+            <button type="button" id="slbClear" class="ghost" title="Remove every song from the set">Clear</button>
+            <button type="button" id="slbPrint" title="Print the whole set in order, each song in its selected key/capo">Print</button>
+            <button type="button" id="slbPDF" title="Export the whole set as one PDF, each song in its selected key/capo">PDF</button>
+            <button type="button" id="slbClose" class="icon" title="Close (the set is kept for next time)">✕</button>
+          </div>
+        </div>
+        <div class="slb-body">
+          <div class="slb-library">
+            <div class="slb-search"><input type="text" id="slbSearch" placeholder="Search title, artist, lyrics…"></div>
+            <div class="slb-library-list" id="slbLibraryList"></div>
+          </div>
+          <div class="slb-set">
+            <div class="slb-set-list" id="slbSetList"></div>
+          </div>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', e => { if(e.target === backdrop) backdrop.remove(); });
+    backdrop.querySelector('#slbClose').onclick = () => backdrop.remove();
+    backdrop.querySelector('#slbClear').onclick = () => { setList = []; slbSave(); renderSlbSet(backdrop); };
+    backdrop.querySelector('#slbPrint').onclick = setListPrint;
+    backdrop.querySelector('#slbPDF').onclick = setListPDF;
+    backdrop.querySelector('#slbSearch').addEventListener('input', () => renderSlbLibrary(backdrop));
+    wireSlbSetPane(backdrop);
+    renderSlbLibrary(backdrop);
+    renderSlbSet(backdrop);
+  }
+
+  // Left pane: the song library, same search semantics as the sidebar's
+  // search box (title/artist/lyrics/preferred keys/tags all match).
+  function renderSlbLibrary(backdrop){
+    const q = backdrop.querySelector('#slbSearch').value.trim().toLowerCase();
+    const list = backdrop.querySelector('#slbLibraryList');
+    const filtered = songs.filter(s => {
+      if(!q) return true;
+      return (s.title||'').toLowerCase().includes(q) ||
+             (s.artist||'').toLowerCase().includes(q) ||
+             (s.content||'').toLowerCase().includes(q) ||
+             (s.preferredKeys||[]).some(k=>k.toLowerCase().includes(q)) ||
+             (s.tags||[]).some(t=>t.toLowerCase().includes(q));
+    });
+    list.innerHTML = filtered.length ? '' : `<div class="slb-set-empty" style="margin:8px;">No songs found.</div>`;
+    filtered.forEach(s => {
+      const row = document.createElement('div');
+      row.className = 'slb-row';
+      row.draggable = true;
+      row.title = 'Drag into the set list, or click ＋';
+      const keysTxt = (s.preferredKeys && s.preferredKeys.length) ? ` · Key${s.preferredKeys.length>1?'s':''} ${s.preferredKeys.join(', ')}` : '';
+      row.innerHTML = `
+        <div class="slb-row-body">
+          <div class="slb-row-title">${Renderer.escapeHtml(s.title || 'Untitled')}</div>
+          <div class="slb-row-meta">${Renderer.escapeHtml((s.artist||'') + keysTxt)}</div>
+        </div>
+        <button type="button" class="slb-add" title="Add to set list">＋</button>`;
+      row.addEventListener('dragstart', e => {
+        slbDragSongId = s.id; slbDragEntryIndex = null;
+        e.dataTransfer.effectAllowed = 'copy';
+        e.dataTransfer.setData('text/plain', String(s.id));
+      });
+      row.addEventListener('dragend', () => { slbDragSongId = null; clearSlbDragHints(backdrop); });
+      row.querySelector('.slb-add').onclick = () => { setList.push(slbNewEntry(s.id)); slbSave(); renderSlbSet(backdrop); };
+      list.appendChild(row);
+    });
+  }
+
+  // Right pane: the set being built. Every entry defaults to NN and carries
+  // its own Key/Capo selects — what's selected here is exactly what Print/
+  // PDF generates for that entry. Reorder-drag starts from the ⠿ handle
+  // only, so the selects themselves stay normally clickable.
+  function renderSlbSet(backdrop){
+    const pane = backdrop.querySelector('#slbSetList');
+    pane.innerHTML = '';
+    if(setList.length === 0){
+      pane.innerHTML = `<div class="slb-set-empty">Drag songs here (or click a song's ＋) to build the set.<br>The same song can be added more than once — each copy keeps its own key and capo.</div>`;
+      return;
+    }
+    setList.forEach((entry, i) => {
+      const stored = songs.find(s => s.id === entry.songId);
+      const row = document.createElement('div');
+      row.className = 'slb-entry';
+      row.innerHTML = `
+        <span class="slb-handle" title="Drag to reorder">⠿</span>
+        <span class="slb-idx">${i+1}.</span>
+        <span class="slb-entry-title">${Renderer.escapeHtml(stored ? (stored.title || 'Untitled') : '(missing song)')}</span>
+        <span class="lbl">Key:</span>
+        <select class="slb-key">${SLB_KEY_OPTIONS.map(k => `<option value="${k}"${entry.key===k?' selected':''}>${k}</option>`).join('')}</select>
+        <span class="lbl">Capo:</span>
+        <select class="slb-capo"><option value="">None</option>${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}"${String(entry.capo)===String(n)?' selected':''}>${n}</option>`).join('')}</select>
+        <button type="button" class="slb-remove" title="Remove from set">✕</button>`;
+      row.querySelector('.slb-key').onchange = e => { entry.key = e.target.value; slbSave(); };
+      row.querySelector('.slb-capo').onchange = e => { entry.capo = e.target.value; slbSave(); };
+      row.querySelector('.slb-remove').onclick = () => { setList.splice(i,1); slbSave(); renderSlbSet(backdrop); };
+      row.querySelector('.slb-handle').addEventListener('mousedown', () => { row.draggable = true; });
+      row.addEventListener('dragstart', e => {
+        slbDragEntryIndex = i; slbDragSongId = null;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', 'reorder');
+      });
+      row.addEventListener('dragend', () => { row.draggable = false; slbDragEntryIndex = null; clearSlbDragHints(backdrop); });
+      pane.appendChild(row);
+    });
+  }
+
+  function slbComputeInsertIndex(pane, clientY){
+    const rows = [...pane.querySelectorAll('.slb-entry')];
+    for(let i=0;i<rows.length;i++){
+      const r = rows[i].getBoundingClientRect();
+      if(clientY < r.top + r.height/2) return i;
+    }
+    return rows.length;
+  }
+  function clearSlbDragHints(backdrop){
+    backdrop.querySelectorAll('.slb-entry.drag-before').forEach(e => e.classList.remove('drag-before'));
+    backdrop.querySelector('#slbSetList').classList.remove('drag-end-hint');
+  }
+  function wireSlbSetPane(backdrop){
+    const pane = backdrop.querySelector('#slbSetList');
+    pane.addEventListener('dragover', e => {
+      if(slbDragSongId == null && slbDragEntryIndex == null) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = slbDragSongId != null ? 'copy' : 'move';
+      slbInsertIndex = slbComputeInsertIndex(pane, e.clientY);
+      clearSlbDragHints(backdrop);
+      const rows = pane.querySelectorAll('.slb-entry');
+      if(slbInsertIndex < rows.length) rows[slbInsertIndex].classList.add('drag-before');
+      else pane.classList.add('drag-end-hint');
+    });
+    pane.addEventListener('dragleave', e => { if(e.target === pane) clearSlbDragHints(backdrop); });
+    pane.addEventListener('drop', e => {
+      e.preventDefault();
+      const idx = slbInsertIndex == null ? setList.length : slbInsertIndex;
+      if(slbDragSongId != null){
+        setList.splice(idx, 0, slbNewEntry(slbDragSongId));
+      } else if(slbDragEntryIndex != null){
+        const [moved] = setList.splice(slbDragEntryIndex, 1);
+        setList.splice(idx > slbDragEntryIndex ? idx - 1 : idx, 0, moved);
+      }
+      slbDragSongId = null; slbDragEntryIndex = null; slbInsertIndex = null;
+      slbSave();
+      renderSlbSet(backdrop);
+    });
+  }
+
+  // Builds the render-ready song object for one set entry: the stored song
+  // with the ENTRY's key/capo swapped in. Canonical-NN songs need nothing
+  // more — the renderer already converts NN tokens per display key at draw
+  // time. Legacy letter-key songs store literal letter chords, so those get
+  // converted to NN or transposed to the picked letter key here — the same
+  // two conversions the editor itself uses for that same distinction.
+  function setListRenderSong(entry){
+    const stored = songs.find(s => s.id === entry.songId);
+    if(!stored) return null;
+    const key = entry.key || 'NN';
+    let content = stored.content || '';
+    if(stored.key !== 'NN'){
+      const storedRoot = (stored.key || 'C').replace(/m$/,'');
+      if(key === 'NN'){
+        content = NashvilleSystem.contentToNumbers(content, storedRoot);
+      } else if(key !== stored.key){
+        const from = Transposer.noteIndex(storedRoot);
+        const to = Transposer.noteIndex(key.replace(/m$/,''));
+        if(from !== undefined && to !== undefined){
+          content = Transposer.transposeText(content, ((to - from) % 12 + 12) % 12, Transposer.FLAT_KEYS.has(key));
+        }
+      }
+    }
+    return Object.assign({}, stored, { key, capo: entry.capo || '', content });
+  }
+
+  // One combined print run: every entry's pages concatenated in set order,
+  // each song starting on a fresh page with its own header — and rendered
+  // at its own saved zoom (previewZoom), pinned inline per-page since the
+  // global --chart-font-scale var only tracks the editor's open song.
+  function renderPrintAreaForSetList(){
+    const entries = setList.map(setListRenderSong).filter(Boolean);
+    const area = el('printArea');
+    area.innerHTML = entries.map(song => {
+      const scalePct = song.previewZoom || FontScaleStore.get();
+      const pages = buildPrintPagesFor(song, scalePct);
+      const parts = buildPageMetaParts(song);
+      return pages.map((sections, i) => `
+        <div class="cs-page" style="--chart-font-scale:${scalePct/100};">
+          ${buildPageHeaderHtml(song, i, parts)}
+          ${sections.join('')}
+        </div>`).join('');
+    }).join('');
+    return entries;
+  }
+
+  function setListPrint(){
+    if(setList.length === 0){ toast('The set list is empty'); return; }
+    renderPrintAreaForSetList();
+    const area = el('printArea');
+    area.classList.remove('hidden');
+    window.print();
+    area.classList.add('hidden');
+  }
+
+  async function setListPDF(){
+    if(setList.length === 0){ toast('The set list is empty'); return; }
+    if(typeof window.jspdf === 'undefined' || typeof window.html2canvas === 'undefined'){
+      toast('PDF libraries unavailable (offline / CDN blocked)');
+      return;
+    }
+    renderPrintAreaForSetList();
+    const area = el('printArea');
+    area.classList.remove('hidden');
+    area.style.position='fixed'; area.style.left='-9999px'; area.style.background='#fff';
+    const pageEls = area.querySelectorAll('.cs-page');
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({unit:'in', format:'a4'});
+    const MARGIN = 0.25, CONTENT_W = 8.27 - MARGIN*2, CONTENT_H = 11.69 - MARGIN*2;
+    for(let i=0;i<pageEls.length;i++){
+      const canvas = await window.html2canvas(pageEls[i], {scale:2, backgroundColor:'#ffffff'});
+      const imgData = canvas.toDataURL('image/png');
+      const imgH = canvas.height * CONTENT_W / canvas.width;
+      if(i>0) pdf.addPage();
+      pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, CONTENT_W, Math.min(imgH, CONTENT_H));
+    }
+    pdf.save(`Set_List_${new Date().toISOString().slice(0,10)}.pdf`);
+    area.classList.add('hidden');
+    toast('Set list PDF exported');
   }
 
   /* ---------------- Drawers: Settings / ProPresenter mock / Versions ---------------- */
@@ -5146,6 +5455,7 @@ ${versesXml}
     el('btnPrint').onclick = doPrint;
     el('btnPDF').onclick = doPDF;
     el('btnPP').onclick = openProPresenterMock;
+    el('btnSetList').onclick = openSetListBuilder;
     el('btnCircle').onclick = openCircleOfFifths;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
     el('slideViewModeControl').querySelectorAll('button').forEach(btn => {
