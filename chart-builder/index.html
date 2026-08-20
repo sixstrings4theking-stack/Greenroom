@@ -695,7 +695,7 @@ small{color:var(--text-faint);}
             <input id="mCopyright" placeholder="Publisher, year, license details...">
           </div>
         </div>
-        <div class="field"><label>Song CCLI #</label><input id="mCCLI" placeholder="1234567"></div>
+        <div class="field"><label>Song CCLI #</label><input id="mCCLI" placeholder="1234567 (optional)"></div>
         <div class="field"><label>Church CCLI #</label><input id="mChurchCCLI" placeholder="License # (optional)"></div>
       </div>
     </div>
@@ -906,6 +906,18 @@ const ChordSpacingStore = (() => {
   function set(px){ localStorage.setItem(KEY, String(px)); }
   function apply(px){ document.documentElement.style.setProperty('--chord-lyric-gap', px + 'px'); }
   return { get, set, apply, MIN_PX, MAX_PX, DEFAULT_PX };
+})();
+
+// The church's own CCLI license number (Settings > Church CCLI License
+// Number) — when set, every NEW song starts with its Church CCLI # field
+// pre-filled with it (see newSong), since a church has one license number
+// that applies to everything they use. Per-song edits still win: this only
+// seeds the field at creation, it never overwrites an existing song's value.
+const ChurchCcliStore = (() => {
+  const KEY = 'wcb_church_ccli';
+  function get(){ return localStorage.getItem(KEY) || ''; }
+  function set(v){ localStorage.setItem(KEY, v.trim()); }
+  return { get, set };
 })();
 
 // Persisted chart text-size preference (title, chords, lyrics, roadmap —
@@ -2316,7 +2328,7 @@ const App = (() => {
     // yet, loadIntoForm's default-key logic just shows NN, same as any
     // other song that's never been saved with a letter key showing.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli:'', key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(),
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(),
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
@@ -4634,6 +4646,11 @@ ${versesXml}
         </div>
       </div>
       <div class="form-row"><button id="replayIntroBtn">Show "Charts are always stored as Nashville Numbers" intro again</button></div>
+      <h4>Church CCLI License Number</h4>
+      <div class="form-row">
+        <input id="prefChurchCcli" placeholder="License # (optional)" value="${Renderer.escapeHtml(ChurchCcliStore.get())}">
+        <small>Auto-fills the Church CCLI # field on every new song from here on. Songs you've already saved keep whatever they have.</small>
+      </div>
       <h4>Data</h4>
       <div class="form-row"><button id="versionHistoryBtn" title="Saved versions of the current song — captured on every Save">Version history (current song)…</button></div>
       <div class="form-row"><button id="exportAllBtn">Export entire library (JSON)</button></div>
@@ -4676,6 +4693,9 @@ ${versesXml}
         drawer.remove();
         maybeShowNNIntro(true);
       };
+      drawer.querySelector('#prefChurchCcli').addEventListener('input', (e) => {
+        ChurchCcliStore.set(e.target.value);
+      });
       // Close Settings before the Version History drawer opens, so the two
       // drawers never stack on top of each other.
       drawer.querySelector('#versionHistoryBtn').onclick = () => {
