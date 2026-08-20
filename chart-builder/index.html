@@ -55,7 +55,14 @@ small{color:var(--text-faint);}
 .tb-group{display:flex; gap:6px; align-items:center; padding-right:10px; border-right:1px solid var(--border-soft); margin-right:2px;}
 .tb-group:last-child{border-right:none;}
 #topbar .spacer{flex:1;}
-#saveStatus{font-size:12px; color:var(--text-faint); white-space:nowrap;}
+/* The Save button IS the save-state indicator (no separate status text):
+   quiet/neutral "Save" when everything's saved, lighting up amber with the
+   label "Unsaved" when there are changes to save — amber matching the
+   dirty-state color the old text indicator already used. min-width keeps
+   the toolbar from jiggling as the label flips between the two words. */
+#btnSave{min-width:76px;}
+#btnSave.unsaved{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+#btnSave.unsaved:hover{filter:brightness(1.08);}
 .circle-btn{background:linear-gradient(135deg,#8b6ef2,#6a4fd8); color:#fff; border:1px solid #7a5ce8; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
 .circle-btn:hover{filter:brightness(1.1); border-color:#8b6ef2;}
 /* Mint/lime green, plain-outline by default like the RN/next-num toggle
@@ -565,7 +572,7 @@ small{color:var(--text-faint);}
   <div class="brand">Chart<span>Builder</span></div>
   <div class="tb-group">
     <button id="btnNew" title="New song (Ctrl+N)">＋ New</button>
-    <button id="btnSave" class="primary" title="Save (Ctrl+S)">Save</button>
+    <button id="btnSave" title="Save (Ctrl+S)">Save</button>
     <button id="btnUndo" class="icon" title="Undo (Ctrl+Z)">↶</button>
     <button id="btnRedo" class="icon" title="Redo (Ctrl+Shift+Z)">↷</button>
   </div>
@@ -589,7 +596,6 @@ small{color:var(--text-faint);}
   </div>
   <button id="btnCircle" class="circle-btn" title="Open Circle of Fifths chord wheel in a new window">⭘ Circle of 5ths</button>
   <button id="btnLyricsOnly" class="lyrics-btn" title="Lyrics-only editor view, for parsing/exporting presentation slides">Lyrics</button>
-  <span id="saveStatus">No song loaded</span>
   <div class="tb-group" style="border-right:none;">
     <button id="btnVersions" title="Version history">History</button>
     <button id="btnSettings" title="Settings & Parameters">⚙</button>
@@ -2572,10 +2578,23 @@ const App = (() => {
     });
   }
 
+  // The Save button doubles as the save-state indicator (the old separate
+  // status text is gone): neutral "Save" when clean, amber "Unsaved" when
+  // there are changes to save. A brand-new untouched song reads as clean —
+  // the moment anything is typed, dirty flips it to "Unsaved".
   function updateSaveStatus(){
-    if(!currentSong){ el('saveStatus').textContent = 'No song loaded'; return; }
-    el('saveStatus').textContent = dirty ? 'Unsaved changes' : (currentSong.id ? 'Saved' : 'New (unsaved)');
-    el('saveStatus').style.color = dirty ? 'var(--accent)' : 'var(--text-faint)';
+    const btn = el('btnSave');
+    if(!currentSong){
+      btn.disabled = true;
+      btn.classList.remove('unsaved');
+      btn.textContent = 'Save';
+      btn.title = 'No song loaded';
+      return;
+    }
+    btn.disabled = false;
+    btn.classList.toggle('unsaved', dirty);
+    btn.textContent = dirty ? 'Unsaved' : 'Save';
+    btn.title = dirty ? 'Unsaved changes — click to save (Ctrl+S)' : 'Save (Ctrl+S)';
   }
 
   /* ---------------- Undo / Redo (editor content) ---------------- */
