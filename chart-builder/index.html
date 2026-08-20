@@ -519,6 +519,26 @@ small{color:var(--text-faint);}
 .slb-entry .slb-remove{flex-shrink:0; padding:2px 8px; font-size:12px;}
 .slb-set-list.drag-end-hint{box-shadow:inset 0 -3px 0 0 #79c2ff;}
 
+/* Lyrics export format picker — small centered modal shown whenever a
+   lyrics export is engaged (the Lyrics view's Export button, or the Set
+   List Builder's Export Lyrics), offering the output format. Sits above
+   the Set List modal (z-index 55) since it can be launched from inside it.
+   OpenLyrics is the one working option today; ProPresenter and PowerPoint
+   are visible-but-disabled placeholders (grayed with a "soon" chip, same
+   self-evident-not-hidden convention as the RN button) until each gets
+   built out. */
+.lxp-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:65; display:flex; align-items:center; justify-content:center;}
+.lxp-modal{background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; width:min(400px, 92vw); box-shadow:0 12px 40px rgba(0,0,0,.5); padding:14px 16px 16px;}
+.lxp-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+.lxp-head h3{margin:0; font-size:14px;}
+.lxp-option{display:block; width:100%; text-align:left; padding:10px 12px; margin-bottom:8px; border-radius:10px; border:1px solid var(--border); background:var(--bg-input);}
+.lxp-option:last-child{margin-bottom:0;}
+.lxp-option:not(:disabled):hover{border-color:#6fe0a0; background:rgba(111,224,160,.08);}
+.lxp-option:disabled{opacity:.45; cursor:default;}
+.lxp-name{display:block; font-weight:700; font-size:13px; margin-bottom:2px;}
+.lxp-desc{display:block; font-size:11.5px; color:var(--text-faint); line-height:1.4;}
+.lxp-soon{font-size:9.5px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--accent); border:1px solid var(--accent-dim); border-radius:8px; padding:1px 6px; margin-left:6px;}
+
 /* PRINT — A4, fixed 0.25in margins */
 @page{ size: A4; margin: 0.25in; }
 @media print{
@@ -571,7 +591,6 @@ small{color:var(--text-faint);}
   <button id="btnLyricsOnly" class="lyrics-btn" title="Lyrics-only editor view, for parsing/exporting presentation slides">Lyrics</button>
   <span id="saveStatus">No song loaded</span>
   <div class="tb-group" style="border-right:none;">
-    <button id="btnPP" title="ProPresenter sync (mock)">ProPresenter</button>
     <button id="btnVersions" title="Version history">History</button>
     <button id="btnSettings" title="Settings & Parameters">⚙</button>
   </div>
@@ -4262,7 +4281,7 @@ ${versesXml}
     backdrop.querySelector('#slbClear').onclick = () => { setList = []; slbSave(); renderSlbSet(backdrop); };
     backdrop.querySelector('#slbPrint').onclick = setListPrint;
     backdrop.querySelector('#slbPDF').onclick = setListPDF;
-    backdrop.querySelector('#slbExportLyrics').onclick = setListExportLyrics;
+    backdrop.querySelector('#slbExportLyrics').onclick = () => openLyricsExportPicker(setListExportLyrics);
     backdrop.querySelector('#slbSearch').addEventListener('input', () => renderSlbLibrary(backdrop));
     wireSlbSetPane(backdrop);
     renderSlbLibrary(backdrop);
@@ -4465,6 +4484,36 @@ ${versesXml}
     toast('Set list PDF exported');
   }
 
+  // Format picker shown whenever a lyrics export is engaged — from the
+  // Lyrics view's Export button (single song) or the Set List Builder's
+  // Export Lyrics (whole set). runOpenLyrics is whichever of those two
+  // actions should fire if the working format is chosen; ProPresenter and
+  // PowerPoint are disabled placeholders until each is built out.
+  function openLyricsExportPicker(runOpenLyrics){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'lxp-backdrop';
+    backdrop.innerHTML = `
+      <div class="lxp-modal">
+        <div class="lxp-head"><h3>Export Lyrics As…</h3><button type="button" class="icon" id="lxpClose">✕</button></div>
+        <button type="button" class="lxp-option" id="lxpOpenLyrics">
+          <span class="lxp-name">OpenLyrics — XML</span>
+          <span class="lxp-desc">The open worship-song XML standard (openlyrics.org). Imports into OpenLP and other presentation software.</span>
+        </button>
+        <button type="button" class="lxp-option" disabled title="Not built yet — coming soon">
+          <span class="lxp-name">ProPresenter<span class="lxp-soon">soon</span></span>
+          <span class="lxp-desc">Native ProPresenter presentation file.</span>
+        </button>
+        <button type="button" class="lxp-option" disabled title="Not built yet — coming soon">
+          <span class="lxp-name">PowerPoint<span class="lxp-soon">soon</span></span>
+          <span class="lxp-desc">Slide deck (.pptx), one slide per lyric block.</span>
+        </button>
+      </div>`;
+    document.body.appendChild(backdrop);
+    backdrop.addEventListener('click', e => { if(e.target === backdrop) backdrop.remove(); });
+    backdrop.querySelector('#lxpClose').onclick = () => backdrop.remove();
+    backdrop.querySelector('#lxpOpenLyrics').onclick = () => { backdrop.remove(); runOpenLyrics(); };
+  }
+
   // Read-only twin of ensureLyricsContentSynced for songs that AREN'T open
   // in the editor: a stored song's hand-parsed lyricsContent (line/paragraph
   // breaks authored in Lyrics view) is used as long as its snapshot still
@@ -4506,7 +4555,7 @@ ${versesXml}
       : `Exported ${exported} lyrics file${exported===1?'':'s'}`);
   }
 
-  /* ---------------- Drawers: Settings / ProPresenter mock / Versions ---------------- */
+  /* ---------------- Drawers: Settings / Versions ---------------- */
   function openDrawer(title, bodyHtml, onMount){
     const backdrop = document.createElement('div');
     backdrop.className = 'drawer-backdrop';
@@ -4655,38 +4704,6 @@ ${versesXml}
     });
   }
 
-
-  function openProPresenterMock(){
-    const body = `
-      <h4>ProPresenter Web API Sync <span class="badge">mock</span></h4>
-      <div class="form-row"><label>ProPresenter host (this network)</label><input id="ppHost" placeholder="e.g. 192.168.1.42:1025"></div>
-      <button id="ppConnectBtn" class="primary">Connect</button>
-      <div id="ppResult"></div>
-      <div class="mock-note">
-        // [API-MOCK] ProPresenter exposes a local network Web API (Stage Display / Remote / v1 REST+WS)
-        that this mock simulates for cueing/sync without requiring the app on the same LAN during dev.
-        // [FUTURE-PYTHON] A companion FastAPI service could bridge this browser app to ProPresenter's
-        REST API (e.g. <code>POST /v1/presentation/active/next</code>) since raw LAN sockets from a
-        static HTML page are limited by browser security; a local relay handles that.
-      </div>
-    `;
-    openDrawer('API Hook: ProPresenter Sync', body, (drawer) => {
-      drawer.querySelector('#ppConnectBtn').onclick = () => {
-        const host = drawer.querySelector('#ppHost').value.trim() || '(unspecified)';
-        drawer.querySelector('#ppResult').innerHTML = `
-          <div class="mock-result">
-            <div>✅ (mock) Connected to ProPresenter at <b>${Renderer.escapeHtml(host)}</b></div>
-            <div style="margin-top:6px;">Sections detected for cueing:</div>
-            <ul style="margin:6px 0 0 18px; padding:0;">
-              ${(currentSong ? ChordParser.parseSections(el('editor').value) : [])
-                .map(s => `<li>${Renderer.escapeHtml(s.label || '(untitled block)')}</li>`).join('') || '<li>(no sections parsed yet)</li>'}
-            </ul>
-            <div style="margin-top:8px;"><button id="ppPushBtn">Push cues (mock)</button></div>
-          </div>`;
-        drawer.querySelector('#ppPushBtn').onclick = () => { toast('(mock) Cues pushed to ProPresenter'); };
-      };
-    });
-  }
 
   /* ---------------- Circle of Fifths (opens in its own window) ---------------- */
   let circleWinRef = null;
@@ -5496,12 +5513,11 @@ ${versesXml}
       e.target.value='';
     };
     el('btnExport').onclick = () => {
-      if(el('btnLyricsOnly').classList.contains('active')) exportOpenLyrics();
+      if(el('btnLyricsOnly').classList.contains('active')) openLyricsExportPicker(exportOpenLyrics);
       else exportCurrent();
     };
     el('btnPrint').onclick = doPrint;
     el('btnPDF').onclick = doPDF;
-    el('btnPP').onclick = openProPresenterMock;
     el('btnSetList').onclick = openSetListBuilder;
     el('btnCircle').onclick = openCircleOfFifths;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
