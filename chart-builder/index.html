@@ -1057,6 +1057,24 @@ function computeCCLicense(ccLicense){
   return { code: 'CC BY' + (tags.length ? '-' + key : ''), tags, summary: CC_LICENSE_SUMMARIES[key] };
 }
 
+// The song map as a flat code list (V1, C1, PC2, ... — see
+// matchSectionFamily; custom labels fall back to their first letter), one
+// entry per labeled section in the order it appears, repeats included.
+// Shared by the chart's rendered badge roadmap (Renderer.buildRoadmap) and
+// the chords-over-lyrics export's "Song Map:" header line.
+function roadmapCodes(sections){
+  const codes = [];
+  sections.forEach(sec => {
+    if(!sec.label) return;
+    const label = sec.label.trim();
+    const match = matchSectionFamily(label);
+    if(match){ codes.push(match.code); return; }
+    const firstLetterMatch = label.match(/[A-Za-z]/);
+    if(firstLetterMatch) codes.push(firstLetterMatch[0].toUpperCase());
+  });
+  return codes;
+}
+
 // Renders one round section-marker badge as inline SVG — plain black-on-
 // white, no per-family coloring: white-filled circle, black ring, bold
 // black letter code centered with the dy="0.35em" baseline trick
@@ -1698,16 +1716,7 @@ const Renderer = (() => {
   // (e.g. two V2's in a row) — the map should read as literally what was
   // entered, not a collapsed summary of it.
   function buildRoadmap(sections){
-    const codes = [];
-    sections.forEach(sec => {
-      if(!sec.label) return;
-      const label = sec.label.trim();
-      const match = matchSectionFamily(label);
-      if(match) { codes.push(match.code); return; }
-      const firstLetterMatch = label.match(/[A-Za-z]/);
-      if(firstLetterMatch) codes.push(firstLetterMatch[0].toUpperCase());
-    });
-    return codes.map(code => `<span class="cs-roadmap-item">${sectionBadgeSvg(code, ROADMAP_BADGE_SIZE)}</span>`).join('');
+    return roadmapCodes(sections).map(code => `<span class="cs-roadmap-item">${sectionBadgeSvg(code, ROADMAP_BADGE_SIZE)}</span>`).join('');
   }
 
   function renderChordSheet(container, song, opts={}){
@@ -1970,6 +1979,12 @@ const IO = (() => {
     let out = `${song.title || 'Untitled'}\n${song.artist || ''}\n`;
     if(song.key) out += `Key: ${song.key}\n`;
     if(song.capo) out += `Capo: ${song.capo}\n`;
+    // Same song map the rendered chart shows, as a header line ("Song Map:
+    // I V1 C1 V2 ...") — one code per labeled section in order. Derived
+    // data: the importer strips it (like Key:/Capo:) rather than reading
+    // it, since it regenerates from the sections themselves.
+    const mapCodes = roadmapCodes(sections);
+    if(mapCodes.length) out += `Song Map: ${mapCodes.join(' ')}\n`;
     out += '\n';
     sections.forEach(sec => {
       if(sec.label) out += `${sec.label}:\n`;
@@ -2038,13 +2053,19 @@ const IO = (() => {
     const capoLine = lines.find(l => /^Capo:\s*/i.test(l));
     if(capoLine) song.capo = capoLine.replace(/^Capo:\s*/i,'').trim();
 
-    const CHORD_LINE_RE = /^[\sA-G0-9#b\/majinsudgo°+()\-]*$/;
+    // A line is a chord line when EVERY token is either a letter chord
+    // (G, F#m7, C/E) or a Nashville Number token (1, 6m7, b3, 4/5) — the
+    // NN alternative mirrors the letter one so .txt files this app exports
+    // while displaying NN merge back correctly on re-import, not just
+    // letter-notation ones.
     function looksLikeChordLine(l){
       if(l.trim()==='') return false;
       const tokens = l.trim().split(/\s+/);
-      return tokens.length>0 && tokens.every(t => /^[A-G](#|b)?(m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/[A-G](#|b)?)?$/.test(t));
+      const LETTER = /^[A-G](#|b)?(m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/[A-G](#|b)?)?$/;
+      const NN = /^(b|#)?[1-7](m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/(b|#)?[1-7])?$/;
+      return tokens.length>0 && tokens.every(t => LETTER.test(t) || NN.test(t));
     }
-    const rest = lines.slice(idx).filter(l => !/^Key:\s*/i.test(l) && !/^Capo:\s*/i.test(l));
+    const rest = lines.slice(idx).filter(l => !/^Key:\s*/i.test(l) && !/^Capo:\s*/i.test(l) && !/^Song Map:\s*/i.test(l));
     let out = [];
     for(let i=0;i<rest.length;i++){
       const line = rest[i];
