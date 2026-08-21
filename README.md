@@ -2,18 +2,18 @@
 
 Client-side web apps for running a church service. No build step, no backend — open the HTML directly in a browser.
 
-- [`index.html`](index.html) — **Greenroom**, the parent app. People profiles, teams and positions, services, order-of-service planning by drag-and-drop, and team scheduling. Embeds Chart Builder as a tab.
+- [`index.html`](index.html) — **Greenroom**, the parent app. People profiles, teams and positions, services, order-of-service planning by drag-and-drop, and team scheduling. Embeds ChartBench as a tab.
 - [`chart-builder/`](chart-builder/index.html) — chord/lyric chart editor with Nashville Number System support, transposition, and PDF/print export. Sample song exports live in `chart-builder/sample-data/`.
 
 ## How the two main apps relate
 
-Chart Builder stays the single source of truth for charts. Greenroom does not reimplement any chart editing — it reads Chart Builder's song library (read-only) and embeds the editor itself in the **Chart Builder** tab, so the same app serves both the standalone and the embedded use.
+ChartBench stays the single source of truth for charts. Greenroom does not reimplement any chart editing — it reads ChartBench's song library (read-only) and embeds the editor itself in the **ChartBench** tab, so the same app serves both the standalone and the embedded use.
 
 Opening a song from a service plan or the song library deep-links into the editor via `chart-builder/index.html?song=<id>`.
 
 ## Branding
 
-Greenroom uses the mint green Chart Builder already uses for its Lyrics mode (`#6fe0a0` on `#0d2b1a`) as its accent; Chart Builder keeps amber. Neutrals, spacing, and control styling are shared token-for-token, so the two read as one product while staying distinguishable when one is running inside the other.
+Greenroom uses the mint green ChartBench already uses for its Lyrics mode (`#6fe0a0` on `#0d2b1a`) as its accent; ChartBench keeps amber. Neutrals, spacing, and control styling are shared token-for-token, so the two read as one product while staying distinguishable when one is running inside the other.
 
 Amber survives in Greenroom as `--warn` (partial team coverage, a library that's connected but empty) — against a green accent, a green caution state would read as success.
 
@@ -22,9 +22,9 @@ Amber survives in Greenroom as `--warn` (partial team coverage, a library that's
 | Database | Owner | Contents |
 | --- | --- | --- |
 | `GreenroomDB` | parent app | people, services, imported songs, preferences |
-| `WorshipChartBuilderDB` | Chart Builder | songs, preferences (read-only from the parent) |
+| `WorshipChartBuilderDB` | ChartBench | songs, preferences (read-only from the parent) |
 
-Both are IndexedDB, and **IndexedDB is scoped per origin**. The parent app can only see Chart Builder's library when both are served from the same origin — which `file://` does not provide. Serve the folder over HTTP instead.
+Both are IndexedDB, and **IndexedDB is scoped per origin**. The parent app can only see ChartBench's library when both are served from the same origin — which `file://` does not provide. Serve the folder over HTTP instead.
 
 ## Running it
 
@@ -38,11 +38,11 @@ python -m http.server 8777
 
 Then visit `http://127.0.0.1:8777/`. Bookmark that — it's the app's address.
 
-Opening `index.html` directly from Explorer mostly works, but the Songs tab won't see Chart Builder's library. In that case the banner says so and offers a JSON import of chart exports instead; everything else is unaffected. Chart Builder's PDF export also needs an internet connection, since it pulls its PDF library from a CDN.
+Opening `index.html` directly from Explorer mostly works, but the Songs tab won't see ChartBench's library. In that case the banner says so and offers a JSON import of chart exports instead; everything else is unaffected. ChartBench's PDF export also needs an internet connection, since it pulls its PDF library from a CDN.
 
 ## Settings
 
-The ⚙ button in the top bar opens a drawer, matching Chart Builder's own Settings drawer:
+The ⚙ button in the top bar opens a drawer, matching ChartBench's own Settings drawer:
 
 - **Organization** — the name shown beside the logo.
 - **Service types** — see below.
@@ -50,7 +50,7 @@ The ⚙ button in the top bar opens a drawer, matching Chart Builder's own Setti
 - **Song library** — connection status and a refresh.
 - **Data** — export a full backup (people, services, positions, preferences), restore one, or clear the local database and start over from the sample roster.
 
-Backups do not include charts; those live in Chart Builder and back up from its own Settings.
+Backups do not include charts; those live in ChartBench and back up from its own Settings.
 
 ## Service types
 

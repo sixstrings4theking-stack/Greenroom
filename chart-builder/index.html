@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chart Builder</title>
+<title>ChartBench</title>
 <style>
 /* ==========================================================================
    DESIGN TOKENS
@@ -141,7 +141,7 @@ small{color:var(--text-faint);}
 .song-item:hover{background:var(--bg-panel-2);}
 .song-item.active{background:var(--bg-panel-2); border-color:var(--accent-dim);}
 .song-item .si-body{flex:1; min-width:0;}
-/* Right-justified — removes the song from Chart Builder's own list only,
+/* Right-justified — removes the song from ChartBench's own list only,
    never anything on disk (nothing here can reach the original file). */
 .si-delete{flex-shrink:0; margin-left:6px; background:none; border:none; color:var(--text-faint); opacity:.5; cursor:pointer; font-size:12px; line-height:1; padding:2px 4px;}
 .si-delete:hover{opacity:1; color:var(--danger);}
@@ -580,7 +580,7 @@ small{color:var(--text-faint);}
 
 <!-- ============================== TOP BAR ============================== -->
 <div id="topbar">
-  <div class="brand">Chart<span>Builder</span></div>
+  <div class="brand">Chart<span>Bench</span></div>
   <div class="tb-group">
     <button id="btnNew" title="New song (Ctrl+N)">＋ New</button>
     <button id="btnSave" title="Save (Ctrl+S)">Save</button>
@@ -2851,7 +2851,7 @@ const App = (() => {
     });
     if(songs.length===0){
       list.innerHTML = `<div class="sb-empty">
-        <p><strong>Welcome to Chart Builder!</strong> Songs you save will show up in this list.</p>
+        <p><strong>Welcome to ChartBench!</strong> Songs you save will show up in this list.</p>
         <p>Click <strong>＋ New</strong> up top to start your first chart — the editor fills in with a quick example to show you how the markup works.</p>
         <p>Already have charts? Click <strong>Import</strong> (or <strong>Import Folder</strong> for a whole batch at once) to bring in ChordPro, plain text, or previously-exported files.</p>
         <p>Once you've saved a song or two: click any song below to open it, and add tags (in the song's Tags field) to filter this list by theme.</p>
@@ -3020,7 +3020,7 @@ const App = (() => {
     renderSongList();
   }
 
-  // Removes a song from Chart Builder's own library only — DB.deleteSong
+  // Removes a song from ChartBench's own library only — DB.deleteSong
   // just deletes the IndexedDB record; there's no way for a browser app to
   // reach whatever file it may have originally been imported from, and this
   // doesn't attempt to. If the deleted song was open in the editor, falls
@@ -3029,7 +3029,7 @@ const App = (() => {
   async function deleteSongFromList(id){
     const s = songs.find(s => s.id===id);
     if(!s) return;
-    if(!confirm(`Remove "${s.title || 'Untitled'}" from Chart Builder's library?\n\nThis only removes it from the app — it won't touch any original file it was imported from.`)) return;
+    if(!confirm(`Remove "${s.title || 'Untitled'}" from ChartBench's library?\n\nThis only removes it from the app — it won't touch any original file it was imported from.`)) return;
     await DB.deleteSong(id);
     const wasCurrent = currentSong && currentSong.id === id;
     await refreshLibrary();
@@ -4196,7 +4196,7 @@ const App = (() => {
     }).join('\n');
 
     return `<?xml version="1.0" encoding="UTF-8"?>
-<song xmlns="http://openlyrics.info/namespace/2009/song" version="0.9" createdIn="Chart Builder" modifiedDate="${new Date().toISOString()}">
+<song xmlns="http://openlyrics.info/namespace/2009/song" version="0.9" createdIn="ChartBench" modifiedDate="${new Date().toISOString()}">
   <properties>
     ${titleXml}
     ${authorXml}
@@ -4608,7 +4608,7 @@ ${versesXml}
   function openChartExportPicker(){
     if(!currentSong){ toast('No song loaded'); return; }
     openFormatPicker('Export Chart As…', [
-      {name:'JSON — Chart Builder file', desc:'This app\'s own full-fidelity format: the whole song, re-importable exactly. The right choice for backups or moving songs between browsers.', run: () => exportCurrent('json')},
+      {name:'JSON — ChartBench file', desc:'This app\'s own full-fidelity format: the whole song, re-importable exactly. The right choice for backups or moving songs between browsers.', run: () => exportCurrent('json')},
       {name:'Chords-over-Lyrics — .txt', desc:'Plain text with chords printed above each lyric line, like a handed-out chart. Exports whatever notation the editor is showing.', run: () => exportCurrent('txt')},
       {name:'ChordPro — .cho', desc:'The standard [G]bracketed format most other chart software reads. Exports whatever notation the editor is showing.', run: () => exportCurrent('chordpro')}
     ]);
@@ -4617,7 +4617,7 @@ ${versesXml}
   // Download Software: explains what a local copy is, then Proceed fetches
   // this page's own source, flips the WEB_HOSTED_COPY flag to false in the
   // text (the downloaded copy greys this button out — it IS the local
-  // copy), and saves it as ChartBuilder.html. The needle is built by
+  // copy), and saves it as ChartBench.html. The needle is built by
   // concatenation so this function's own source can never match it; the
   // flag's declaration line is the only contiguous occurrence in the file.
   function openDownloadAppPopup(){
@@ -4626,9 +4626,9 @@ ${versesXml}
     backdrop.innerHTML = `
       <div class="lxp-modal">
         <div class="lxp-head"><h3>Download a Local Copy</h3><button type="button" class="icon" id="dlClose">✕</button></div>
-        <p>Chart Builder is one single HTML file — Proceed saves it to your device. Double-click that file and the full app opens in your browser: no install, no account, nothing else to set up. It works offline too (PDF export is the one feature that needs internet, since it loads its converter from the web).</p>
+        <p>ChartBench is one single HTML file — Proceed saves it to your device. Double-click that file and the full app opens in your browser: no install, no account, nothing else to set up. It works offline too (PDF export is the one feature that needs internet, since it loads its converter from the web).</p>
         <p>Your songs live in your browser's own storage, on your machine — nothing you write ever leaves your device. A fresh local copy starts with its own empty library; use Export and Import to move songs between copies.</p>
-        <p>Chart Builder is completely open source and free to use, licensed <b>Creative Commons BY-NC-SA</b> — use it, share it, build on it non-commercially, keeping this same license.</p>
+        <p>ChartBench is completely open source and free to use, licensed <b>Creative Commons BY-NC-SA</b> — use it, share it, build on it non-commercially, keeping this same license.</p>
         <div class="lxp-actions">
           <button type="button" class="ghost" id="dlCancel">Cancel</button>
           <button type="button" class="primary" id="dlProceed">Proceed</button>
@@ -4646,7 +4646,7 @@ ${versesXml}
         let html = await res.text();
         const flag = 'const WEB_HOSTED_COPY';
         html = html.replace(flag + ' = true;', flag + ' = false;');
-        downloadBlob('ChartBuilder.html', html, 'text/html');
+        downloadBlob('ChartBench.html', html, 'text/html');
         toast('Local copy saved — double-click the file to run it');
         close();
       }catch(err){
@@ -4899,7 +4899,7 @@ ${versesXml}
     //   - dim ring:    vii°=slot i only
     // So exactly 3 slots (i, i-1, i+1) light up, consistently, across all rings.
     return `<!DOCTYPE html>
-<html><head><meta charset="UTF-8"><title>Circle of Fifths — Chart Builder</title>
+<html><head><meta charset="UTF-8"><title>Circle of Fifths — ChartBench</title>
 <style>
   :root{ --bg:#14171c; --panel:#1b1f27; --border:#2e3440; --text:#e7e9ee; --text-dim:#9aa2b1; --text-faint:#5f6779; --tonic:#68c98f; --sub:#79c2ff; --dom:#e8b45a; }
   *{box-sizing:border-box;}

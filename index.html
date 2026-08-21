@@ -8,14 +8,14 @@
 /* ==========================================================================
    DESIGN TOKENS
    The neutrals are deliberately the SAME values as chart-builder/index.html so
-   the two read as one product. Chart Builder is a child surface of this app
-   (see the "Chart Builder" nav tab, which embeds it rather than
+   the two read as one product. ChartBench is a child surface of this app
+   (see the "ChartBench" nav tab, which embeds it rather than
    reimplementing it), so any drift in those would immediately look like two
    different apps bolted together.
 
    The ACCENT is the one deliberate divergence: Greenroom takes the mint green
-   Chart Builder already uses for its Lyrics mode (#6fe0a0 on #0d2b1a), while
-   Chart Builder keeps amber. Same family, distinguishable at a glance — which
+   ChartBench already uses for its Lyrics mode (#6fe0a0 on #0d2b1a), while
+   ChartBench keeps amber. Same family, distinguishable at a glance — which
    matters when one is running inside the other.
    ========================================================================== */
 :root{
@@ -404,7 +404,7 @@ a{color:var(--accent);}
 .song-table .st-actions{text-align:right; white-space:nowrap;}
 
 /* ==========================================================================
-   CHART BUILDER EMBED
+   CHARTBENCH EMBED
    ========================================================================== */
 #chartFrame{flex:1; width:100%; border:none; background:var(--bg); min-height:0;}
 
@@ -448,7 +448,7 @@ a{color:var(--accent);}
 .date-chip button{background:none; border:none; color:var(--text-faint); padding:0 3px; font-size:12px; line-height:1;}
 .date-chip button:hover{color:var(--danger);}
 
-/* Settings drawer — same right-side drawer Chart Builder uses for its own
+/* Settings drawer — same right-side drawer ChartBench uses for its own
    Settings, down to the widths and section headings, so the two feel like one
    preferences surface rather than two conventions. */
 .drawer-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:70; display:flex; justify-content:flex-end;}
@@ -547,7 +547,7 @@ a{color:var(--accent);}
     <button data-route="people">People</button>
     <button data-route="teams">Teams</button>
     <button data-route="songs">Songs</button>
-    <button data-route="chart">Chart Builder</button>
+    <button data-route="chart">ChartBench</button>
   </div>
   <div class="spacer"></div>
   <span class="status" id="statusText"></span>
@@ -649,15 +649,15 @@ a{color:var(--accent);}
     </div>
   </section>
 
-  <!-- ========================== CHART BUILDER ========================= -->
+  <!-- ========================== CHARTBENCH ========================= -->
   <section class="view" id="view-chart">
     <div class="view-head">
-      <h2>Chart Builder</h2>
+      <h2>ChartBench</h2>
       <span class="sub">Running inside Greenroom — same app, same database as the standalone editor.</span>
       <div class="spacer" style="flex:1"></div>
       <button id="btnChartNewTab">Open in new tab ↗</button>
     </div>
-    <iframe id="chartFrame" title="Chart Builder"></iframe>
+    <iframe id="chartFrame" title="ChartBench"></iframe>
   </section>
 
 </div>
@@ -766,14 +766,14 @@ a{color:var(--accent);}
 /* ===========================================================================
    GREENROOM — parent application shell.
 
-   Owns the things Chart Builder deliberately does not: people, teams and
-   positions, services, and who is doing what in each service. Chart Builder
+   Owns the things ChartBench deliberately does not: people, teams and
+   positions, services, and who is doing what in each service. ChartBench
    stays the single source of truth for charts themselves; this app reads its
    library (read-only) and embeds it rather than reimplementing any of it.
 
    Storage:
      GreenroomDB          (this app)          -> people, services, songs, prefs
-     WorshipChartBuilderDB (Chart Builder)    -> songs   [READ ONLY from here]
+     WorshipChartBuilderDB (ChartBench)    -> songs   [READ ONLY from here]
    =========================================================================== */
 
 /* ---------------------------------------------------------------------------
@@ -920,8 +920,8 @@ function confirmAction(title, body, onYes){
    3. DATA LAYER — GreenroomDB
      people   (keyPath id)  -> profiles
      services (keyPath id)  -> service plans, including their team assignments
-     songs    (keyPath id)  -> songs imported from a Chart Builder JSON export,
-                               used only when the live Chart Builder database
+     songs    (keyPath id)  -> songs imported from a ChartBench JSON export,
+                               used only when the live ChartBench database
                                isn't reachable from this page
      prefs    (keyPath key) -> org name, editable position lists, seed flag
 --------------------------------------------------------------------------- */
@@ -965,11 +965,11 @@ const DB = (() => {
 })();
 
 /* ---------------------------------------------------------------------------
-   4. CHART BUILDER BRIDGE — read-only view of WorshipChartBuilderDB.
+   4. CHARTBENCH BRIDGE — read-only view of WorshipChartBuilderDB.
 
    Opening another app's IndexedDB by name is not free of side effects: if the
    database does not exist yet, `indexedDB.open(name)` CREATES it at version 1
-   with no object stores. Chart Builder would then open that same version-1
+   with no object stores. ChartBench would then open that same version-1
    database, never fire its own onupgradeneeded, and find no 'songs' store —
    i.e. merely visiting this page first would break it. So we detect the
    create-by-accident case (onupgradeneeded firing at all) and delete the
@@ -1039,7 +1039,7 @@ const ChartLibrary = (() => {
       return state;
     }
     /* Nothing live to show. The three reasons are genuinely different and the
-       banner says so: Chart Builder is connected but empty; Chart Builder has
+       banner says so: ChartBench is connected but empty; ChartBench has
        never been used on this origin; or its database can't be read at all.
        Either way, fall back to anything imported here. */
     const imported = await DB.all('songs');
@@ -1500,8 +1500,8 @@ function renderPalette(){
         <div class="pi-body"><div class="pi-title">${esc(s.title)}</div>
         <div class="pi-sub">${esc([s.artist, s.keys.join('/')].filter(Boolean).join(' · ') || '—')}</div></div>
       </div>`).join('')
-      : `<div class="empty" style="padding:18px 12px">No songs found.<br>Charts come from Chart Builder — see the <strong>Songs</strong> tab.</div>`;
-    hint.textContent = 'Songs come straight from Chart Builder. Dropping one in keeps the link, so the chart is one click away.';
+      : `<div class="empty" style="padding:18px 12px">No songs found.<br>Charts come from ChartBench — see the <strong>Songs</strong> tab.</div>`;
+    hint.textContent = 'Songs come straight from ChartBench. Dropping one in keeps the link, so the chart is one click away.';
   }
 
   if(State.paletteTab === 'people'){
@@ -1566,7 +1566,7 @@ function renderPlanList(svc){
         </div>
         <div class="pi-dur">${Number(it.duration)||0}m</div>
         <div class="pi-actions">
-          ${it.songId ? `<button data-act="chart" title="Open chart in Chart Builder">♪</button>` : ''}
+          ${it.songId ? `<button data-act="chart" title="Open chart in ChartBench">♪</button>` : ''}
           <button data-act="edit" title="Edit element">✎</button>
           <button data-act="del" class="del" title="Remove">✕</button>
         </div>
@@ -1840,7 +1840,7 @@ function renderElementAssign(svc, item){
       <div class="field">
         <label>Chart</label>
         ${song
-          ? `<button id="eaChart" style="width:100%">♪ Open “${esc(song.title)}” in Chart Builder</button>`
+          ? `<button id="eaChart" style="width:100%">♪ Open “${esc(song.title)}” in ChartBench</button>`
           : `<div class="faint" style="font-size:12px">Not linked to a chart. Drag this song in from the Songs palette to link it.</div>`}
       </div>` : ''}
     ${leadTeam ? `
@@ -2285,11 +2285,11 @@ function renderSongs(){
   const banner = $('songBanner');
 
   const BANNERS = {
-    live:        {dot:'var(--good)',   text:`Live from Chart Builder — ${lib.songs.length} songs. Edits made there show up here on refresh.`},
-    empty:       {dot:'var(--warn)', text:'Chart Builder is connected but has no songs yet. Create one in the Chart Builder tab, or import a chart export here.'},
-    absent:      {dot:'var(--text-faint)', text:'No Chart Builder library here yet. Open the Chart Builder tab and save a song, then hit Refresh — it will appear automatically.'},
-    unreachable: {dot:'var(--danger)', text:'Chart Builder’s database isn’t readable from this page (that happens when the two apps aren’t on the same origin). Import chart exports here instead — everything else works the same.'},
-    unknown:     {dot:'var(--text-faint)', text:'Checking for the Chart Builder library…'}
+    live:        {dot:'var(--good)',   text:`Live from ChartBench — ${lib.songs.length} songs. Edits made there show up here on refresh.`},
+    empty:       {dot:'var(--warn)', text:'ChartBench is connected but has no songs yet. Create one in the ChartBench tab, or import a chart export here.'},
+    absent:      {dot:'var(--text-faint)', text:'No ChartBench library here yet. Open the ChartBench tab and save a song, then hit Refresh — it will appear automatically.'},
+    unreachable: {dot:'var(--danger)', text:'ChartBench’s database isn’t readable from this page (that happens when the two apps aren’t on the same origin). Import chart exports here instead — everything else works the same.'},
+    unknown:     {dot:'var(--text-faint)', text:'Checking for the ChartBench library…'}
   };
   const b = BANNERS[lib.status] || BANNERS.unknown;
   banner.innerHTML = `<div class="banner"><span class="dot" style="background:${b.dot}"></span><span>${b.text}</span></div>`;
@@ -2304,7 +2304,7 @@ function renderSongs(){
   const wrap = $('songTableWrap');
   if(!songs.length){
     wrap.innerHTML = `<div class="empty">No songs in the library.<br>
-      Build charts in <strong>Chart Builder</strong>, or import a <strong>.json</strong> export from it.</div>`;
+      Build charts in <strong>ChartBench</strong>, or import a <strong>.json</strong> export from it.</div>`;
     return;
   }
 
@@ -2342,7 +2342,7 @@ async function refreshSongs(){
   if(State.route === 'plan' && State.paletteTab === 'songs') renderPalette();
 }
 
-/* Fallback path: pull songs out of Chart Builder's own JSON export format. */
+/* Fallback path: pull songs out of ChartBench's own JSON export format. */
 $('btnImportSongs').addEventListener('click', () => $('songFile').click());
 $('songFile').addEventListener('change', async e => {
   const files = [...e.target.files];
@@ -2367,7 +2367,7 @@ $('songFile').addEventListener('change', async e => {
 $('btnRefreshSongs').addEventListener('click', async () => { await refreshSongs(); toast('Library refreshed'); });
 
 /* ---------------------------------------------------------------------------
-   15. CHART BUILDER EMBED
+   15. CHARTBENCH EMBED
    The iframe is loaded lazily and only reloaded when the requested song
    changes, so switching tabs doesn't throw away editor state.
 --------------------------------------------------------------------------- */
@@ -2379,7 +2379,7 @@ function openChart(songId){
 }
 function renderChart(){
   const frame = $('chartFrame');
-  /* Imported songs carry an 'imp-' prefixed id that Chart Builder knows
+  /* Imported songs carry an 'imp-' prefixed id that ChartBench knows
      nothing about, so only real library ids are deep-linked. */
   const deepLink = pendingChartSong && !String(pendingChartSong).startsWith('imp-')
     ? `chart-builder/index.html?song=${encodeURIComponent(pendingChartSong)}`
@@ -2454,7 +2454,7 @@ $('btnPrintSheet').addEventListener('click', () => {
 
 /* ---------------------------------------------------------------------------
    16b. SETTINGS DRAWER
-   Same right-side drawer Chart Builder uses, and the same three-part shape:
+   Same right-side drawer ChartBench uses, and the same three-part shape:
    preferences, then data, then the destructive stuff at the bottom.
 --------------------------------------------------------------------------- */
 const WEEKDAYS = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
@@ -2572,8 +2572,8 @@ function openSettings(){
   const lib = ChartLibrary.get();
   const LIB_LABEL = {
     live: `Connected — ${lib.songs.length} songs`,
-    empty: 'Connected, but Chart Builder has no songs yet',
-    absent: 'No Chart Builder library on this origin yet',
+    empty: 'Connected, but ChartBench has no songs yet',
+    absent: 'No ChartBench library on this origin yet',
     unreachable: 'Not readable from this page — serve both apps over http://',
     unknown: 'Checking…'
   };
@@ -2599,7 +2599,7 @@ function openSettings(){
     <div class="note">These change who auto-fill offers and what it flags. They never move anyone already scheduled.</div>
 
     <h4>Song library</h4>
-    <div class="form-row"><label>Chart Builder</label><div class="faint" style="font-size:12px" id="setLibStatus">${esc(LIB_LABEL[lib.status] || LIB_LABEL.unknown)}</div></div>
+    <div class="form-row"><label>ChartBench</label><div class="faint" style="font-size:12px" id="setLibStatus">${esc(LIB_LABEL[lib.status] || LIB_LABEL.unknown)}</div></div>
     <div class="form-row inline"><button id="setRefreshLib">↻ Refresh library</button></div>
 
     <h4>Data</h4>
@@ -2607,11 +2607,11 @@ function openSettings(){
       <button id="setBackup">Export backup</button>
       <button id="setRestore">Restore…</button>
     </div>
-    <div class="note">A backup is one .json holding every person, service, team position and preference — everything except the charts, which live in Chart Builder and back up from there.</div>
+    <div class="note">A backup is one .json holding every person, service, team position and preference — everything except the charts, which live in ChartBench and back up from there.</div>
     <div class="form-row inline" style="margin-top:14px">
       <button id="setWipe" style="border-color:var(--danger); color:var(--danger);">Clear local database</button>
     </div>
-    <div class="note">Erases Greenroom's data in this browser and reloads with the sample roster. Chart Builder is untouched.</div>`;
+    <div class="note">Erases Greenroom's data in this browser and reloads with the sample roster. ChartBench is untouched.</div>`;
 
   openDrawer('Settings', body, (drawer, close) => {
     /* Text/select settings save on change and take effect immediately. */
@@ -2715,7 +2715,7 @@ function openSettings(){
 
     drawer.querySelector('#setWipe').addEventListener('click', () => {
       confirmAction('Clear local database?',
-        'Every person, service and preference in Greenroom is erased and the sample roster comes back. This cannot be undone — export a backup first if you might want any of it. Chart Builder is not affected.',
+        'Every person, service and preference in Greenroom is erased and the sample roster comes back. This cannot be undone — export a backup first if you might want any of it. ChartBench is not affected.',
         async () => {
           for(const p of State.people)   await DB.del('people', p.id);
           for(const v of State.services) await DB.del('services', v.id);
