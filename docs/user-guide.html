@@ -38,6 +38,11 @@
   .cu.flip .cu-img { order: 2; }
   .cu.wide { grid-template-columns: 1.5fr 1fr; }
   .cu.tall { grid-template-columns: 0.8fr 1.2fr; }
+  /* A flipped callout puts the image in the second column, so the column
+     widths swap too — the picture stays the same size whichever side it's on. */
+  .cu.flip { grid-template-columns: 1fr 1.1fr; }
+  .cu.wide.flip { grid-template-columns: 1fr 1.5fr; }
+  .cu.tall.flip { grid-template-columns: 1.2fr 0.8fr; }
   .cu.small .cu-img img { width: 58%; margin: 0 auto; }
   .cu-img img { width: 100%; display: block; border: 1pt solid #d6d9de; border-radius: 6pt; box-shadow: 0 2pt 10pt rgba(0,0,0,.10); }
   .cu-text { font-size: 10.5pt; }
