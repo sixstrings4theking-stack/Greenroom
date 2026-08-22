@@ -5517,6 +5517,42 @@ ${versesXml}
     return backdrop;
   }
 
+  // Settings > Feedback > "Debug & Feature Request": a mailto: link, which
+  // every platform hands to its default mail app (Mail, Outlook, Gmail in
+  // the browser, the phone's mail client) — no server, no form, nothing
+  // sent until the user hits Send in their own client. The body is seeded
+  // with the few facts that make a bug report traceable (which copy, which
+  // browser, page size) and headed blanks for the rest; the address is one
+  // constant so it's trivial to change later.
+  const FEEDBACK_EMAIL = 'sixstrings4theking@gmail.com';
+  function openFeedbackEmail(){
+    const where = WEB_HOSTED_COPY ? ('Web copy at ' + location.origin + location.pathname) : 'Downloaded local copy (ChartBench.html)';
+    const body = [
+      'Type (Bug / Feature request):',
+      '',
+      'What happened, or what would you like added?',
+      '',
+      '',
+      'Steps to reproduce (for a bug):',
+      '1.',
+      '2.',
+      '3.',
+      '',
+      '-----',
+      'ChartBench: ' + where,
+      'Browser: ' + navigator.userAgent,
+      'Page size: ' + PageSizeStore.get().toUpperCase(),
+      'Songs in library: ' + songs.length,
+      'Sent: ' + new Date().toISOString()
+    ].join('\n');
+    const href = 'mailto:' + FEEDBACK_EMAIL
+      + '?subject=' + encodeURIComponent('ChartBench — Debug / Feature Request')
+      + '&body=' + encodeURIComponent(body);
+    const a = document.createElement('a');
+    a.href = href; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+  }
+
   function openSettings(){
     const body = `
       <h4>Display Preferences</h4>
@@ -5571,8 +5607,12 @@ ${versesXml}
         <button id="forgetFolderBtn" class="ghost">Forget</button>
       </div>
       <div class="mock-note">Saves the whole library into the chosen folder as one .json file per song — handy for large work sets (setlists, whole libraries). Requires Chrome or Edge; the folder handle is remembered and re-offered next time this page loads, but the browser will ask you to re-confirm access each session for security.</div>
+      <h4>Feedback</h4>
+      <div class="form-row"><button id="feedbackBtn" title="Opens a new message in your device's email app, addressed to the ChartBench developer">Debug &amp; Feature Request…</button></div>
+      <div class="mock-note">Found a bug or want something added? This opens your email app with a message started for you — describe what happened (or what you'd like), and send. A few details about your copy of ChartBench are filled in to help track it down; everything else is yours to write.</div>
     `;
     openDrawer('Settings', body, (drawer) => {
+      drawer.querySelector('#feedbackBtn').onclick = openFeedbackEmail;
       const fontSlider = drawer.querySelector('#prefFontSize');
       fontSlider.oninput = () => { el('editor').style.fontSize = fontSlider.value + 'px'; };
       const gapSlider = drawer.querySelector('#prefChordGap');
