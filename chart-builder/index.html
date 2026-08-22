@@ -419,7 +419,9 @@ small{color:var(--text-faint);}
 .cs-roadmap-item{display:inline-flex; align-items:center; gap:3px;}
 .cs-section{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
 .cs-section-label{font-size:calc(11px * var(--chart-font-scale)); font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:#a06a1e; margin-bottom:3px;}
-.cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:calc(12px * var(--chart-font-scale));}
+/* Header-line chords ("Intro: 1 4 5") and chords-only lines are the SAME
+   size as chords above lyrics — a chord is a chord wherever it sits. */
+.cs-inline-chords{font-family:var(--mono); font-weight:700; color:#1a6fb0; text-transform:none; letter-spacing:normal; font-size:calc(13.5px * var(--chart-font-scale)); vertical-align:baseline;}
 /* Key-change marker (see ChordParser.KEY_CHANGE_RE / Renderer.renderSections)
    — same purple as the song-map roadmap line, since it's the same "where
    the song moves" family of information. Scales with editor-typed content
@@ -428,7 +430,7 @@ small{color:var(--text-faint);}
 .cs-line{display:flex; flex-direction:column; white-space:pre;}
 .chord-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.1; white-space:pre; margin-bottom:var(--chord-lyric-gap);}
 .lyric-row{font-family:var(--mono); font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.5; white-space:pre; color:#111;}
-.chordonly-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:calc(13px * var(--chart-font-scale)); margin:2px 0;}
+.chordonly-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:calc(13.5px * var(--chart-font-scale)); margin:2px 0;}
 .comment-row{font-family:var(--sans); font-style:italic; color:#888; font-size:calc(12px * var(--chart-font-scale)); margin:2px 0;}
 /* Chart-body justification (song.bodyAlign — the ⟸ ≡ ⟹ buttons in the
    Live Preview head). Chords sit above lyrics by leading-space column
@@ -1095,7 +1097,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-22 17:45';
+const APP_BUILD = '2026-08-22 18:05';
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
