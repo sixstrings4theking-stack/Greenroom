@@ -2940,7 +2940,12 @@ const App = (() => {
   // (not-yet-converted) letter-key songs this is just a passthrough — their
   // content field always stores literally what's typed, unchanged from
   // pre-migration behavior.
+  // In Lyrics view the textarea holds lyricsContent, NOT the chart — the
+  // chart is whatever currentSong.content already is, and must be returned
+  // untouched (saving from Lyrics view once wrote the lyrics over the chart).
+  function inLyricsView(){ return el('btnLyricsOnly').classList.contains('active'); }
   function resolveCanonicalContent(){
+    if(inLyricsView()) return (currentSong && currentSong.content) || '';
     const raw = el('editor').value;
     if(currentSong && currentSong.key === 'NN' && liveKey && liveKey !== 'NN'){
       return NashvilleSystem.contentToNumbers(raw, liveKey.replace(/m$/, ''));
@@ -4859,7 +4864,9 @@ const App = (() => {
       expandRepeats: !!(currentSong && currentSong.expandRepeats),
       tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
       libraries: (currentSong && currentSong.libraries) || [],
-      content: el('editor').value
+      // The editor shows the chart only outside Lyrics view (see
+      // resolveCanonicalContent); in Lyrics view the chart is the stored one.
+      content: inLyricsView() ? ((currentSong && currentSong.content) || '') : el('editor').value
     };
   }
 
@@ -7137,6 +7144,7 @@ ${versesXml}
       drawer.querySelectorAll('[data-restore]').forEach(btn => {
         btn.onclick = () => {
           const v = currentSong.versions[Number(btn.dataset.restore)];
+          if(inLyricsView()) toggleLyricsOnlyView(); // a version is chart text — restore into the chart editor, never the lyrics one
           commitPendingUndo();
           el('editor').value = v.content;
           syncUndoBaseline();
