@@ -6769,6 +6769,32 @@ ${versesXml}
     });
   }
 
+  // One-time catch-up for songs saved before lastDisplayedKey existed: each
+  // gets the key it would have opened in under the old rule (NN, or its
+  // first Preferred Key if a letter key was showing at save; a legacy
+  // letter-key song just gets its own key) written onto the record, so the
+  // whole library behaves like a freshly saved one and any export of it
+  // carries the key. Leaves updatedAt alone — this isn't an edit, and the
+  // Recent sort shouldn't reshuffle over it. Skips itself once nothing
+  // needs migrating.
+  async function migrateLastDisplayedKey(){
+    let all;
+    try{ all = await DB.getAllSongs(); }catch(e){ return; }
+    for(const s of all){
+      if(SLB_KEY_OPTIONS.includes(s.lastDisplayedKey)) continue;
+      const key = s.key || 'C';
+      let derived;
+      if(key === 'NN'){
+        derived = s.lastDisplayedNN === false ? toDisplayableKey((s.preferredKeys && s.preferredKeys[0]) || 'C') : 'NN';
+      } else {
+        derived = toDisplayableKey(key);
+      }
+      if(!SLB_KEY_OPTIONS.includes(derived)) continue;
+      s.lastDisplayedKey = derived;
+      try{ await DB.putSong(s); }catch(e){ console.warn('lastDisplayedKey migration skipped a song:', e.message); }
+    }
+  }
+
   async function init(){
     wire();
     // Ask the browser to treat this origin's storage as persistent, so the
@@ -6796,6 +6822,7 @@ ${versesXml}
     applyMetaBarCollapse(MetaBarCollapseStore.get());
     applyTagFilterCollapse(TagFilterCollapseStore.get());
     applyKeyFilterCollapse(KeyFilterCollapseStore.get());
+    await migrateLastDisplayedKey();
     await refreshLibrary();
     await seedDemoSongsIfNeeded();
     // ?song=<id> deep link — how the Greenroom parent app opens a specific
