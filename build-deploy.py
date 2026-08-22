@@ -11,7 +11,7 @@ Layout (upload the CONTENTS of the folder into the web root, e.g. /public):
         *.json              one ChartBench JSON per demo song
     docs/                   the User Guide the app's Guide button opens
         user-guide.html, ChartBench-User-Guide.pdf, guide-assets/
-    greenroom/index.html    the Greenroom parent prototype, pointed at ../index.html
+    og-image.png            link-preview image (Open Graph)
 
 Demo songs come from chart-builder/sample-data/ in the repo (the source of
 truth, so GitHub Pages and the website seed the same songs). Drop finished
@@ -56,12 +56,10 @@ for f in os.listdir(assets_src):
     if f.lower().endswith(".png"):
         copy(os.path.join(assets_src, f), os.path.join(OUT, "docs", "guide-assets", f))
 
-# 5. Greenroom parent, re-pointed at the root app
-gr = open(os.path.join(REPO, "index.html"), encoding="utf-8").read()
-gr, n = re.subn(r"(['\"`])chart-builder/index\.html", r"\1../index.html", gr)
-assert n >= 2, f"expected to rewrite the chart-builder references in the Greenroom index, rewrote {n}"
-os.makedirs(os.path.join(OUT, "greenroom"), exist_ok=True)
-open(os.path.join(OUT, "greenroom", "index.html"), "w", encoding="utf-8", newline="\n").write(gr)
+# 5. share image for link previews (the og:image URL in index.html's <head>)
+copy(os.path.join(REPO, "docs", "brand", "og-image.png"), os.path.join(OUT, "og-image.png"))
+# (The Greenroom prototype is deliberately NOT shipped — the public site is
+#  ChartBench only until Greenroom is ready for people to find.)
 
 # 6. upload notes
 open(os.path.join(OUT, "UPLOAD-README.txt"), "w", encoding="utf-8").write(f"""ChartBench website bundle
@@ -77,7 +75,7 @@ index.html is at https://thechartbench.com/index.html.
     manifest.json          must list every demo file by exact filename
     {chr(10).join('    ' + n + (' ' * max(1, 22 - len(n))) + 'demo song' for n in manifest)}
   docs/                    the User Guide (the app's Guide button opens docs/user-guide.html)
-  greenroom/index.html     the Greenroom prototype (optional)
+  og-image.png             link-preview image for shared links
 
 To replace a demo song: drop the finished ChartBench JSON into sample-data/
 under the SAME filename listed in manifest.json (or add the file and the
