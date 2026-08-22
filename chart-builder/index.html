@@ -4297,8 +4297,16 @@ const App = (() => {
       try{
         const text = await readFileAsText(file);
         const {song} = IO.detectAndParse(file.name, text);
-        lastSong = await importParsedSong(song, libraryName);
-        imported++;
+        // A ChartBench library export (Settings > Data > "Export entire
+        // library") is one JSON file holding an ARRAY of songs — every
+        // entry imports, each through the same per-song path.
+        const entries = Array.isArray(song) ? song : [song];
+        if(entries.length === 0) throw new Error('empty file');
+        for(const entry of entries){
+          if(!entry || typeof entry !== 'object') throw new Error('not a song');
+          lastSong = await importParsedSong(entry, libraryName);
+          imported++;
+        }
       }catch(err){
         failures.push(file.name);
         console.error('Import failed for ' + file.name, err);
