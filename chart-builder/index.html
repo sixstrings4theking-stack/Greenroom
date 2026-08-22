@@ -687,6 +687,12 @@ small{color:var(--text-faint);}
     <div id="tagFiltersLabel" class="filter-label hidden">Tags</div>
     <div id="tagFilters"></div>
     <button type="button" id="btnToggleTags" class="collapse-handle hidden" title="Hide tag filters"><span>▲</span><span>▲</span><span>▲</span></button>
+    <div id="mirrorNudge" class="backup-nudge hidden">
+      <div id="mirrorNudgeText"></div>
+      <div class="row">
+        <button type="button" id="mirrorNudgeGo" title="Re-confirm access to the library folder and sync">Reconnect folder</button>
+      </div>
+    </div>
     <div id="backupNudge" class="backup-nudge hidden">
       <div id="backupNudgeText"></div>
       <div class="row">
@@ -2067,17 +2073,32 @@ const DB = (() => {
 })();
 
 /* ---------------------------------------------------------------------------
-   5b. LOCAL BACKUP FOLDER (File System Access API)
-   NOTE: Cookies cannot hold a folder reference (4KB text only, no filesystem
-   access whatsoever) so this uses the browser's real File System Access API
-   instead. The chosen FileSystemDirectoryHandle is structured-cloneable and
-   is persisted in the same IndexedDB 'prefs' store DB already uses, so the
-   app can re-offer the same folder next time the page loads. Chrome/Edge only
-   — Firefox/Safari fall back to the existing JSON Export button.
+   5b. LIBRARY FOLDER MIRROR (File System Access API)
+   The user picks a real folder on their machine and the library lives there
+   as one JSON file per song, kept in step with the browser's IndexedDB:
+   every Save writes the file, every delete removes it, and each launch
+   reconciles the two (see App's mirrorSync). The folder is the durable copy
+   — clearing browser data, or opening the app on another machine pointed at
+   the same (cloud-synced) folder, gets the library back — while IndexedDB
+   stays the fast working cache that every browser has, so nothing changes
+   for Firefox/Safari/phones except that they can't mirror.
+
+   The FileSystemDirectoryHandle is structured-cloneable and is persisted in
+   DB's 'prefs' store (same key the old "backup folder" used, so a folder
+   chosen before the mirror existed carries straight over). Chromium only;
+   re-opening a stored handle needs permission, which Chrome can remember
+   ("Allow on every visit") or re-ask for once per session.
+
+   Files: "<Title>--<uid8>.json" — the uid suffix is what ties a file to a
+   song across machines and title changes (song.uid is a UUID minted on
+   first save; DB ids are per-machine and never written to the folder).
 --------------------------------------------------------------------------- */
-const FolderBackup = (() => {
+const FolderMirror = (() => {
   const PREF_KEY = 'backupDirHandle';
+  const TOMB_KEY = 'mirrorTombstones'; // {uid: deletedAt} — deletions made while the folder was unreachable
+  const SYNC_KEY = 'mirrorLastSync';
   let dirHandle = null;
+  let connected = false; // permission confirmed granted this session
 
   function supported(){ return 'showDirectoryPicker' in window; }
 
@@ -2086,36 +2107,59 @@ const FolderBackup = (() => {
     return dirHandle;
   }
 
-  // Checks current permission WITHOUT prompting (safe to call on page load).
+  // Checks current permission WITHOUT prompting (safe on page load).
   async function currentStatus(){
     if(!supported()) return {state:'unsupported'};
     if(!dirHandle) await loadStoredHandle();
     if(!dirHandle) return {state:'none'};
     try{
       const perm = await dirHandle.queryPermission({mode:'readwrite'});
+      if(perm === 'granted') connected = true;
       return {state: perm, name: dirHandle.name};
     }catch(e){
       return {state:'none'};
     }
   }
 
-  // Must be called from a user gesture (button click) — browsers require this.
+  // Must be called from a user gesture (button click).
   async function chooseFolder(){
     if(!supported()) throw new Error('File System Access API not supported in this browser');
     const handle = await window.showDirectoryPicker({id:'wcbBackupFolder', mode:'readwrite'});
     dirHandle = handle;
+    connected = true;
     await DB.setPref(PREF_KEY, handle);
     return handle;
   }
 
-  // Must be called from a user gesture — re-requests permission if needed.
+  // Re-requests permission if needed — a user gesture is required for the
+  // prompt itself, so this is only called from clicks (or at launch when the
+  // query already says 'granted', where no prompt happens).
   async function ensurePermission(){
     if(!dirHandle) await loadStoredHandle();
-    if(!dirHandle) throw new Error('No backup folder selected yet');
+    if(!dirHandle) throw new Error('No library folder selected yet');
     let perm = await dirHandle.queryPermission({mode:'readwrite'});
     if(perm !== 'granted') perm = await dirHandle.requestPermission({mode:'readwrite'});
     if(perm !== 'granted') throw new Error('Permission to the folder was not granted');
+    connected = true;
     return dirHandle;
+  }
+
+  function isConnected(){ return connected && !!dirHandle; }
+  function folderName(){ return dirHandle ? dirHandle.name : ''; }
+
+  function safeTitle(title){
+    return (String(title || '').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)) || 'Untitled';
+  }
+  const uid8 = uid => String(uid).replace(/-/g, '').slice(0, 8).toLowerCase();
+  function fileNameFor(song){ return `${safeTitle(song.title)}--${uid8(song.uid)}.json`; }
+  function uid8FromName(name){ const m = name.match(/--([0-9a-f]{8})\.json$/i); return m ? m[1].toLowerCase() : null; }
+
+  // The file form of a song: the whole record minus the two per-machine
+  // fields (DB id, and when this machine last mirrored it).
+  function serialize(song){
+    const copy = Object.assign({}, song);
+    delete copy.id; delete copy.mirroredAt;
+    return JSON.stringify(copy, null, 2);
   }
 
   async function writeFile(filename, content){
@@ -2125,25 +2169,70 @@ const FolderBackup = (() => {
     await writable.close();
   }
 
-  // Saves the entire local song library into the chosen folder as one .json file per song —
-  // intended for large work sets (whole setlists/libraries), not single-song export.
-  async function saveAllSongsToFolder(songs){
-    await ensurePermission();
-    let count = 0;
-    for(const song of songs){
-      const base = (song.title || 'untitled_' + song.id).replace(/[^\w\-]+/g,'_');
-      await writeFile(`${base}.json`, JSON.stringify(song, null, 2));
-      count++;
+  async function listJsonFiles(){
+    const out = [];
+    for await (const [name, handle] of dirHandle.entries()){
+      if(handle.kind === 'file' && /\.json$/i.test(name)) out.push({name, handle});
     }
-    return count;
+    return out;
   }
 
-  function forget(){
+  // Writes the song under its canonical name and clears any older file of
+  // the same uid left under a previous title.
+  async function writeSong(song){
+    const name = fileNameFor(song);
+    await writeFile(name, serialize(song));
+    const u = uid8(song.uid);
+    for(const f of await listJsonFiles()){
+      if(f.name !== name && uid8FromName(f.name) === u) await dirHandle.removeEntry(f.name);
+    }
+  }
+
+  async function removeSong(uid){
+    const u = uid8(uid);
+    for(const f of await listJsonFiles()){
+      if(uid8FromName(f.name) === u) await dirHandle.removeEntry(f.name);
+    }
+  }
+
+  async function removeFile(name){ await dirHandle.removeEntry(name); }
+
+  // Every readable ChartBench song file in the folder. Anything that isn't
+  // one (other JSON, a corrupt file) is skipped and left alone.
+  async function readAll(){
+    const out = [];
+    for(const f of await listJsonFiles()){
+      try{
+        const file = await f.handle.getFile();
+        const data = JSON.parse(await file.text());
+        if(data && typeof data === 'object' && !Array.isArray(data) && typeof data.title === 'string' && typeof data.content === 'string'){
+          out.push({name: f.name, song: data, lastModified: file.lastModified});
+        }
+      }catch(e){
+        console.warn('Library folder: skipped unreadable file', f.name, e.message);
+      }
+    }
+    return out;
+  }
+
+  async function getTombstones(){ return (await DB.getPref(TOMB_KEY, null)) || {}; }
+  async function setTombstones(t){ return DB.setPref(TOMB_KEY, t); }
+  async function addTombstone(uid){ const t = await getTombstones(); t[uid] = Date.now(); return setTombstones(t); }
+
+  async function lastSync(){ return (await DB.getPref(SYNC_KEY, null)) || 0; }
+  async function markSynced(){ return DB.setPref(SYNC_KEY, Date.now()); }
+
+  async function forget(){
     dirHandle = null;
-    return DB.setPref(PREF_KEY, null);
+    connected = false;
+    await DB.setPref(PREF_KEY, null);
+    await DB.setPref(TOMB_KEY, null);
+    await DB.setPref(SYNC_KEY, null);
   }
 
-  return { supported, currentStatus, chooseFolder, ensurePermission, saveAllSongsToFolder, forget };
+  return { supported, currentStatus, chooseFolder, ensurePermission, isConnected, folderName,
+           fileNameFor, uid8, uid8FromName, serialize, writeSong, removeSong, removeFile, readAll,
+           getTombstones, setTombstones, addTombstone, lastSync, markSynced, forget };
 })();
 
 /* ---------------------------------------------------------------------------
@@ -2954,7 +3043,10 @@ const App = (() => {
     const persistTxt = persisted === true
       ? '✅ Persistent — the browser won’t auto-evict it'
       : (persisted === false ? '⚠️ Best-effort — the browser may clear it under storage pressure' : 'Unknown');
-    st.innerHTML = `<small>Storage: ${persistTxt}.<br>Last full backup: <b>${lastTxt}</b>. Songs live in browser site data — clearing “cookies and site data” erases them, so back up regularly.</small>`;
+    const mirrorTxt = FolderMirror.isConnected()
+      ? `Library folder <b>${Renderer.escapeHtml(FolderMirror.folderName())}</b> is mirroring every save — that folder is your durable copy.`
+      : 'Songs live in browser site data — clearing “cookies and site data” erases them, so back up regularly (or set a Library Folder below).';
+    st.innerHTML = `<small>Storage: ${persistTxt}.<br>Last full backup: <b>${lastTxt}</b>. ${mirrorTxt}</small>`;
   }
 
   // Reflects SongSortStore into a sort toggle (sidebar or builder). Clicks
@@ -2972,6 +3064,233 @@ const App = (() => {
     });
   }
 
+  /* ---------------- Library folder mirror (App side) ---------------- */
+  // See the FolderMirror module note. Rules, in one place:
+  //   * song.uid (UUID) identifies a song across machines; DB id never
+  //     leaves this browser. song.mirroredAt = when THIS browser last saw
+  //     the song in the folder (written or read) — unset means "never
+  //     mirrored to the current folder".
+  //   * Save/import/delete write through to the folder when it's connected
+  //     (persistSong / mirrorForgetSong). A delete while disconnected leaves
+  //     a tombstone so the file goes on the next sync.
+  //   * mirrorSync reconciles by uid: newer updatedAt wins in both
+  //     directions; a file with no DB song is pulled in; a DB song with no
+  //     file is pushed if it was never mirrored, and treated as "deleted on
+  //     another machine" if it was — that last case asks first, because an
+  //     empty-looking folder (a cloud drive still downloading, say) must
+  //     never silently wipe a library.
+  //   * Choosing a new folder clears every mirroredAt, so the first sync
+  //     pushes everything rather than reading the new folder as deletions.
+  //   * Old "backup folder" files (Title.json, no uid) are adopted on first
+  //     sync: matched to an un-mirrored DB song by title+artist if there is
+  //     exactly one, else imported; renamed to the uid convention.
+  function newUid(){
+    if(crypto && crypto.randomUUID) return crypto.randomUUID();
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => { const r = Math.random()*16|0; return (c === 'x' ? r : (r&3|8)).toString(16); });
+  }
+  function ensureSongUid(song){
+    if(typeof song.uid !== 'string' || !song.uid) song.uid = newUid();
+    return song.uid;
+  }
+
+  // The one write path for songs: DB, plus the folder when connected.
+  let mirrorWriteWarned = false;
+  async function persistSong(song){
+    ensureSongUid(song);
+    if(FolderMirror.isConnected()){
+      try{
+        await FolderMirror.writeSong(song);
+        song.mirroredAt = Date.now();
+        mirrorWriteWarned = false;
+      }catch(e){
+        console.warn('Library folder write failed:', e);
+        if(!mirrorWriteWarned){ toast('Saved in the browser, but the library folder couldn’t be written — Sync in Settings will catch it up'); mirrorWriteWarned = true; }
+      }
+    }
+    const id = await DB.putSong(song);
+    song.id = id;
+    return id;
+  }
+
+  async function mirrorForgetSong(song){
+    if(!song || !song.uid) return;
+    if(FolderMirror.isConnected()){
+      try{ await FolderMirror.removeSong(song.uid); return; }
+      catch(e){ console.warn('Library folder remove failed:', e); }
+    }
+    if(await FolderMirror.currentStatus().then(s => s.state !== 'none' && s.state !== 'unsupported')){
+      await FolderMirror.addTombstone(song.uid);
+    }
+  }
+
+  const MIRROR_FIELDS_LOCAL = ['id', 'mirroredAt'];
+  function applyFileToRecord(record, fileSong){
+    for(const k of Object.keys(record)){ if(!MIRROR_FIELDS_LOCAL.includes(k) && !(k in fileSong)) delete record[k]; }
+    for(const k of Object.keys(fileSong)){ if(!MIRROR_FIELDS_LOCAL.includes(k)) record[k] = fileSong[k]; }
+    return record;
+  }
+
+  let mirrorSyncing = false;
+  async function mirrorSync(reason){
+    if(!FolderMirror.isConnected() || mirrorSyncing) return null;
+    mirrorSyncing = true;
+    const stats = {pulled:0, pushed:0, removedLocal:0, removedRemote:0, adopted:0};
+    try{
+      const now = Date.now();
+      const files = await FolderMirror.readAll();
+      const dbSongs = await DB.getAllSongs();
+      const tomb = await FolderMirror.getTombstones();
+      const byUid = new Map();
+      for(const s of dbSongs){
+        if(!s.uid){ ensureSongUid(s); await DB.putSong(s); }
+        byUid.set(s.uid, s);
+      }
+      const seen = new Set();
+      const pulledUids = new Set();
+
+      // --- files without a uid: adopt (legacy backup files / hand-made) ---
+      for(const f of files){
+        if(typeof f.song.uid === 'string' && f.song.uid) continue;
+        const t = (f.song.title || '').trim().toLowerCase(), a = (f.song.artist || '').trim().toLowerCase();
+        const candidates = dbSongs.filter(s => !s.mirroredAt && (s.title || '').trim().toLowerCase() === t && (s.artist || '').trim().toLowerCase() === a);
+        f.song.uid = candidates.length === 1 ? candidates[0].uid : newUid();
+        delete f.song.id; delete f.song.mirroredAt;
+        await FolderMirror.writeSong(f.song);
+        if(f.name !== FolderMirror.fileNameFor(f.song)) await FolderMirror.removeFile(f.name);
+        f.name = FolderMirror.fileNameFor(f.song);
+        stats.adopted++;
+      }
+
+      // --- duplicate files for one uid: keep the newest, drop the rest ---
+      const fileByUid = new Map();
+      for(const f of files){
+        const prev = fileByUid.get(f.song.uid);
+        if(!prev){ fileByUid.set(f.song.uid, f); continue; }
+        const loser = ((f.song.updatedAt || 0) > (prev.song.updatedAt || 0)) ? prev : f;
+        const winner = loser === prev ? f : prev;
+        fileByUid.set(f.song.uid, winner);
+        try{ await FolderMirror.removeFile(loser.name); }catch(e){}
+      }
+
+      // --- folder → browser ---
+      for(const [uid, f] of fileByUid){
+        seen.add(uid);
+        const fs = f.song, d = byUid.get(uid);
+        if(tomb[uid] && tomb[uid] >= (fs.updatedAt || 0)){
+          await FolderMirror.removeSong(uid); stats.removedRemote++; delete tomb[uid]; continue;
+        }
+        delete tomb[uid];
+        if(!d){
+          const rec = Object.assign({}, fs); delete rec.id; rec.mirroredAt = now;
+          await DB.putSong(rec); stats.pulled++; pulledUids.add(uid); continue;
+        }
+        const fu = fs.updatedAt || 0, du = d.updatedAt || 0;
+        const handEdited = fu === du && f.lastModified > (d.mirroredAt || 0) + 5000 && FolderMirror.serialize(fs) !== FolderMirror.serialize(d);
+        if(fu > du || handEdited){
+          applyFileToRecord(d, fs); d.mirroredAt = now;
+          await DB.putSong(d); stats.pulled++; pulledUids.add(uid);
+        } else if(du > fu){
+          await FolderMirror.writeSong(d); d.mirroredAt = now;
+          await DB.putSong(d); stats.pushed++;
+        } else if(!d.mirroredAt){
+          d.mirroredAt = now; await DB.putSong(d);
+        }
+      }
+
+      // --- browser → folder, and deletions made elsewhere ---
+      const missing = [];
+      for(const [uid, d] of byUid){
+        if(seen.has(uid)) continue;
+        if(d.mirroredAt) missing.push(d);
+        else { await FolderMirror.writeSong(d); d.mirroredAt = now; await DB.putSong(d); stats.pushed++; }
+      }
+      if(missing.length){
+        const names = missing.slice(0, 6).map(s => `• ${s.title || 'Untitled'}`).join('\n') + (missing.length > 6 ? `\n• …and ${missing.length - 6} more` : '');
+        const ok = confirm(`${missing.length} song${missing.length === 1 ? ' is' : 's are'} no longer in the library folder "${FolderMirror.folderName()}":\n\n${names}\n\nRemove ${missing.length === 1 ? 'it' : 'them'} from this browser too?\n\nOK = remove here as well (they were deleted elsewhere).\nCancel = keep them and write them back to the folder.`);
+        for(const d of missing){
+          if(ok){ await DB.deleteSong(d.id); stats.removedLocal++; }
+          else { await FolderMirror.writeSong(d); d.mirroredAt = now; await DB.putSong(d); stats.pushed++; }
+        }
+      }
+      await FolderMirror.setTombstones(tomb);
+      await FolderMirror.markSynced();
+      BackupStore.markBackedUp();
+
+      await refreshLibrary();
+      // The open song: reload it if the folder had a newer copy and nothing
+      // is unsaved here; if there ARE unsaved edits, they win until Save.
+      if(currentSong && currentSong.uid){
+        const fresh = songs.find(s => s.uid === currentSong.uid);
+        if(!fresh && currentSong.id){
+          if(songs.length) selectSong(songs[0].id); else newSong();
+        } else if(fresh && pulledUids.has(currentSong.uid)){
+          if(!dirty) selectSong(fresh.id);
+          else toast(`"${fresh.title}" changed in the folder — your unsaved edits are kept; Save will overwrite the folder copy`);
+        }
+      }
+      renderMirrorNudge();
+      renderBackupNudge();
+      renderStorageStatus();
+      return stats;
+    }catch(e){
+      console.error('Library folder sync failed:', e);
+      toast('Library folder sync failed: ' + e.message);
+      return null;
+    }finally{
+      mirrorSyncing = false;
+    }
+  }
+
+  function describeSync(stats){
+    if(!stats) return '';
+    const parts = [];
+    if(stats.pulled) parts.push(`${stats.pulled} updated from folder`);
+    if(stats.pushed) parts.push(`${stats.pushed} written to folder`);
+    if(stats.removedLocal) parts.push(`${stats.removedLocal} removed here`);
+    if(stats.removedRemote) parts.push(`${stats.removedRemote} removed from folder`);
+    if(stats.adopted) parts.push(`${stats.adopted} older file${stats.adopted === 1 ? '' : 's'} adopted`);
+    return parts.length ? parts.join(', ') : 'already in sync';
+  }
+
+  // Sidebar strip shown when a remembered folder needs its permission
+  // re-confirmed this session (Chrome wants a click for that).
+  function renderMirrorNudge(){
+    const box = el('mirrorNudge');
+    FolderMirror.currentStatus().then(status => {
+      const show = status.state === 'prompt';
+      box.classList.toggle('hidden', !show);
+      if(show) el('mirrorNudgeText').innerHTML = `Library folder <b>${Renderer.escapeHtml(status.name)}</b> needs reconnecting this session.`;
+    });
+  }
+  async function mirrorReconnect(){
+    try{
+      await FolderMirror.ensurePermission();
+      const stats = await mirrorSync('reconnect');
+      toast('Library folder connected — ' + describeSync(stats));
+    }catch(e){
+      toast('Could not reconnect: ' + e.message);
+    }
+    renderMirrorNudge();
+  }
+  // Launch: silently sync if Chrome still grants the folder; otherwise show
+  // the reconnect strip and wait for the click.
+  async function mirrorConnectOnLaunch(){
+    const status = await FolderMirror.currentStatus();
+    if(status.state === 'granted'){
+      const stats = await mirrorSync('launch');
+      if(stats && (stats.pulled || stats.removedLocal || stats.adopted)) toast('Library folder: ' + describeSync(stats));
+    }
+    renderMirrorNudge();
+  }
+  // Choosing a folder: every song is "never mirrored here" from now on, so
+  // the first sync pushes the library into it (and adopts anything in it).
+  async function mirrorAdoptFolder(){
+    const all = await DB.getAllSongs();
+    for(const s of all){ if(s.mirroredAt){ delete s.mirroredAt; await DB.putSong(s); } }
+    await FolderMirror.setTombstones({});
+    return mirrorSync('choose');
+  }
+
   const BACKUP_NUDGE_DAYS = 14;
   function renderBackupNudge(){
     const box = el('backupNudge');
@@ -2979,7 +3298,8 @@ const App = (() => {
     const now = Date.now();
     const last = BackupStore.lastBackup();
     const days = Math.floor((now - (last || BackupStore.firstRun())) / 86400000);
-    const show = real > 0 && BackupStore.snoozedUntil() <= now && days >= BACKUP_NUDGE_DAYS;
+    // A connected library folder IS the backup — no nagging while it's live.
+    const show = !FolderMirror.isConnected() && real > 0 && BackupStore.snoozedUntil() <= now && days >= BACKUP_NUDGE_DAYS;
     box.classList.toggle('hidden', !show);
     if(!show) return;
     el('backupNudgeText').innerHTML = last
@@ -3274,7 +3594,8 @@ const App = (() => {
       renderCurrentSongLibraries();
       renderLibraryFilters();
     } else {
-      await DB.putSong(song);
+      song.updatedAt = Date.now();
+      await persistSong(song);
       await refreshLibrary();
     }
     if(!el('libraryAssignPopup').classList.contains('hidden')) renderLibraryAssignPopup();
@@ -3317,8 +3638,10 @@ const App = (() => {
   async function deleteSongFromList(id){
     const s = songs.find(s => s.id===id);
     if(!s) return;
-    if(!confirm(`Remove "${s.title || 'Untitled'}" from ChartBench's library?\n\nThis only removes it from the app — it won't touch any original file it was imported from.`)) return;
+    const folderNote = FolderMirror.isConnected() ? `\n\nIts file in the library folder "${FolderMirror.folderName()}" is removed too.` : `\n\nThis only removes it from the app — it won't touch any original file it was imported from.`;
+    if(!confirm(`Remove "${s.title || 'Untitled'}" from ChartBench's library?${folderNote}`)) return;
     await DB.deleteSong(id);
+    await mirrorForgetSong(s);
     const wasCurrent = currentSong && currentSong.id === id;
     await refreshLibrary();
     if(wasCurrent){
@@ -3367,8 +3690,7 @@ const App = (() => {
     currentSong.versions = currentSong.versions || [];
     currentSong.versions.push({ts: Date.now(), content: currentSong.content, key: currentSong.key, note:'Autosave on save'});
     if(currentSong.versions.length > 25) currentSong.versions = currentSong.versions.slice(-25);
-    const id = await DB.putSong(currentSong);
-    currentSong.id = id;
+    await persistSong(currentSong);
     dirty = false;
     updateSaveStatus();
     await refreshLibrary();
@@ -4291,8 +4613,12 @@ const App = (() => {
       const shown = toDisplayableKey(statedKey);
       if(SLB_KEY_OPTIONS.includes(shown)){ toSave.lastDisplayedKey = shown; toSave.lastDisplayedNN = false; }
     }
-    const id = await DB.putSong(toSave);
-    toSave.id = id;
+    // An import is always a NEW song here — it gets its own uid (see
+    // ensureSongUid) rather than inheriting one from the file, so importing
+    // a file twice gives two songs, never two records claiming one mirror
+    // file. (Songs arriving via the library folder itself keep their uid —
+    // that's mirrorSync's path, not this one.)
+    await persistSong(toSave);
     return toSave;
   }
 
@@ -4410,7 +4736,7 @@ const App = (() => {
       lastDisplayedNN: el('mDisplayKey').value === 'NN',
       lastDisplayedKey: el('mDisplayKey').value
     });
-    delete full.id;
+    delete full.id; delete full.mirroredAt;
     return full;
   }
 
@@ -5599,14 +5925,14 @@ ${versesXml}
       <div class="form-row"><button id="versionHistoryBtn" title="Saved versions of the current song — captured on every Save">Version history (current song)…</button></div>
       <div class="form-row"><button id="exportAllBtn">Export entire library (JSON)</button></div>
       <div class="form-row"><button id="wipeBtn" style="border-color:var(--danger); color:var(--danger);">Clear local database</button></div>
-      <h4>Local Backup Folder</h4>
+      <h4>Library Folder</h4>
       <div class="form-row" id="folderStatus"><small>Checking folder access…</small></div>
       <div class="form-row" style="display:flex; gap:6px;">
         <button id="chooseFolderBtn">Choose folder…</button>
-        <button id="saveToFolderBtn">Save all songs to folder</button>
+        <button id="saveToFolderBtn">Sync now</button>
         <button id="forgetFolderBtn" class="ghost">Forget</button>
       </div>
-      <div class="mock-note">Saves the whole library into the chosen folder as one .json file per song — handy for large work sets (setlists, whole libraries). Requires Chrome or Edge; the folder handle is remembered and re-offered next time this page loads, but the browser will ask you to re-confirm access each session for security.</div>
+      <div class="mock-note">Pick a folder and your library lives there as one .json file per song, kept in step automatically: every Save writes the file, deleting a song removes it, and each launch reconciles both ways — so the folder is the durable copy and "backing up" stops being a thing you do. Point it at a folder inside OneDrive, Dropbox, Google Drive or iCloud Drive and the same library follows you to another computer. Requires Chrome or Edge; if the browser asks to re-confirm access when the app opens, tick "Allow on every visit" and it won't ask again.</div>
       <h4>Feedback</h4>
       <div class="form-row"><button id="feedbackBtn" title="Opens a new message in your device's email app, addressed to the ChartBench developer">Debug &amp; Feature Request…</button></div>
       <div class="mock-note">Found a bug or want something added? This opens your email app with a message started for you — describe what happened (or what you'd like), and send. A few details about your copy of ChartBench are filled in to help track it down; everything else is yours to write.</div>
@@ -5681,7 +6007,8 @@ ${versesXml}
         toast('Library exported');
       };
       drawer.querySelector('#wipeBtn').onclick = async () => {
-        if(confirm('This deletes ALL locally stored songs. Continue?')){
+        const folderNote = FolderMirror.isConnected() ? '\n\nThe library folder is NOT touched — its files stay, and the next sync brings them back into this browser.' : '';
+        if(confirm('This deletes ALL songs stored in this browser. Continue?' + folderNote)){
           const all = await DB.getAllSongs();
           for(const s of all) await DB.deleteSong(s.id);
           await refreshLibrary();
@@ -5691,57 +6018,63 @@ ${versesXml}
         }
       };
 
-      // --- Local Backup Folder wiring ---
+      // --- Library Folder (mirror) wiring ---
       const folderStatusEl = drawer.querySelector('#folderStatus');
       const chooseBtn = drawer.querySelector('#chooseFolderBtn');
-      const saveBtn = drawer.querySelector('#saveToFolderBtn');
+      const syncBtn = drawer.querySelector('#saveToFolderBtn');
       const forgetBtn = drawer.querySelector('#forgetFolderBtn');
 
       async function refreshFolderStatus(){
-        if(!FolderBackup.supported()){
+        if(!FolderMirror.supported()){
           folderStatusEl.innerHTML = `<small>Not supported in this browser (Chrome/Edge only). Use "Export entire library" above instead.</small>`;
-          chooseBtn.disabled = true; saveBtn.disabled = true; forgetBtn.disabled = true;
+          chooseBtn.disabled = true; syncBtn.disabled = true; forgetBtn.disabled = true;
           return;
         }
-        const status = await FolderBackup.currentStatus();
+        const status = await FolderMirror.currentStatus();
         if(status.state === 'none'){
-          folderStatusEl.innerHTML = `<small>No folder selected yet.</small>`;
-          saveBtn.disabled = true; forgetBtn.disabled = true;
+          folderStatusEl.innerHTML = `<small>No folder chosen — songs live only in this browser's storage.</small>`;
+          syncBtn.disabled = true; forgetBtn.disabled = true;
         } else if(status.state === 'granted'){
-          folderStatusEl.innerHTML = `<small>✅ Connected: <b>${Renderer.escapeHtml(status.name)}</b></small>`;
-          saveBtn.disabled = false; forgetBtn.disabled = false;
+          const last = await FolderMirror.lastSync();
+          const mirrored = songs.filter(s => s.mirroredAt).length;
+          folderStatusEl.innerHTML = `<small>✅ Mirroring to <b>${Renderer.escapeHtml(status.name)}</b> — ${mirrored} of ${songs.length} song${songs.length === 1 ? '' : 's'} in the folder. Last sync: <b>${last ? new Date(last).toLocaleString() : 'not yet'}</b>.</small>`;
+          syncBtn.disabled = false; forgetBtn.disabled = false;
         } else {
-          folderStatusEl.innerHTML = `<small>⚠️ Folder "<b>${Renderer.escapeHtml(status.name)}</b>" remembered, but needs re-confirmation this session. Click "Save all songs to folder" to reconnect.</small>`;
-          saveBtn.disabled = false; forgetBtn.disabled = false;
+          folderStatusEl.innerHTML = `<small>⚠️ Folder "<b>${Renderer.escapeHtml(status.name)}</b>" is remembered but needs re-confirmation this session — click "Sync now" to reconnect.</small>`;
+          syncBtn.disabled = false; forgetBtn.disabled = false;
         }
       }
 
       chooseBtn.onclick = async () => {
         try{
-          await FolderBackup.chooseFolder();
-          toast('Backup folder selected');
+          await FolderMirror.chooseFolder();
+          const stats = await mirrorAdoptFolder();
+          toast(`Library folder set — ${describeSync(stats)}`);
+          renderMirrorNudge();
           await refreshFolderStatus();
         }catch(e){
           if(e.name !== 'AbortError') toast('Could not select folder: ' + e.message);
         }
       };
-      saveBtn.onclick = async () => {
+      syncBtn.onclick = async () => {
         try{
-          const all = await DB.getAllSongs();
-          if(all.length === 0){ toast('No songs to save yet'); return; }
-          const count = await FolderBackup.saveAllSongsToFolder(all);
-          BackupStore.markBackedUp();
-          renderBackupNudge();
-          renderStorageStatus();
-          toast(`Saved ${count} song(s) to folder`);
+          await FolderMirror.ensurePermission();
+          const stats = await mirrorSync('manual');
+          toast('Library folder: ' + describeSync(stats));
+          renderMirrorNudge();
           await refreshFolderStatus();
         }catch(e){
-          toast('Save to folder failed: ' + e.message);
+          toast('Sync failed: ' + e.message);
         }
       };
       forgetBtn.onclick = async () => {
-        await FolderBackup.forget();
-        toast('Backup folder forgotten');
+        if(!confirm('Stop mirroring to the library folder?\n\nThe files already in the folder stay exactly where they are; the app just stops writing to it. Your songs remain in this browser.')) return;
+        await FolderMirror.forget();
+        const all = await DB.getAllSongs();
+        for(const s of all){ if(s.mirroredAt){ delete s.mirroredAt; await DB.putSong(s); } }
+        await refreshLibrary();
+        toast('Library folder forgotten');
+        renderMirrorNudge();
         await refreshFolderStatus();
       };
       refreshFolderStatus();
@@ -6626,6 +6959,7 @@ ${versesXml}
     el('btnDownloadApp').onclick = openDownloadAppPopup;
     el('backupNudgeGo').onclick = openSettings;
     el('backupNudgeLater').onclick = () => { BackupStore.snooze(7); renderBackupNudge(); };
+    el('mirrorNudgeGo').onclick = mirrorReconnect;
     el('btnCircle').onclick = openCircleOfFifths;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
     el('slideViewModeControl').querySelectorAll('button').forEach(btn => {
@@ -6833,21 +7167,26 @@ ${versesXml}
   // carries the key. Leaves updatedAt alone — this isn't an edit, and the
   // Recent sort shouldn't reshuffle over it. Skips itself once nothing
   // needs migrating.
+  // Also mints a uid for any song that predates the library folder mirror
+  // (see ensureSongUid) — same pass, same no-updatedAt rule.
   async function migrateLastDisplayedKey(){
     let all;
     try{ all = await DB.getAllSongs(); }catch(e){ return; }
     for(const s of all){
-      if(SLB_KEY_OPTIONS.includes(s.lastDisplayedKey)) continue;
-      const key = s.key || 'C';
-      let derived;
-      if(key === 'NN'){
-        derived = s.lastDisplayedNN === false ? toDisplayableKey((s.preferredKeys && s.preferredKeys[0]) || 'C') : 'NN';
-      } else {
-        derived = toDisplayableKey(key);
+      let changed = false;
+      if(typeof s.uid !== 'string' || !s.uid){ ensureSongUid(s); changed = true; }
+      if(!SLB_KEY_OPTIONS.includes(s.lastDisplayedKey)){
+        const key = s.key || 'C';
+        let derived;
+        if(key === 'NN'){
+          derived = s.lastDisplayedNN === false ? toDisplayableKey((s.preferredKeys && s.preferredKeys[0]) || 'C') : 'NN';
+        } else {
+          derived = toDisplayableKey(key);
+        }
+        if(SLB_KEY_OPTIONS.includes(derived)){ s.lastDisplayedKey = derived; changed = true; }
       }
-      if(!SLB_KEY_OPTIONS.includes(derived)) continue;
-      s.lastDisplayedKey = derived;
-      try{ await DB.putSong(s); }catch(e){ console.warn('lastDisplayedKey migration skipped a song:', e.message); }
+      if(!changed) continue;
+      try{ await DB.putSong(s); }catch(e){ console.warn('Record migration skipped a song:', e.message); }
     }
   }
 
@@ -6892,6 +7231,10 @@ ${versesXml}
     if(requestedId && songs.some(s => s.id === requestedId)){ selectSong(requestedId); }
     else { newSong(); }
     maybeShowNNIntro();
+    // Library folder: reconcile now if Chrome still grants it, else offer
+    // the reconnect strip. After the song is on screen, so the UI never
+    // waits on the folder.
+    mirrorConnectOnLaunch();
   }
 
   return { init };
