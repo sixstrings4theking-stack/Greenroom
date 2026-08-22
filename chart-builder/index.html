@@ -224,10 +224,6 @@ small{color:var(--text-faint);}
 .cc-btn-group{display:inline-flex; gap:3px;}
 .cc-btn-group button{padding:4px 7px; font-size:11px; line-height:1; white-space:nowrap;}
 .cc-btn-group button.active{background:var(--accent); color:var(--accent-text); font-weight:600;}
-/* Live readout of the resolved license code (see renderCCLicensePicker) —
-   plain text, not a badge, so the highlighted buttons stay the UI. */
-.cc-result{font-size:11px; font-weight:600; color:var(--accent); white-space:nowrap; align-self:center; padding-left:4px;}
-.cc-result:empty{display:none;}
 /* Preferred-key picker (meta bar) — pure metadata, mirrors the chord-popup
    root/accidental button pattern (#chordPopup .cp-root / button.selected)
    rather than inventing new visual language. */
@@ -767,7 +763,6 @@ small{color:var(--text-faint);}
                 <button type="button" data-val="yes_sa" title="Adds SA (ShareAlike) — others may modify it, but their version must carry this exact same license.">SA</button>
                 <button type="button" data-val="no" title="Adds ND (No Derivatives) — others may not modify, remix, or rearrange this song at all.">NM</button>
               </div>
-              <span id="ccResult" class="cc-result" title="The license these two answers resolve to — this is what prints on the chart"></span>
             </div>
             <input id="mCopyright" placeholder="Publisher, year, license details...">
           </div>
@@ -2596,9 +2591,6 @@ const App = (() => {
       b.classList.toggle('active', b.dataset.val === cl.modification);
     });
     el('ccModificationGroup').classList.toggle('hidden', !cl.monetization);
-    const cc = computeCCLicense(cl);
-    el('ccResult').textContent = cc ? cc.code : '';
-    el('ccResult').title = cc ? `${cc.code} — ${cc.summary}` : '';
   }
 
   // Converts every chord token in the editor between arabic Nashville
