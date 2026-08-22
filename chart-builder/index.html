@@ -2255,6 +2255,60 @@ const FolderMirror = (() => {
     return out;
   }
 
+  // Saved set lists live in a "Set Lists" subfolder as
+  // "<Name>--<id8>.setlist.json" — a different folder, a different
+  // suffix, and a different shape (no title/content) from song files, so
+  // neither side's reconcile can ever mistake one for the other. Entries
+  // reference songs by uid, which is what makes a set portable between
+  // machines. Attached-PDF bytes are NOT mirrored (they live in this
+  // browser's DB only); a set with attachments loads elsewhere minus them.
+  const SETS_DIR = 'Set Lists';
+  async function setsDir(create){
+    try{ return await dirHandle.getDirectoryHandle(SETS_DIR, {create: !!create}); }
+    catch(e){ return null; }
+  }
+  function setFileNameFor(set){ return `${safeTitle(set.name)}--${uid8(set.id)}.setlist.json`; }
+  function setId8FromName(name){ const m = name.match(/--([0-9a-f]{8})\.setlist\.json$/i); return m ? m[1].toLowerCase() : null; }
+  function serializeSet(set){
+    const copy = Object.assign({ chartbench: 'setlist' }, set);
+    delete copy.mirroredAt;
+    return JSON.stringify(copy, null, 2);
+  }
+  async function writeSet(set){
+    const dir = await setsDir(true);
+    const name = setFileNameFor(set);
+    const fh = await dir.getFileHandle(name, {create:true});
+    const w = await fh.createWritable(); await w.write(serializeSet(set)); await w.close();
+    const u = uid8(set.id);
+    for await (const [n, h] of dir.entries()){
+      if(h.kind === 'file' && n !== name && setId8FromName(n) === u) await dir.removeEntry(n);
+    }
+  }
+  async function removeSet(id){
+    const dir = await setsDir(false);
+    if(!dir) return;
+    const u = uid8(id);
+    for await (const [n, h] of dir.entries()){
+      if(h.kind === 'file' && setId8FromName(n) === u) await dir.removeEntry(n);
+    }
+  }
+  async function readAllSets(){
+    const out = [];
+    const dir = await setsDir(false);
+    if(!dir) return out;
+    for await (const [n, h] of dir.entries()){
+      if(h.kind !== 'file' || !/\.setlist\.json$/i.test(n)) continue;
+      try{
+        const data = JSON.parse(await (await h.getFile()).text());
+        if(data && typeof data === 'object' && typeof data.id === 'string' && typeof data.name === 'string' && Array.isArray(data.entries)){
+          delete data.chartbench; delete data.mirroredAt;
+          out.push({name: n, set: data});
+        }
+      }catch(e){ console.warn('Library folder: skipped unreadable set list', n, e.message); }
+    }
+    return out;
+  }
+
   async function getTombstones(){ return (await DB.getPref(TOMB_KEY, null)) || {}; }
   async function setTombstones(t){ return DB.setPref(TOMB_KEY, t); }
   async function addTombstone(uid){ const t = await getTombstones(); t[uid] = Date.now(); return setTombstones(t); }
@@ -2272,6 +2326,7 @@ const FolderMirror = (() => {
 
   return { supported, currentStatus, chooseFolder, ensurePermission, isConnected, folderName,
            fileNameFor, uid8, uid8FromName, serialize, writeSong, removeSong, removeFile, readAll,
+           writeSet, removeSet, readAllSets,
            getTombstones, setTombstones, addTombstone, lastSync, markSynced, forget };
 })();
 
@@ -3174,7 +3229,7 @@ const App = (() => {
   async function mirrorSync(reason){
     if(!FolderMirror.isConnected() || mirrorSyncing) return null;
     mirrorSyncing = true;
-    const stats = {pulled:0, pushed:0, removedLocal:0, removedRemote:0, adopted:0};
+    const stats = {pulled:0, pushed:0, removedLocal:0, removedRemote:0, adopted:0, pulledSets:0, pushedSets:0};
     try{
       const now = Date.now();
       const files = await FolderMirror.readAll();
@@ -3244,14 +3299,46 @@ const App = (() => {
         if(d.mirroredAt) missing.push(d);
         else { await FolderMirror.writeSong(d); d.mirroredAt = now; await DB.putSong(d); stats.pushed++; }
       }
-      if(missing.length){
-        const names = missing.slice(0, 6).map(s => `• ${s.title || 'Untitled'}`).join('\n') + (missing.length > 6 ? `\n• …and ${missing.length - 6} more` : '');
-        const ok = confirm(`${missing.length} song${missing.length === 1 ? ' is' : 's are'} no longer in the library folder "${FolderMirror.folderName()}":\n\n${names}\n\nRemove ${missing.length === 1 ? 'it' : 'them'} from this browser too?\n\nOK = remove here as well (they were deleted elsewhere).\nCancel = keep them and write them back to the folder.`);
+
+      // --- saved set lists ("Set Lists/" subfolder), same rules ---
+      const setFiles = await FolderMirror.readAllSets();
+      const savedSets = await SavedSetListsStore.all();
+      const setById = new Map(savedSets.map(s => [s.id, s]));
+      const seenSets = new Set();
+      let setsChanged = false;
+      for(const f of setFiles){
+        const fs = f.set; seenSets.add(fs.id);
+        const d = setById.get(fs.id);
+        const tk = 'set:' + fs.id;
+        if(tomb[tk] && tomb[tk] >= (fs.updatedAt || 0)){ await FolderMirror.removeSet(fs.id); delete tomb[tk]; stats.removedRemote++; continue; }
+        delete tomb[tk];
+        if(!d){ savedSets.push(Object.assign({}, fs, {mirroredAt: now})); setsChanged = true; stats.pulledSets++; }
+        else if((fs.updatedAt || 0) > (d.updatedAt || 0)){ Object.assign(d, fs, {mirroredAt: now}); setsChanged = true; stats.pulledSets++; }
+        else if((d.updatedAt || 0) > (fs.updatedAt || 0)){ await FolderMirror.writeSet(d); d.mirroredAt = now; setsChanged = true; stats.pushedSets++; }
+        else if(!d.mirroredAt){ d.mirroredAt = now; setsChanged = true; }
+      }
+      const missingSets = [];
+      for(const d of savedSets){
+        if(seenSets.has(d.id)) continue;
+        if(d.mirroredAt) missingSets.push(d);
+        else { await FolderMirror.writeSet(d); d.mirroredAt = now; setsChanged = true; stats.pushedSets++; }
+      }
+
+      if(missing.length || missingSets.length){
+        const items = missing.map(s => `• ${s.title || 'Untitled'}`).concat(missingSets.map(s => `• Set list: ${s.name}`));
+        const names = items.slice(0, 8).join('\n') + (items.length > 8 ? `\n• …and ${items.length - 8} more` : '');
+        const ok = confirm(`${items.length} item${items.length === 1 ? ' is' : 's are'} no longer in the library folder "${FolderMirror.folderName()}":\n\n${names}\n\nRemove ${items.length === 1 ? 'it' : 'them'} from this browser too?\n\nOK = remove here as well (deleted elsewhere).\nCancel = keep and write back to the folder.`);
         for(const d of missing){
           if(ok){ await DB.deleteSong(d.id); stats.removedLocal++; }
           else { await FolderMirror.writeSong(d); d.mirroredAt = now; await DB.putSong(d); stats.pushed++; }
         }
+        for(const d of missingSets){
+          if(ok){ const i = savedSets.indexOf(d); if(i >= 0) savedSets.splice(i, 1); stats.removedLocal++; }
+          else { await FolderMirror.writeSet(d); d.mirroredAt = now; stats.pushedSets++; }
+          setsChanged = true;
+        }
       }
+      if(setsChanged) await SavedSetListsStore.write(savedSets);
       await FolderMirror.setTombstones(tomb);
       await FolderMirror.markSynced();
       BackupStore.markBackedUp();
@@ -3289,6 +3376,8 @@ const App = (() => {
     if(stats.removedLocal) parts.push(`${stats.removedLocal} removed here`);
     if(stats.removedRemote) parts.push(`${stats.removedRemote} removed from folder`);
     if(stats.adopted) parts.push(`${stats.adopted} older file${stats.adopted === 1 ? '' : 's'} adopted`);
+    if(stats.pulledSets) parts.push(`${stats.pulledSets} set list${stats.pulledSets === 1 ? '' : 's'} from folder`);
+    if(stats.pushedSets) parts.push(`${stats.pushedSets} set list${stats.pushedSets === 1 ? '' : 's'} written`);
     return parts.length ? parts.join(', ') : 'already in sync';
   }
 
@@ -3327,8 +3416,29 @@ const App = (() => {
   async function mirrorAdoptFolder(){
     const all = await DB.getAllSongs();
     for(const s of all){ if(s.mirroredAt){ delete s.mirroredAt; await DB.putSong(s); } }
+    await clearSavedSetMirrorMarks();
     await FolderMirror.setTombstones({});
     return mirrorSync('choose');
+  }
+  async function clearSavedSetMirrorMarks(){
+    const sets = await SavedSetListsStore.all();
+    if(sets.some(s => s.mirroredAt)){ sets.forEach(s => { delete s.mirroredAt; }); await SavedSetListsStore.write(sets); }
+  }
+  // Write-through for saved set lists (the set-list twin of persistSong /
+  // mirrorForgetSong).
+  async function mirrorWriteSet(set){
+    if(!FolderMirror.isConnected()) return;
+    try{ await FolderMirror.writeSet(set); set.mirroredAt = Date.now(); }
+    catch(e){ console.warn('Library folder set-list write failed:', e); }
+  }
+  async function mirrorForgetSet(id){
+    if(FolderMirror.isConnected()){
+      try{ await FolderMirror.removeSet(id); return; }catch(e){ console.warn('Library folder set-list remove failed:', e); }
+    }
+    const st = await FolderMirror.currentStatus();
+    if(st.state !== 'none' && st.state !== 'unsupported'){
+      const t = await FolderMirror.getTombstones(); t['set:' + id] = Date.now(); await FolderMirror.setTombstones(t);
+    }
   }
 
   const BACKUP_NUDGE_DAYS = 14;
@@ -5378,11 +5488,14 @@ ${versesXml}
       existing.entries = snapshotSetEntries();
       existing.name = name;
       existing.updatedAt = now;
+      await mirrorWriteSet(existing);
       await SavedSetListsStore.write(saved);
       for(const id of oldPdfIds) await slbDropPdfIfUnreferenced(id);
       toast(`Updated saved set "${name}"`);
     } else {
-      saved.push({ id: newUid(), name, createdAt: now, updatedAt: now, entries: snapshotSetEntries() });
+      const fresh = { id: newUid(), name, createdAt: now, updatedAt: now, entries: snapshotSetEntries() };
+      await mirrorWriteSet(fresh);
+      saved.push(fresh);
       await SavedSetListsStore.write(saved);
       toast(`Saved set "${name}"`);
     }
@@ -5407,6 +5520,7 @@ ${versesXml}
     if(!s) return;
     if(!confirm(`Delete the saved set "${s.name}"?\n\nThe songs themselves stay in the library; only this set is removed.`)) return;
     await SavedSetListsStore.write(saved.filter(x => x.id !== id));
+    await mirrorForgetSet(id);
     for(const e of (s.entries || [])){ if(e.type === 'pdf') await slbDropPdfIfUnreferenced(e.pdfId, id); }
     toast(`Deleted saved set "${s.name}"`);
     await renderSavedSetsPanel(backdrop);
@@ -6132,7 +6246,7 @@ ${versesXml}
         <button id="saveToFolderBtn">Sync now</button>
         <button id="forgetFolderBtn" class="ghost">Forget</button>
       </div>
-      <div class="mock-note">Pick a folder and your library lives there as one .json file per song, kept in step automatically: every Save writes the file, deleting a song removes it, and each launch reconciles both ways — so the folder is the durable copy and "backing up" stops being a thing you do. Point it at a folder inside OneDrive, Dropbox, Google Drive or iCloud Drive and the same library follows you to another computer. Requires Chrome or Edge; if the browser asks to re-confirm access when the app opens, tick "Allow on every visit" and it won't ask again.</div>
+      <div class="mock-note">Pick a folder and your library lives there as one .json file per song (saved set lists go in a "Set Lists" subfolder), kept in step automatically: every Save writes the file, deleting a song removes it, and each launch reconciles both ways — so the folder is the durable copy and "backing up" stops being a thing you do. Point it at a folder inside OneDrive, Dropbox, Google Drive or iCloud Drive and the same library follows you to another computer. Requires Chrome or Edge; if the browser asks to re-confirm access when the app opens, tick "Allow on every visit" and it won't ask again.</div>
       <h4>Feedback</h4>
       <div class="form-row"><button id="feedbackBtn" title="Opens a new message in your device's email app, addressed to the ChartBench developer">Debug &amp; Feature Request…</button></div>
       <div class="mock-note">Found a bug or want something added? This opens your email app with a message started for you — describe what happened (or what you'd like), and send. A few details about your copy of ChartBench are filled in to help track it down; everything else is yours to write.</div>
@@ -6273,6 +6387,7 @@ ${versesXml}
         await FolderMirror.forget();
         const all = await DB.getAllSongs();
         for(const s of all){ if(s.mirroredAt){ delete s.mirroredAt; await DB.putSong(s); } }
+        await clearSavedSetMirrorMarks();
         await refreshLibrary();
         toast('Library folder forgotten');
         renderMirrorNudge();
