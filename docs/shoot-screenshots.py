@@ -207,14 +207,25 @@ const sel = document.getElementById('mDisplayKey'); sel.value='NN'; sel.dispatch
 """)
 time.sleep(0.5)
 
-# ---- 7. CC license picker ----
-js("document.querySelector('#copyrightModeControls [data-mode=\"CC\"]').click()")
-time.sleep(0.4)
+# ---- 7. CC license picker — on "The Mighty, Righteous, Risen" (the
+# author's own song, already CC BY-SA), so the license examples show it ----
+js("""
+const rows = Array.from(document.querySelectorAll('#songList .song-item'));
+rows.find(r => r.textContent.includes('Mighty')).click();
+""")
+wait_for("document.getElementById('mTitle').value.includes('Mighty')", 10)
+time.sleep(0.8)
 shot("07-cc-picker.png")
 crop("cu-cc-picker.png", ["#copyrightModeControls", "#ccInlineControls"], pad=8)
 crop_text("cu-cc-chart-line.png", ["#previewScroll .cs-title", "#previewScroll .cs-artist", "#previewScroll .cs-copyright"], pad=16)
-js("document.querySelector('#copyrightModeControls [data-mode=\"\\u00a9\"]')?.click()")
-time.sleep(0.3)
+# back to Romans 11 in Nashville view for the rest of the shoot
+js("""
+const rows = Array.from(document.querySelectorAll('#songList .song-item'));
+rows.find(r => r.textContent.includes('Romans 11')).click();
+""")
+wait_for("document.getElementById('mTitle').value === 'Romans 11'", 10)
+js("const s = document.getElementById('mDisplayKey'); if(s.value !== 'NN'){ s.value = 'NN'; s.dispatchEvent(new Event('change', {bubbles:true})); }")
+time.sleep(0.6)
 
 # ---- 8. Export Chart picker ----
 js("document.getElementById('btnExport').click()")
