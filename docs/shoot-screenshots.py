@@ -275,9 +275,18 @@ handles = driver.window_handles
 circle = [h for h in handles if h != main_handle]
 if circle:
     driver.switch_to.window(circle[0])
-    driver.set_window_size(760, 800)
-    time.sleep(0.8)
-    shot("13-circle.png")
+    # Tall enough that the whole wheel is inside the viewport, then trim the
+    # spare background below it so the figure is just the window's content.
+    driver.set_window_size(780, 1100)
+    time.sleep(1.0)
+    img = Image.open(io.BytesIO(driver.get_screenshot_as_png())).convert('RGB')
+    bg = img.getpixel((4, img.height - 4))
+    bottom = img.height
+    while bottom > 0 and all(abs(a - b) < 6 for a, b in zip(img.getpixel((img.width // 2, bottom - 1)), bg)) and \
+          all(abs(a - b) < 6 for a, b in zip(img.getpixel((img.width // 4, bottom - 1)), bg)):
+        bottom -= 1
+    img.crop((0, 0, img.width, min(img.height, bottom + 24 * DPR))).save(os.path.join(OUT, "13-circle.png"), optimize=True)
+    print("shot: 13-circle.png (trimmed to", bottom, ")")
     driver.close()
     driver.switch_to.window(main_handle)
 else:
