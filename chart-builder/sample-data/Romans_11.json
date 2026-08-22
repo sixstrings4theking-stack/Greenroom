@@ -9,10 +9,34 @@
     "modification": "yes_sa"
   },
   "churchCcli": "",
-  "key": "G",
-  "notationStyle": "arabic",
+  "key": "NN",
+  "preferredKeys": [
+    "G"
+  ],
   "capo": "",
+  "notationStyle": "arabic",
   "titleAlign": "center",
+  "bodyAlign": "left",
+  "expandRepeats": false,
   "tags": [],
-  "content": "Intro:   [6m7] [37] [2m7] [37]\nVerse 1: \n[6m7]Oh, the depths of the [37]riches. [2m7]Of the wisdom and [37]knowledge of God\n[6m7]How unsearchable His [37]judgements [2m7]and untraceable [37]all His ways\nChorus 1: \n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\nVerse 2: \n[6m7]Oh, who has first given [37]to Him? [2m7]That He would need [37]repay\n[6m7]Oh, who has first given [37]to Him? [2m7]That He would need [37]repay\nChorus 2: \n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\nBridge 1: \nFor from Him and through Him and to Him are all things\nTag 1: \nTo Him be the glory forever"
+  "content": "Intro:   [6m7] [37] [2m7] [37]   [*repeat as desired]\nVerse 1: \n[6m7]Oh, the depths of the [37]riches. [2m7]Of the wisdom and [37]knowledge of God\n[6m7]How unsearchable His [37]judgements [2m7]and untraceable [37]all His ways\nChorus 1: \n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\nVerse 2: \n[6m7]Who has first given [37]to Him? [2m7]That He would [37]need repay\nVerse 2: \nChorus 1: \nBridge 1: \n[4add9]For from Him [37]and through Him, [4add9]yes from Him [37]and through Him\n[4add9]Oh from Him [37]and through Him and to Him a[6m7]re all things\n\nTag 1: \n[4add9]All the glory for[1]ever be to H[5]im, a[6m7]men   [*repeat to end]",
+  "versions": [
+    {
+      "ts": 1787419578805,
+      "content": "Intro:   [6m7] [37] [2m7] [37]   [*repeat as desired]\nVerse 1: \n[6m7]Oh, the depths of the [37]riches. [2m7]Of the wisdom and [37]knowledge of God\n[6m7]How unsearchable His [37]judgements [2m7]and untraceable [37]all His ways\nChorus 1: \n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\nVerse 2: \n[6m7]Who has first given [37]to Him? [2m7]That He would [37]need repay\nVerse 2: \nChorus 1: \nBridge 1: \n[4add9]For from Him [37]and through Him, [4add9]yes from Him [37]and through Him\n[4add9]Oh from Him [37]and through Him and to Him a[6m7]re all things\n\nTag 1: \n[4add9]All the glory for[1]ever be to H[5]im, a[6m7]men   [*repeat to end]",
+      "key": "NN",
+      "note": "Autosave on save"
+    },
+    {
+      "ts": 1787420802105,
+      "content": "Intro:   [6m7] [37] [2m7] [37]   [*repeat as desired]\nVerse 1: \n[6m7]Oh, the depths of the [37]riches. [2m7]Of the wisdom and [37]knowledge of God\n[6m7]How unsearchable His [37]judgements [2m7]and untraceable [37]all His ways\nChorus 1: \n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\n[6m7]Who has known the [37]mind of the Lord? Who has been His [6m7]counselor?\nVerse 2: \n[6m7]Who has first given [37]to Him? [2m7]That He would [37]need repay\nVerse 2: \nChorus 1: \nBridge 1: \n[4add9]For from Him [37]and through Him, [4add9]yes from Him [37]and through Him\n[4add9]Oh from Him [37]and through Him and to Him a[6m7]re all things\n\nTag 1: \n[4add9]All the glory for[1]ever be to H[5]im, a[6m7]men   [*repeat to end]",
+      "key": "NN",
+      "note": "Autosave on save"
+    }
+  ],
+  "createdAt": 1787419618907,
+  "updatedAt": 1787420802105,
+  "previewZoom": 155,
+  "lastDisplayedNN": false,
+  "lastDisplayedKey": "G"
 }

@@ -6167,14 +6167,18 @@ ${versesXml}
   // with the few facts that make a bug report traceable (which copy, which
   // browser, page size) and headed blanks for the rest; the address is one
   // constant so it's trivial to change later.
-  // Top-bar Guide button: the HTML user guide ships beside the app in the
-  // repo (docs/user-guide.html), so a copy running from the repo — hosted
-  // or file:// — opens its own. A downloaded single-file copy, or a
-  // deployment that ships only the app, falls back to the published one.
+  // Top-bar Guide button: the HTML user guide ships beside the app — in the
+  // repo layout it's a sibling of chart-builder/ (../docs/), in the website
+  // bundle (see build-deploy.py) the app sits at the root with docs/ next
+  // to it. A hosted copy opens its own; a downloaded single-file copy has
+  // no docs folder and opens the published one.
   const GUIDE_URL_HOSTED = 'https://sixstrings4theking-stack.github.io/Greenroom/docs/user-guide.html';
   function openUserGuide(){
-    const local = /\/chart-builder\/[^/]*$/.test(location.pathname);
-    const url = (WEB_HOSTED_COPY && local) ? new URL('../docs/user-guide.html', location.href).href : GUIDE_URL_HOSTED;
+    let url = GUIDE_URL_HOSTED;
+    if(WEB_HOSTED_COPY){
+      const rel = /\/chart-builder\/[^/]*$/.test(location.pathname) ? '../docs/user-guide.html' : 'docs/user-guide.html';
+      url = new URL(rel, location.href).href;
+    }
     window.open(url, '_blank', 'noopener');
   }
 
