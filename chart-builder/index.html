@@ -2621,7 +2621,11 @@ const App = (() => {
 
   function setNotationStyle(style, markDirty=true){
     if(!currentSong) return;
-    if(currentSong.notationStyle !== style) convertEditorNotation(style);
+    if(currentSong.notationStyle !== style){
+      commitPendingUndo();
+      convertEditorNotation(style);
+      syncUndoBaseline(); // a display transform, not an undo step (see the undo note)
+    }
     currentSong.notationStyle = style;
     updateNotationStyleButton();
     if(markDirty){
@@ -2850,23 +2854,65 @@ const App = (() => {
   }
 
   /* ---------------- Undo / Redo (editor content) ---------------- */
+  // Two kinds of edit, one history. TYPING is coalesced: the editor keeps a
+  // baseline (_lastValue, the text before the current burst) and each real
+  // input event (re)arms a 400 ms timer; when the typing pauses, the
+  // baseline is pushed as one undo step and moved up to the current text.
+  // Every PROGRAMMATIC edit — chord/note popup insert, chord nudge,
+  // section Insert button, key-change marker — goes through
+  // applyEditorEdit, which first commits any pending typing burst, then
+  // pushes the pre-edit text as its own step and re-bases. That is what
+  // keeps a chord inserted by mouse from silently folding into whatever you
+  // type next, where one undo would wipe both. Display transforms (key
+  // reflow, transpose, RN toggle, version restore) are deliberately NOT
+  // undo steps — they're reversible from their own controls, and undoing
+  // only the text would leave the key/notation controls contradicting it —
+  // they just commit anything pending and re-base.
   function pushUndo(prevValue){
     undoStack.push(prevValue);
     if(undoStack.length>100) undoStack.shift();
     redoStack = [];
   }
-  // Keeps the debounced-undo baseline (_lastValue) in sync whenever the
-  // editor's value is set programmatically — song load, transpose,
-  // key-change reflow, version restore, undo/redo itself — rather than by
-  // the user typing. Without this, the baseline stays stuck at whatever it
-  // last was (the empty string at startup, or a previous song's content),
-  // so the very next real edit's undo would revert to that stale value
-  // instead of the one character just typed — in practice, wiping the
-  // whole chart back to blank. Also cancels any pending debounced push so a
-  // programmatic change can't get queued up behind a stale snapshot.
+  // The typing burst waiting on the debounce, if any: the pre-burst text
+  // and which history it belongs to (chart, or Lyrics view's own stack —
+  // see insertLyricsBreak; the two are never mixed).
+  let pendingUndo = null;
+  function commitPendingUndo(){
+    clearTimeout(undoTimer); undoTimer = null;
+    const p = pendingUndo; pendingUndo = null;
+    if(!p) return;
+    const ta = el('editor');
+    if(p.snapshot !== ta.value){
+      if(p.lyricsMode) pushLyricsUndo(p.snapshot); else pushUndo(p.snapshot);
+    }
+    ta._lastValue = ta.value;
+  }
+  // Re-bases after the editor's value is set programmatically (song load,
+  // transpose, key reflow, version restore, undo/redo itself). Any typing
+  // burst still pending is committed first — never dropped — so the history
+  // keeps every step the user actually took.
   function syncUndoBaseline(){
-    clearTimeout(undoTimer);
+    commitPendingUndo();
     el('editor')._lastValue = el('editor').value;
+  }
+  // Bound to the editor's input event (real user edits only; setting
+  // .value programmatically doesn't fire it — so arrow keys, modifier
+  // presses and programmatic changes never schedule anything).
+  function scheduleUndoSnapshot(){
+    if(!pendingUndo) pendingUndo = { snapshot: el('editor')._lastValue, lyricsMode: el('btnLyricsOnly').classList.contains('active') };
+    clearTimeout(undoTimer);
+    undoTimer = setTimeout(commitPendingUndo, 400);
+  }
+  // The one path for programmatic chart edits — see the note above.
+  function applyEditorEdit(newValue){
+    const ta = el('editor');
+    commitPendingUndo();
+    if(newValue !== ta.value){
+      pushUndo(ta.value);
+      ta.value = newValue;
+    }
+    ta._lastValue = ta.value;
+    onEditorInput();
   }
   function onEditorInput(e){
     if(el('btnLyricsOnly').classList.contains('active')){ onLyricsInput(); return; }
@@ -2875,22 +2921,6 @@ const App = (() => {
     renderPreview();
     renderParseStatus();
     updateDynamicSectionButtons();
-  }
-  function onEditorBeforeInputDebounced(){
-    clearTimeout(undoTimer);
-    const snapshot = el('editor')._lastValue;
-    const lyricsMode = el('btnLyricsOnly').classList.contains('active');
-    undoTimer = setTimeout(()=>{
-      if(lyricsMode){
-        // Same debounce, the lyrics-only stack (see insertLyricsBreak) —
-        // a typing burst in Lyrics view undoes as one step, and never
-        // lands on the chart's history.
-        if(snapshot !== el('editor').value) pushLyricsUndo(snapshot);
-      } else {
-        pushUndo(snapshot);
-      }
-      el('editor')._lastValue = el('editor').value;
-    }, 400);
   }
 
   /* ---------------- Library / persistence ---------------- */
@@ -3350,6 +3380,7 @@ const App = (() => {
       return;
     }
     const preferFlat = Transposer.FLAT_KEYS.has(fromKey);
+    commitPendingUndo(); // any typing burst is banked before the text is rewritten
     const newContent = Transposer.transposeText(el('editor').value, semis, preferFlat);
     el('editor').value = newContent;
     syncUndoBaseline();
@@ -3379,6 +3410,7 @@ const App = (() => {
     const newKey = el('mDisplayKey').value;
     updateRomanButtonVisibility();
     if(newKey === liveKey){ updateCapoNote(); dirty=true; updateSaveStatus(); renderPreview(); return; }
+    commitPendingUndo(); // bank any typing burst before the reflow rewrites the text
 
     if(currentSong.key === 'NN'){
       if(newKey === 'NN'){
@@ -3483,11 +3515,10 @@ const App = (() => {
     const headerPart = `${needsNL}${tag}: `;
     const needsTrailingNL = after.length > 0 && !after.startsWith('\n');
     const insertion = headerPart + (needsTrailingNL ? '\n' : '');
-    ta.value = before + insertion + after;
+    applyEditorEdit(before + insertion + after);
     const newPos = (before + headerPart).length;
     ta.focus();
     ta.setSelectionRange(newPos, newPos);
-    onEditorInput();
   }
 
   // Scans the chart for every existing "Verse N" / "Chorus N" (etc.) section
@@ -3753,7 +3784,7 @@ const App = (() => {
       const before = ta.value.slice(0, start);
       const after = ta.value.slice(end);
       const insertion = `[${token}]`;
-      ta.value = before + insertion + after;
+      applyEditorEdit(before + insertion + after);
       newPos = (before + insertion).length;
     } else {
       const idx = cpState.insertIndex;
@@ -3765,10 +3796,9 @@ const App = (() => {
       // button — add one so it doesn't read as "Intro:[G]".
       const needsSpace = cpState.needsLeadingSpace && before.length && !/\s$/.test(before);
       const insertion = `${needsSpace ? ' ' : ''}[${token}]`;
-      ta.value = before + insertion + after;
+      applyEditorEdit(before + insertion + after);
       newPos = (before + insertion).length;
     }
-    onEditorInput();
     ta.focus();
     ta.setSelectionRange(newPos, newPos);
     cpClose();
@@ -3896,11 +3926,10 @@ const App = (() => {
     const tokenText = ta.value.slice(cpState.editRange.start, cpState.editRange.end);
     const { lineStart, lineEnd, withoutToken, newRelPos } = target;
     const newLine = withoutToken.slice(0, newRelPos) + tokenText + withoutToken.slice(newRelPos);
-    ta.value = ta.value.slice(0, lineStart) + newLine + ta.value.slice(lineEnd);
+    applyEditorEdit(ta.value.slice(0, lineStart) + newLine + ta.value.slice(lineEnd));
     const newStart = lineStart + newRelPos;
     const newEnd = newStart + tokenText.length;
     cpState.editRange = { start: newStart, end: newEnd };
-    onEditorInput();
     ta.focus();
     ta.setSelectionRange(newStart, newEnd);
     const caret = editorCaretRect(ta, newStart);
@@ -4063,9 +4092,8 @@ const App = (() => {
     const before = ta.value.slice(0, npInsertIndex);
     const after = ta.value.slice(npInsertIndex);
     const insertion = `[*${noteText}]`;
-    ta.value = before + insertion + after;
+    applyEditorEdit(before + insertion + after);
     const newPos = (before + insertion).length;
-    onEditorInput();
     ta.focus();
     ta.setSelectionRange(newPos, newPos);
     npClose();
@@ -4152,9 +4180,8 @@ const App = (() => {
     const sign = kcSemitones > 0 ? '+' : '';
     const marker = `{Key Change: ${sign}${kcSemitones}}`;
     const insertion = `${needsNL}${marker}\n`;
-    ta.value = before + insertion + after;
+    applyEditorEdit(before + insertion + after);
     const newPos = (before + insertion).length;
-    onEditorInput();
     ta.focus();
     ta.setSelectionRange(newPos, newPos);
     kcClose();
@@ -6128,6 +6155,7 @@ ${versesXml}
   // Pushes the pre-edit state onto the lyrics-only undo stack first.
   function insertLyricsBreak(pos, breakStr){
     if(!currentSong) return;
+    commitPendingUndo();
     pushLyricsUndo(currentSong.lyricsContent);
     const text = currentSong.lyricsContent || '';
     currentSong.lyricsContent = capitalizeLineStarts(text.slice(0, pos) + breakStr + text.slice(pos));
@@ -6338,6 +6366,7 @@ ${versesXml}
       drawer.querySelectorAll('[data-restore]').forEach(btn => {
         btn.onclick = () => {
           const v = currentSong.versions[Number(btn.dataset.restore)];
+          commitPendingUndo();
           el('editor').value = v.content;
           syncUndoBaseline();
           el('mDisplayKey').value = toDisplayableKey(v.key) || el('mDisplayKey').value;
@@ -6552,7 +6581,7 @@ ${versesXml}
     el('mDisplayKey').addEventListener('change', handleKeySelectChange);
 
     el('editor').addEventListener('input', onEditorInput);
-    el('editor').addEventListener('keydown', onEditorBeforeInputDebounced);
+    el('editor').addEventListener('input', scheduleUndoSnapshot);
     // Browsers select the whole word natively on the SECOND click of a
     // double-click, before our own 'dblclick' handler ever runs — that's
     // where the "jumps to word-start" behavior actually comes from, not
@@ -6634,6 +6663,7 @@ ${versesXml}
     // Lyrics view is active. Never mixed: a lyrics-view undo only ever
     // touches currentSong.lyricsContent, never the chart.
     el('btnUndo').onclick = () => {
+      commitPendingUndo(); // an undo right after typing undoes THAT burst first, not the one before it
       if(el('btnLyricsOnly').classList.contains('active')){
         if(lyricsUndoStack.length===0) return;
         lyricsRedoStack.push(currentSong.lyricsContent);
@@ -6651,6 +6681,7 @@ ${versesXml}
       onEditorInput();
     };
     el('btnRedo').onclick = () => {
+      commitPendingUndo();
       if(el('btnLyricsOnly').classList.contains('active')){
         if(lyricsRedoStack.length===0) return;
         lyricsUndoStack.push(currentSong.lyricsContent);
