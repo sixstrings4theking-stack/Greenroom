@@ -4540,6 +4540,176 @@ ${versesXml}
     toast('Exported ProPresenter text');
   }
 
+  /* ---------------- PowerPoint (.pptx) export ---------------- */
+  // PptxGenJS is fetched from the CDN the first time a deck is built — the
+  // same web dependency the PDF libraries are, just loaded on demand
+  // rather than on every page load, since it's 470 KB and most sessions
+  // never need it. Offline local copies get a clear toast instead.
+  const PPTXGEN_URL = 'https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js';
+  const PPTX_MIME = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+  const lazyScripts = {};
+  function loadScriptOnce(url){
+    if(!lazyScripts[url]){
+      lazyScripts[url] = new Promise((resolve, reject) => {
+        const s = document.createElement('script');
+        s.src = url;
+        s.onload = () => resolve();
+        s.onerror = () => { delete lazyScripts[url]; reject(new Error('Could not load ' + url)); };
+        document.head.appendChild(s);
+      });
+    }
+    return lazyScripts[url];
+  }
+  async function ensurePptxGen(){
+    if(!window.PptxGenJS) await loadScriptOnce(PPTXGEN_URL);
+    return window.PptxGenJS;
+  }
+
+  // Slide geometry mirrors the Lyrics view: aspect ratio and Dark/Light
+  // theme come from the same stores the preview reads, lyrics sit centered
+  // in a full-width box, and the compliance footnote lands bottom-right on
+  // a song's last slide. Inches, like PptxGenJS's layouts.
+  function pptxSlideSpec(){
+    const wide = LyricsAspectStore.get() !== '4:3';
+    const light = LyricsThemeStore.get() === 'light';
+    return {
+      layout: wide ? 'LAYOUT_16x9' : 'LAYOUT_4x3',
+      w: 10, h: wide ? 5.625 : 7.5,
+      bg: light ? 'FFFFFF' : '000000',
+      text: light ? '111111' : 'FFFFFF',
+      faint: light ? '808080' : '8C8C8C',
+      margin: 0.5, footH: 0.8
+    };
+  }
+
+  // Largest point size (44 down to 18) at which the slide's lines, wrapped
+  // at the box width, still fit the box height — Arial Bold averages about
+  // 0.55em per character at ~1.2em line height. Chosen here per slide
+  // rather than leaning on PowerPoint's shrink-to-fit, which only
+  // recalculates once somebody edits the text.
+  function pptxFontSize(lines, boxWIn, boxHIn){
+    const boxW = boxWIn * 72, boxH = boxHIn * 72;
+    for(let size = 44; size > 18; size -= 2){
+      const wrapped = lines.reduce((n, l) => n + Math.max(1, Math.ceil(l.length * 0.55 * size / boxW)), 0);
+      if(wrapped * size * 1.2 <= boxH) return size;
+    }
+    return 18;
+  }
+
+  // Plain-text twin of buildSlideFootnoteHtml — same fields, same order.
+  function pptxFootnoteLines(song){
+    const lines = [];
+    if(song.title) lines.push(song.title);
+    const by = [];
+    if(song.artist) by.push('Authored By: ' + song.artist);
+    if(song.ccli) by.push('CCLI Song #' + song.ccli);
+    if(by.length) lines.push(by.join(' | '));
+    const copyrightText = Renderer.buildCopyrightText(song);
+    if(copyrightText) lines.push(copyrightText);
+    if(song.churchCcli) lines.push('Used by Permission CCLI #: ' + song.churchCcli);
+    return lines;
+  }
+
+  // Appends one song's slides — the Lyrics view's slides, via the same
+  // buildLyricsSlidesFrom — to a deck; returns how many it added. The
+  // section label rides along as the slide's speaker notes (PowerPoint
+  // has no groups, and notes never reach the screen). sectionTitle, when
+  // given, files the slides under a PowerPoint section of that name.
+  function pptxAddSong(pptx, spec, song, lyricsContent, sectionTitle){
+    const slides = buildLyricsSlidesFrom(lyricsContent);
+    if(slides.length === 0) return 0;
+    const boxX = spec.margin, boxW = spec.w - spec.margin * 2;
+    const boxY = spec.margin * 0.6, boxH = spec.h - boxY - spec.footH;
+    const footnote = pptxFootnoteLines(song);
+    slides.forEach((s, i) => {
+      const slide = sectionTitle ? pptx.addSlide({ sectionTitle }) : pptx.addSlide();
+      slide.background = { color: spec.bg };
+      const lines = s.lines.map(l => l.trim());
+      slide.addText(lines.join('\n'), {
+        x: boxX, y: boxY, w: boxW, h: boxH,
+        fontFace: 'Arial', fontSize: pptxFontSize(lines, boxW, boxH), bold: true, color: spec.text,
+        align: 'center', valign: 'middle', margin: 0
+      });
+      if(i === slides.length - 1 && footnote.length){
+        slide.addText(footnote.join('\n'), {
+          x: spec.w * 0.35, y: spec.h - spec.footH, w: spec.w * 0.65 - 0.2, h: spec.footH - 0.1,
+          fontFace: 'Arial', fontSize: 9, italic: true, color: spec.faint,
+          align: 'right', valign: 'bottom', margin: 0
+        });
+      }
+      if(s.label) slide.addNotes(s.label);
+    });
+    return slides.length;
+  }
+
+  // Lyrics view's Export > PowerPoint (single song): one deck, one slide
+  // per lyric block.
+  async function exportPowerPoint(){
+    if(!currentSong) return;
+    ensureLyricsContentSynced();
+    const lyrics = currentSong.lyricsContent || '';
+    if(buildLyricsSlidesFrom(lyrics).length === 0){ toast('No lyrics to export'); return; }
+    const song = currentSongSnapshot();
+    try{
+      const PptxGenJS = await ensurePptxGen();
+      const pptx = new PptxGenJS();
+      const spec = pptxSlideSpec();
+      pptx.layout = spec.layout;
+      pptx.title = song.title || 'Untitled';
+      pptx.author = song.artist || 'ChartBench';
+      pptxAddSong(pptx, spec, song, lyrics, null);
+      const blob = await pptx.write({ outputType: 'blob' });
+      downloadBlob(`${presentationFilename(song.title)}.pptx`, blob, PPTX_MIME);
+      toast('Exported PowerPoint');
+    }catch(err){
+      console.error(err);
+      toast('PowerPoint export needs internet — it loads its builder from the web');
+    }
+  }
+
+  // Set List Builder's Export Lyrics > PowerPoint: ONE deck for the whole
+  // service, in set order, each entry filed under its own PowerPoint
+  // section — unlike the per-song ProPresenter files, a deck plays
+  // straight through, so a song that appears twice in the set appears
+  // twice here (its second section gets a " (2)" suffix; PptxGenJS files
+  // slides by section title). Attached PDFs and lyric-less songs are
+  // skipped.
+  async function setListExportPowerPoint(){
+    if(setList.length === 0){ toast('The set list is empty'); return; }
+    try{
+      const PptxGenJS = await ensurePptxGen();
+      const pptx = new PptxGenJS();
+      const spec = pptxSlideSpec();
+      pptx.layout = spec.layout;
+      const dateStr = new Date().toISOString().slice(0,10);
+      pptx.title = 'Set List ' + dateStr;
+      pptx.author = 'ChartBench';
+      let exported = 0, skipped = 0;
+      const titleCounts = {};
+      setList.forEach(entry => {
+        const stored = songs.find(s => s.id === entry.songId);
+        if(!stored){ skipped++; return; }
+        const lyrics = lyricsContentFor(stored);
+        if(buildLyricsSlidesFrom(lyrics).length === 0){ skipped++; return; }
+        const base = stored.title || 'Untitled';
+        titleCounts[base] = (titleCounts[base] || 0) + 1;
+        const sectionTitle = titleCounts[base] > 1 ? `${base} (${titleCounts[base]})` : base;
+        pptx.addSection({ title: sectionTitle });
+        pptxAddSong(pptx, spec, stored, lyrics, sectionTitle);
+        exported++;
+      });
+      if(exported === 0){ toast('Nothing to export — no lyrics in this set'); return; }
+      const blob = await pptx.write({ outputType: 'blob' });
+      downloadBlob(`Set_List_${dateStr}.pptx`, blob, PPTX_MIME);
+      toast(skipped
+        ? `Exported a ${exported}-song PowerPoint (${skipped} skipped — no lyrics)`
+        : `Exported a ${exported}-song PowerPoint`);
+    }catch(err){
+      console.error(err);
+      toast('PowerPoint export needs internet — it loads its builder from the web');
+    }
+  }
+
   /* ---------------- Print / PDF (phrase-aware pagination) ---------------- */
   // Paginates one song object into print pages. fontScalePct (optional)
   // pins --chart-font-scale for the measurement pass — needed when the song
@@ -4698,7 +4868,7 @@ ${versesXml}
           <h3>Set List Builder</h3>
           <div class="slb-actions">
             <button type="button" id="slbClear" class="ghost" title="Remove every song from the set">Clear</button>
-            <button type="button" id="slbExportLyrics" class="lyrics-btn" title="Export each song's lyrics for presentation software — OpenLyrics XML or ProPresenter text, one file per song — the same formats as the Lyrics view's Export">Export Lyrics</button>
+            <button type="button" id="slbExportLyrics" class="lyrics-btn" title="Export the set's lyrics for presentation software — OpenLyrics XML or ProPresenter text (one file per song), or one PowerPoint deck in set order — the same formats as the Lyrics view's Export">Export Lyrics</button>
             <button type="button" id="slbPrint" title="Print the whole set in order, each song in its selected key/capo">Print</button>
             <button type="button" id="slbPDF" title="Export the whole set as one PDF, each song in its selected key/capo">PDF</button>
             <button type="button" id="slbClose" class="icon" title="Close (the set is kept for next time)">✕</button>
@@ -4745,7 +4915,7 @@ ${versesXml}
     });
     backdrop.querySelector('#slbPrint').onclick = setListPrint;
     backdrop.querySelector('#slbPDF').onclick = setListPDF;
-    backdrop.querySelector('#slbExportLyrics').onclick = () => openLyricsExportPicker(setListExportLyrics, setListExportProPresenter);
+    backdrop.querySelector('#slbExportLyrics').onclick = () => openLyricsExportPicker(setListExportLyrics, setListExportProPresenter, setListExportPowerPoint);
     backdrop.querySelector('#slbSearch').addEventListener('input', () => renderSlbLibrary(backdrop));
     wireSortControl('slbSortControl', backdrop, () => { renderSlbLibrary(backdrop); renderSongList(); });
     wireSlbSetPane(backdrop);
@@ -5104,13 +5274,13 @@ ${versesXml}
 
   // Shown whenever a lyrics export is engaged — from the Lyrics view's
   // Export button (single song) or the Set List Builder's Export Lyrics
-  // (whole set). runOpenLyrics / runProPresenter are whichever of those
-  // two contexts' actions should fire for the chosen format.
-  function openLyricsExportPicker(runOpenLyrics, runProPresenter){
+  // (whole set). The three run callbacks are whichever of those two
+  // contexts' actions should fire for the chosen format.
+  function openLyricsExportPicker(runOpenLyrics, runProPresenter, runPowerPoint){
     openFormatPicker('Export Lyrics As…', [
       {name:'OpenLyrics — XML', desc:'The open worship-song XML standard (openlyrics.org). Imports into OpenLP and other presentation software.', run: runOpenLyrics},
       {name:'ProPresenter — .txt', desc:'Plain text laid out for ProPresenter\'s File › Import. Every slide break you set here becomes a slide and section names become Groups (Verse 1, Chorus…) — nothing to fix up after import.', run: runProPresenter},
-      {name:'PowerPoint', desc:'Slide deck (.pptx), one slide per lyric block.'}
+      {name:'PowerPoint — .pptx', desc:'A finished slide deck: one slide per lyric block in this view\'s aspect ratio and Dark/Light theme, compliance footnote on the last slide. A set list becomes one deck in set order with a section per song.', run: runPowerPoint}
     ]);
   }
 
@@ -5141,7 +5311,7 @@ ${versesXml}
     backdrop.innerHTML = `
       <div class="lxp-modal">
         <div class="lxp-head"><h3>Download a Local Copy</h3><button type="button" class="icon" id="dlClose">✕</button></div>
-        <p>ChartBench is one single HTML file — Proceed saves it to your device. Double-click that file and the full app opens in your browser: no install, no account, nothing else to set up. It works offline too (PDF export is the one feature that needs internet, since it loads its converter from the web).</p>
+        <p>ChartBench is one single HTML file — Proceed saves it to your device. Double-click that file and the full app opens in your browser: no install, no account, nothing else to set up. It works offline too (PDF and PowerPoint export are the two features that need internet, since they load their converters from the web).</p>
         <p>Your songs live in your browser's own storage, on your machine — nothing you write ever leaves your device. A fresh local copy starts with its own empty library; use Export and Import to move songs between copies.</p>
         <p>ChartBench is completely open source and free to use, licensed <b>Creative Commons BY-NC-SA</b> — use it, share it, build on it non-commercially, keeping this same license.</p>
         <div class="lxp-actions">
@@ -5860,7 +6030,7 @@ ${versesXml}
     el('structBarLyrics').classList.toggle('hidden', !turningOn);
     el('btnExport').classList.toggle('export-lyrics-mode', turningOn);
     el('btnExport').title = turningOn
-      ? 'Export lyrics for presentation software (OpenLyrics XML or ProPresenter text), built from this parsed Lyrics view'
+      ? 'Export lyrics for presentation software (OpenLyrics XML, ProPresenter text, or a PowerPoint deck), built from this parsed Lyrics view'
       : '';
     updateEditorClickHint();
     if(turningOn){
@@ -6265,7 +6435,7 @@ ${versesXml}
       e.target.value='';
     };
     el('btnExport').onclick = () => {
-      if(el('btnLyricsOnly').classList.contains('active')) openLyricsExportPicker(exportOpenLyrics, exportProPresenterText);
+      if(el('btnLyricsOnly').classList.contains('active')) openLyricsExportPicker(exportOpenLyrics, exportProPresenterText, exportPowerPoint);
       else openChartExportPicker();
     };
     el('btnPrint').onclick = doPrint;
