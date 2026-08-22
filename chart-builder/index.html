@@ -202,8 +202,8 @@ small{color:var(--text-faint);}
 .align-controls{display:flex; gap:3px; margin-top:4px;}
 .align-controls .align-btn{flex:1; padding:3px 0; font-size:12px; line-height:1;}
 .align-controls .align-btn.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
-#settingsAlignControls{margin-top:4px;}
-#settingsAlignControls .align-btn{padding:6px 10px;}
+#settingsAlignControls, #settingsBodyAlignControls{margin-top:4px;}
+#settingsAlignControls .align-btn, #settingsBodyAlignControls .align-btn{padding:6px 10px;}
 .copyright-input-row{display:flex; align-items:center; gap:6px;}
 .copyright-input-row input{flex:1 1 auto; min-width:0;}
 .copyright-mode-controls{display:inline-flex; gap:3px; flex-shrink:0;}
@@ -947,6 +947,19 @@ const NNIntroStore = (() => {
 // (title/artist/copyright/permission/roadmap all follow the same setting).
 // Doesn't touch songs that already have an alignment saved — only the
 // default applied to brand-new ones.
+// Default CHART-BODY justification for new songs (Settings > Default Chart
+// Justification) — the per-song bodyAlign starts from this. Header
+// justification has its own store below (DefaultAlignStore).
+const DefaultBodyAlignStore = (() => {
+  const KEY = 'wcb_default_body_align';
+  function get(){
+    const val = localStorage.getItem(KEY);
+    return (val === 'left' || val === 'center' || val === 'right') ? val : 'left';
+  }
+  function set(val){ localStorage.setItem(KEY, val); }
+  return { get, set };
+})();
+
 const DefaultAlignStore = (() => {
   const KEY = 'wcb_default_title_align';
   function get(){
@@ -2468,7 +2481,7 @@ const App = (() => {
     // yet, loadIntoForm's default-key logic just shows NN, same as any
     // other song that's never been saved with a letter key showing.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(), bodyAlign:'left', expandRepeats:false,
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(), bodyAlign:DefaultBodyAlignStore.get(), expandRepeats:false,
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
@@ -2603,7 +2616,7 @@ const App = (() => {
     syncUndoBaseline();
     setNotationStyle(currentSong.notationStyle || 'roman', false);
     setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
-    setBodyAlign(currentSong.bodyAlign || 'left', false);
+    setBodyAlign(currentSong.bodyAlign || DefaultBodyAlignStore.get(), false);
     el('toggleExpandRepeats').checked = !!currentSong.expandRepeats;
     originalKey = usableKey;
     liveKey = usableKey;
@@ -2646,7 +2659,7 @@ const App = (() => {
   }
   // CSS hook for the page element (see .cs-body-center / .cs-body-right).
   function bodyAlignClass(song){
-    const a = (song && song.bodyAlign) || 'left';
+    const a = (song && song.bodyAlign) || DefaultBodyAlignStore.get();
     return a === 'center' ? ' cs-body-center' : (a === 'right' ? ' cs-body-right' : '');
   }
 
@@ -3222,6 +3235,7 @@ const App = (() => {
     // Key(s)) — nothing to read back from a form field here.
     currentSong.content = resolveCanonicalContent();
     currentSong.titleAlign = currentSong.titleAlign || DefaultAlignStore.get();
+    currentSong.bodyAlign = currentSong.bodyAlign || DefaultBodyAlignStore.get();
     currentSong.updatedAt = Date.now();
     if(!currentSong.createdAt) currentSong.createdAt = Date.now();
     currentSong.versions = currentSong.versions || [];
@@ -4128,7 +4142,7 @@ const App = (() => {
     const importedLibraries = normalizeLibraries(libraryName ? [libraryName] : song.libraries);
     const toSave = {
       title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||'left', expandRepeats: !!song.expandRepeats,
+      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||DefaultBodyAlignStore.get(), expandRepeats: !!song.expandRepeats,
       tags: song.tags||[], libraries: importedLibraries, content: importedContent,
       versions: song.versions||[],
       createdAt: Date.now(), updatedAt: Date.now()
@@ -4210,7 +4224,7 @@ const App = (() => {
       notationStyle: (currentSong && currentSong.notationStyle) || 'arabic',
       capo: el('mCapo').value,
       titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
-      bodyAlign: (currentSong && currentSong.bodyAlign) || 'left',
+      bodyAlign: (currentSong && currentSong.bodyAlign) || DefaultBodyAlignStore.get(),
       expandRepeats: !!(currentSong && currentSong.expandRepeats),
       tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
       libraries: (currentSong && currentSong.libraries) || [],
@@ -5066,8 +5080,16 @@ ${versesXml}
         <input type="range" id="prefFontScale" min="${FontScaleStore.MIN_PCT}" max="${FontScaleStore.MAX_PCT}" step="5" value="${FontScaleStore.get()}" style="width:100%;">
       </div>
       <div class="form-row">
-        <label>Default alignment for new songs</label>
+        <label>Default Header Justification (new songs)</label>
         <div class="align-controls" id="settingsAlignControls">
+          <button type="button" class="align-btn" data-align="left" title="Left">⟸ Left</button>
+          <button type="button" class="align-btn" data-align="center" title="Center">≡ Center</button>
+          <button type="button" class="align-btn" data-align="right" title="Right">⟹ Right</button>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>Default Chart Justification (new songs)</label>
+        <div class="align-controls" id="settingsBodyAlignControls">
           <button type="button" class="align-btn" data-align="left" title="Left">⟸ Left</button>
           <button type="button" class="align-btn" data-align="center" title="Center">≡ Center</button>
           <button type="button" class="align-btn" data-align="right" title="Right">⟹ Right</button>
@@ -5115,7 +5137,17 @@ ${versesXml}
         btn.onclick = () => {
           DefaultAlignStore.set(btn.dataset.align);
           alignBtns.forEach(b => b.classList.toggle('active', b === btn));
-          toast(`New songs will default to ${btn.dataset.align} alignment`);
+          toast(`New songs' header will default to ${btn.dataset.align}`);
+        };
+      });
+      const bodyBtns = drawer.querySelectorAll('#settingsBodyAlignControls .align-btn');
+      const currentBody = DefaultBodyAlignStore.get();
+      bodyBtns.forEach(b => b.classList.toggle('active', b.dataset.align === currentBody));
+      bodyBtns.forEach(btn => {
+        btn.onclick = () => {
+          DefaultBodyAlignStore.set(btn.dataset.align);
+          bodyBtns.forEach(b => b.classList.toggle('active', b === btn));
+          toast(`New songs' chart will default to ${btn.dataset.align}`);
         };
       });
       drawer.querySelector('#replayIntroBtn').onclick = () => {
