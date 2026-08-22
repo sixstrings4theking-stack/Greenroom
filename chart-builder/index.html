@@ -1145,7 +1145,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-22 19:45';
+const APP_BUILD = '2026-08-22 19:55';
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
@@ -6491,7 +6491,7 @@ ${versesXml}
     captureError('promise', (r && r.message) || String(r), r && r.stack);
   });
 
-  const FEEDBACK_EMAIL = 'sixstrings4theking@gmail.com';
+  const FEEDBACK_EMAIL = 'info@thechartbench.com';
   function openFeedbackEmail(){
     const where = WEB_HOSTED_COPY ? ('Web copy at ' + location.origin + location.pathname) : 'Downloaded local copy (ChartBench.html)';
     const body = [
