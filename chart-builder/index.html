@@ -56,9 +56,9 @@ small{color:var(--text-faint);}
 .tb-group:last-child{border-right:none;}
 #topbar .spacer{flex:1;}
 /* The Save button IS the save-state indicator (no separate status text):
-   quiet/neutral "Save" when everything's saved, lighting up in the app's
-   muted red (--danger, the existing palette rose) with the label "Unsaved"
-   when there are changes to save. min-width keeps the toolbar from
+   solid green "Saved" (--good) when everything's stored, solid muted red
+   "Unsaved" (--danger) when there are changes to save — two states, two
+   colors, same convention. min-width keeps the toolbar from
    jiggling as the label flips between the two words. */
 /* Backup nudge — a quiet amber strip above the song list that appears once
    it's been a while since a full backup (see renderBackupNudge). */
@@ -66,9 +66,10 @@ small{color:var(--text-faint);}
 .backup-nudge b{color:var(--accent);}
 .backup-nudge .row{display:flex; gap:6px; margin-top:7px;}
 .backup-nudge button{font-size:11px; padding:3px 8px;}
-#btnSave{min-width:76px;}
-#btnSave.unsaved{background:var(--danger); color:#2a0e14; border-color:var(--danger); font-weight:600;}
-#btnSave.unsaved:hover{filter:brightness(1.08);}
+#btnSave{min-width:76px; font-weight:600;}
+#btnSave.saved{background:var(--good); color:#0d2b1a; border-color:var(--good);}
+#btnSave.unsaved{background:var(--danger); color:#2a0e14; border-color:var(--danger);}
+#btnSave.saved:hover, #btnSave.unsaved:hover{filter:brightness(1.08);}
 .circle-btn{background:linear-gradient(135deg,#8b6ef2,#6a4fd8); color:#fff; border:1px solid #7a5ce8; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
 .circle-btn:hover{filter:brightness(1.1); border-color:#8b6ef2;}
 /* Mint/lime green, plain-outline by default like the RN/next-num toggle
@@ -2730,21 +2731,22 @@ const App = (() => {
   }
 
   // The Save button doubles as the save-state indicator (the old separate
-  // status text is gone): neutral "Save" when clean, amber "Unsaved" when
+  // status text is gone): green "Saved" when clean, red "Unsaved" when
   // there are changes to save. A brand-new untouched song reads as clean —
   // the moment anything is typed, dirty flips it to "Unsaved".
   function updateSaveStatus(){
     const btn = el('btnSave');
     if(!currentSong){
       btn.disabled = true;
-      btn.classList.remove('unsaved');
+      btn.classList.remove('unsaved', 'saved');
       btn.textContent = 'Save';
       btn.title = 'No song loaded';
       return;
     }
     btn.disabled = false;
     btn.classList.toggle('unsaved', dirty);
-    btn.textContent = dirty ? 'Unsaved' : 'Save';
+    btn.classList.toggle('saved', !dirty);
+    btn.textContent = dirty ? 'Unsaved' : 'Saved';
     btn.title = dirty ? 'Unsaved changes — click to save (Ctrl+S)' : 'Save (Ctrl+S)';
   }
 
