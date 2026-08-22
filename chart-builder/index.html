@@ -367,7 +367,7 @@ small{color:var(--text-faint);}
 .pane-head-left{display:flex; align-items:center; gap:10px;}
 #editor{
   flex:1; resize:none; border:none; border-radius:0; background:var(--bg); color:var(--text);
-  font-family:var(--mono); font-size:14px; line-height:1.6; padding:14px; white-space:pre; overflow:auto;
+  font-family:var(--mono); font-size:calc(14px * var(--editor-zoom, 1)); line-height:1.6; padding:14px; white-space:pre; overflow:auto;
 }
 /* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
    stripe + tinted background make it visually obvious this isn't the normal
@@ -857,7 +857,15 @@ small{color:var(--text-faint);}
             <span>Editor</span>
             <span class="hint" id="editorClickHint"></span>
           </span>
-          <span class="hint" id="parseStatus">0 lines</span>
+          <div style="display:flex; align-items:center; gap:14px;">
+            <div style="display:flex; align-items:center; gap:4px; text-transform:none;" title="Editor text size — a workspace preference, not saved with the song (the Live Preview's A−/A+ is what sizes the printed chart)">
+              <button type="button" id="editorZoomDown" class="icon" title="Smaller editor text" style="padding:2px 7px; font-size:11px;">A−</button>
+              <span id="editorZoomValue" style="font-size:11px; min-width:34px; text-align:center;"></span>
+              <button type="button" id="editorZoomUp" class="icon" title="Larger editor text" style="padding:2px 7px; font-size:13px;">A+</button>
+              <button type="button" id="editorZoomReset" class="ghost" title="Reset editor text size to 100%" style="padding:2px 6px; font-size:10px;">Reset</button>
+            </div>
+            <span class="hint" id="parseStatus">0 lines</span>
+          </div>
         </div>
         <textarea id="editor" spellcheck="false" placeholder="# Welcome! Type here to build your chart — this is just an example.
 # A chord tag like [1] or [G] can go anywhere in a line of words — it
@@ -1103,6 +1111,23 @@ const ChurchCcliStore = (() => {
 // reaches the live preview, the offscreen pagination measurement pass, and
 // print/PDF identically — a chart that fits at a given scale in preview
 // fits the same way on paper, and pagination is measured post-scaling.
+// Editor text size (the pane-head A−/A+ stepper over the editor, mirrored by
+// the Settings slider). A workspace preference, browser-wide — unlike the
+// Live Preview's zoom it's never saved with a song, since it changes how the
+// editor reads, not what prints. Percent of the 14px base, same 5% steps.
+const EditorZoomStore = (() => {
+  const KEY = 'wcb_editor_zoom';
+  const DEFAULT_PCT = 100;
+  const MIN_PCT = 70, MAX_PCT = 160, STEP = 5;
+  function get(){
+    const val = parseInt(localStorage.getItem(KEY), 10);
+    return (!isNaN(val) && val >= MIN_PCT && val <= MAX_PCT) ? val : DEFAULT_PCT;
+  }
+  function set(pct){ localStorage.setItem(KEY, String(pct)); }
+  function apply(pct){ document.documentElement.style.setProperty('--editor-zoom', pct / 100); }
+  return { get, set, apply, MIN_PCT, MAX_PCT, DEFAULT_PCT, STEP };
+})();
+
 const FontScaleStore = (() => {
   const KEY = 'wcb_chart_font_scale';
   const DEFAULT_PCT = 100;
@@ -5882,7 +5907,7 @@ ${versesXml}
   function openSettings(){
     const body = `
       <h4>Display Preferences</h4>
-      <div class="form-row"><label>Editor font size</label><input type="range" id="prefFontSize" min="11" max="20" value="14" style="width:100%;"></div>
+      <div class="form-row"><label>Editor text size <span id="settingsEditorZoomValue"></span></label><input type="range" id="prefFontSize" min="${EditorZoomStore.MIN_PCT}" max="${EditorZoomStore.MAX_PCT}" step="${EditorZoomStore.STEP}" value="${EditorZoomStore.get()}" style="width:100%;"><small>Same control as the A−/A+ over the editor. Workspace-wide; not saved with songs.</small></div>
       <div class="form-row">
         <label>Chord-to-lyric spacing <span id="chordGapValue"></span></label>
         <input type="range" id="prefChordGap" min="${ChordSpacingStore.MIN_PX}" max="${ChordSpacingStore.MAX_PX}" value="${ChordSpacingStore.get()}" style="width:100%;">
@@ -5940,7 +5965,8 @@ ${versesXml}
     openDrawer('Settings', body, (drawer) => {
       drawer.querySelector('#feedbackBtn').onclick = openFeedbackEmail;
       const fontSlider = drawer.querySelector('#prefFontSize');
-      fontSlider.oninput = () => { el('editor').style.fontSize = fontSlider.value + 'px'; };
+      fontSlider.oninput = () => setEditorZoom(parseInt(fontSlider.value, 10));
+      updateEditorZoomLabel();
       const gapSlider = drawer.querySelector('#prefChordGap');
       const gapValueLabel = drawer.querySelector('#chordGapValue');
       const updateGapLabel = () => { gapValueLabel.textContent = `(${gapSlider.value}px)`; };
@@ -6927,6 +6953,26 @@ ${versesXml}
   }
   function bumpFontScale(delta){ setFontScale(currentZoomPct() + delta); }
 
+  // Editor text size — the editor pane-head stepper and the Settings
+  // slider drive the same EditorZoomStore, so either stays in sync with
+  // whichever changed it last. Browser-wide, never per song.
+  function updateEditorZoomLabel(){
+    const pct = EditorZoomStore.get();
+    const label = el('editorZoomValue');
+    if(label) label.textContent = pct + '%';
+    const settingsSlider = document.getElementById('prefFontSize');
+    if(settingsSlider) settingsSlider.value = pct;
+    const settingsLabel = document.getElementById('settingsEditorZoomValue');
+    if(settingsLabel) settingsLabel.textContent = `(${pct}%)`;
+  }
+  function setEditorZoom(pct){
+    const clamped = Math.max(EditorZoomStore.MIN_PCT, Math.min(EditorZoomStore.MAX_PCT, pct));
+    EditorZoomStore.set(clamped);
+    EditorZoomStore.apply(clamped);
+    updateEditorZoomLabel();
+  }
+  function bumpEditorZoom(delta){ setEditorZoom(EditorZoomStore.get() + delta); }
+
   /* ---------------- Wiring ---------------- */
   function wire(){
     el('btnNew').onclick = () => { if(dirty && !confirm('Discard unsaved changes?')) return; newSong(); };
@@ -7048,6 +7094,9 @@ ${versesXml}
     el('fontScaleDown').addEventListener('click', () => bumpFontScale(-FONT_SCALE_STEP));
     el('fontScaleUp').addEventListener('click', () => bumpFontScale(FONT_SCALE_STEP));
     el('fontScaleReset').addEventListener('click', () => setFontScale(FontScaleStore.DEFAULT_PCT));
+    el('editorZoomDown').addEventListener('click', () => bumpEditorZoom(-EditorZoomStore.STEP));
+    el('editorZoomUp').addEventListener('click', () => bumpEditorZoom(EditorZoomStore.STEP));
+    el('editorZoomReset').addEventListener('click', () => setEditorZoom(EditorZoomStore.DEFAULT_PCT));
 
     el('searchBox').addEventListener('input', renderSongList);
     wireSortControl('songSortControl', document, () => {
@@ -7213,6 +7262,8 @@ ${versesXml}
     updateRomanButtonVisibility();
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
+    EditorZoomStore.apply(EditorZoomStore.get());
+    updateEditorZoomLabel();
     applySidebarCollapse(SidebarCollapseStore.get());
     applyMetaBarCollapse(MetaBarCollapseStore.get());
     applyTagFilterCollapse(TagFilterCollapseStore.get());
