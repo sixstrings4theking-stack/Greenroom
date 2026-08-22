@@ -220,7 +220,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>The chord picker</h4>
     <p><b>Double-click anywhere in the chart text</b> — on a word, at a syllable, in a space, wherever the chord belongs — and the picker opens right there. Top to bottom: an accidental (♮ ♯ ♭), a quality (maj, m, 7, maj7, m7, sus2, sus4, dim, aug, add9), the <b>Slash chord</b> tick, then the root — clicking a root inserts immediately. In Nashville view the roots are scale degrees 1–7; when a letter key is displayed they become A–G (below), always matching what the editor shows.</p>
-    <p><b>Double-click an existing chord</b> instead and the picker opens pre-loaded with its values — here an existing <code>37</code>: quality 7, degree 3 — plus <b>◀ ▶</b> arrows that nudge the chord one character at a time along the lyric, the fastest way to land it on exactly the right syllable.</p>
+    <p><b>Double-click an existing chord</b> instead and the picker opens pre-loaded with its values — here an existing <code>6m</code>: quality m, degree 6 — plus <b>◀ ▶</b> arrows that nudge the chord one character at a time along the lyric, the fastest way to land it on exactly the right syllable.</p>
     <p><b>Slash chords:</b> in Nashville view you pick the chord first, then the bass degree <i>relative to that chord</i> (1 = its own root). In letter view the bass is simply a note name.</p>
     <p><b>Anything unusual</b> goes in the Custom box and is inserted verbatim — <code>[1sus4/5]</code>, <code>[N.C.]</code>, whatever the song needs.</p>
     <div class="cap">Fig. 6 — Editing an existing chord in Nashville view. Each insert or edit is its own Undo step.</div>
@@ -256,7 +256,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-img"><img src="guide-assets/cu-song-map.png" alt="Song map badges"></div>
   <div class="cu-text">
     <h4>The song map</h4>
-    <p>Every labeled section becomes a round badge under the chart's header — <b>I, V1, C1, V2, C2, B1, T1</b> — in performance order. This row <i>is</i> the song map: the band sees the whole arrangement at a glance before the first downbeat. It's for the chart only; it never appears on slides or in lyrics exports.</p>
+    <p>Every labeled section becomes a round badge under the chart's header — <b>I, V1, C1, I, V2, C2, B1, T1, O</b> — in performance order. This row <i>is</i> the song map: the band sees the whole arrangement at a glance before the first downbeat. It's for the chart only; it never appears on slides or in lyrics exports.</p>
     <div class="cap">Fig. 9 — Title, author, license line, and the song map.</div>
   </div>
 </div>
@@ -274,15 +274,15 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 
 <!-- ============================ 8 ============================ -->
 <h2 class="chapter" id="c8">8 &nbsp;Keys, transposition &amp; capo</h2>
-<div class="fig"><img src="guide-assets/06-letters-capo.png" alt="Letter key with capo"><div class="cap">Fig. 11 — The same song viewed in G with Capo 2: the editor reflows into letter chords and the chart shows the shapes to play. Note the red "Unsaved" Save button.</div></div>
+<div class="fig"><img src="guide-assets/06-letters-capo.png" alt="Letter key with capo"><div class="cap">Fig. 11 — The same song viewed in A with Capo 2: the editor reflows into letter chords and the chart shows the shapes to play. Note the red "Unsaved" Save button.</div></div>
 <div class="cu wide">
   <div class="cu-img"><img src="guide-assets/cu-display-key-g.png" alt="Display Key, RN and Capo controls"></div>
   <div class="cu-text">
     <h4>Display Key, − / +, RN, Capo</h4>
-    <p>The <b>Display Key</b> dropdown is a lens, not an edit. Pick <b>G</b> and the whole editor and preview reflow into letter chords in G; pick <b>Nashville #s (NN)</b> and they flow back to numbers. The underlying song never changes.</p>
+    <p>The <b>Display Key</b> dropdown is a lens, not an edit. Pick <b>A</b> and the whole editor and preview reflow into letter chords in A; pick <b>Nashville #s (NN)</b> and they flow back to numbers. The underlying song never changes.</p>
     <p><b>− / +</b> step the display a half-step at a time through the common key spellings — C, D♭, D, E♭, E, F, F♯, G, A♭, A, B♭, B — with every chord respelled for the new key.</p>
     <p><b>Capo:</b> set a fret and the chart displays the <i>shapes to play</i> — chords transposed down by the capo — while still sounding in the displayed key; the header notes "chords shown as played." Capo applies to letter views only.</p>
-    <div class="cap">Fig. 12 — The display controls, shown in G with Capo 2.</div>
+    <div class="cap">Fig. 12 — The display controls, shown in A with Capo 2.</div>
   </div>
 </div>
 <div class="cu tall flip">
@@ -290,7 +290,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>Preferred Keys</h4>
     <p>Preferred Keys are pure metadata: the keys you like to sing the song in. Build one with the letter picker in the meta bar (A–G plus m / ♯ / ♭ toggles, with impossible spellings disabled) and click <b>+ Add</b>; it becomes a chip, and a song can carry several. They show in the library list and feed the sidebar's Preferred Key filter.</p>
-    <div class="cap">Fig. 13 — The picker with a "G maj" chip already added.</div>
+    <div class="cap">Fig. 13 — The picker with an "A maj" chip already added.</div>
   </div>
 </div>
 <div class="callout"><b>What reopening looks like:</b> a song reopens in exactly the Display Key it was showing when you last saved it — G, B♭, or Nashville numbers — and an exported song carries that key with it, so a library imported from your export lands in your keys. Either way the stored chart is the same numbers underneath.</div>
@@ -365,7 +365,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>Export Chart As…</h4>
     <p><b>JSON — ChartBench file.</b> The whole song, exactly as stored: chart (always in canonical Nashville numbers), lyrics slide breaks, preferred keys, the key it's showing, its zoom, version history. The format for moving songs between copies of the app; re-imports to precisely the song it came from.</p>
-    <p><b>Chords-over-Lyrics (.txt).</b> A classic handout: chords printed above each lyric line, plus <code>Key:</code>, <code>Capo:</code>, and an <code>Order:</code> line carrying the song map (<code>Order: I V1 C1 V2 C2 B1 T1</code>).</p>
+    <p><b>Chords-over-Lyrics (.txt).</b> A classic handout: chords printed above each lyric line, plus <code>Key:</code>, <code>Capo:</code>, and an <code>Order:</code> line carrying the song map (<code>Order: I V1 C1 I V2 C2 B1 T1 O</code>).</p>
     <p><b>ChordPro (.cho).</b> The bracket format most other chart software reads, with the standard metadata directives.</p>
     <div class="cap">Fig. 19 — The chart export picker.</div>
   </div>
@@ -438,7 +438,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
     <h4>Building the set</h4>
     <p>Drag songs from the library pane into the set, or click a song's <b>＋</b>. Every entry defaults to Nashville Numbers and carries its own <b>Key</b> and <b>Capo</b> — what's selected is what gets generated. The same song can appear twice (an opener reprised in a new key at the close); each copy is independent. Drag the <b>⠿</b> handle to reorder, <b>✕</b> to remove.</p>
     <p><b>Not in the library?</b> <i>Attach a PDF…</i> (or drop a PDF from the desktop onto the set) inserts an existing PDF chart as an entry; its pages print and export in sequence with the rest.</p>
-    <div class="cap">Fig. 27 — Three entries: Romans 11 in G, Amazing Grace in NN with capo 3, Romans 11 again in NN.</div>
+    <div class="cap">Fig. 27 — Three entries: The Mighty, Righteous, Risen in A, Amazing Grace in NN with capo 3, and the opener again in NN.</div>
   </div>
 </div>
 <div class="cu wide flip">

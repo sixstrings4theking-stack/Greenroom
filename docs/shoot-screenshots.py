@@ -118,10 +118,10 @@ crop("cu-save-saved.png", "#btnSave", pad=8)
 # ---- 3. open Romans 11: canonical chart view ----
 js("""
 const rows = Array.from(document.querySelectorAll('#songList .song-item'));
-rows.find(r => r.textContent.includes('Romans 11')).click();
+rows.find(r => r.textContent.includes('Mighty')).click();
 """)
-wait_for("document.getElementById('mTitle').value === 'Romans 11'", 10)
-# The demo opens in its remembered Display Key (G); the canonical shots are
+wait_for("document.getElementById('mTitle').value.includes('Mighty')", 10)
+# The demo opens in its remembered Display Key (A); the canonical shots are
 # the Nashville view, so switch to NN first.
 js("const s = document.getElementById('mDisplayKey'); if(s.value !== 'NN'){ s.value = 'NN'; s.dispatchEvent(new Event('change', {bubbles:true})); }")
 time.sleep(0.8)  # preview render
@@ -138,7 +138,7 @@ crop("cu-song-list.png", "#songList", pad=8)
 # ---- 4. chord picker (edit an existing chord) ----
 js("""
 const ta = document.getElementById('editor');
-const idx = ta.value.indexOf('[37]');
+const idx = ta.value.indexOf('[6m]mighty');
 ta.focus(); ta.setSelectionRange(idx+1, idx+1);
 ta.dispatchEvent(new MouseEvent('dblclick', {bubbles:true, clientX:420, clientY:300}));
 """)
@@ -152,8 +152,8 @@ js("const s = document.getElementById('mDisplayKey'); s.value = 'C'; s.dispatchE
 time.sleep(0.5)
 js("""
 const ta = document.getElementById('editor');
-const idx = ta.value.indexOf('unsearchable');
-ta.focus(); ta.setSelectionRange(idx, idx + 12);
+const idx = ta.value.indexOf('displayed');
+ta.focus(); ta.setSelectionRange(idx, idx + 9);
 ta.dispatchEvent(new MouseEvent('dblclick', {bubbles:true, clientX:420, clientY:330}));
 """)
 wait_for("!document.getElementById('chordPopup').classList.contains('hidden')")
@@ -166,7 +166,7 @@ time.sleep(0.5)
 # ---- 5. note annotation popup (right-click) ----
 js("""
 const ta = document.getElementById('editor');
-const idx = ta.value.indexOf('counselor');
+const idx = ta.value.indexOf('majesty');
 ta.focus(); ta.setSelectionRange(idx, idx);
 ta.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true, clientX:500, clientY:330}));
 """)
@@ -188,7 +188,7 @@ if js("return !!document.querySelector('#keyChangePopup') && !document.querySele
 # ---- 6. Display Key G + Capo 2 (letter view, Unsaved state) ----
 js("""
 const sel = document.getElementById('mDisplayKey');
-sel.value = 'G'; sel.dispatchEvent(new Event('change', {bubbles:true}));
+sel.value = 'A'; sel.dispatchEvent(new Event('change', {bubbles:true}));
 """)
 time.sleep(0.5)
 js("""
@@ -198,7 +198,7 @@ capo.value = '2'; capo.dispatchEvent(new Event('change', {bubbles:true}));
 time.sleep(0.8)
 shot("06-letters-capo.png")
 crop("cu-save-unsaved.png", "#btnSave", pad=8)
-crop("cu-display-key-g.png", "#structBarChart .right-controls", pad=8)
+crop("cu-display-key-g.png", "#structBarChart .right-controls", pad=8)  # (file name kept; shows A)
 crop("cu-capo-chart.png", "#previewScroll .cs-title, #previewScroll .cs-roadmap, #previewScroll .cs-meta", pad=14)
 # restore: back to NN, no capo (leave dirty flag; harmless in headless)
 js("""
@@ -209,23 +209,9 @@ time.sleep(0.5)
 
 # ---- 7. CC license picker — on "The Mighty, Righteous, Risen" (the
 # author's own song, already CC BY-SA), so the license examples show it ----
-js("""
-const rows = Array.from(document.querySelectorAll('#songList .song-item'));
-rows.find(r => r.textContent.includes('Mighty')).click();
-""")
-wait_for("document.getElementById('mTitle').value.includes('Mighty')", 10)
-time.sleep(0.8)
 shot("07-cc-picker.png")
 crop("cu-cc-picker.png", ["#copyrightModeControls", "#ccInlineControls"], pad=8)
 crop_text("cu-cc-chart-line.png", ["#previewScroll .cs-title", "#previewScroll .cs-artist", "#previewScroll .cs-copyright"], pad=16)
-# back to Romans 11 in Nashville view for the rest of the shoot
-js("""
-const rows = Array.from(document.querySelectorAll('#songList .song-item'));
-rows.find(r => r.textContent.includes('Romans 11')).click();
-""")
-wait_for("document.getElementById('mTitle').value === 'Romans 11'", 10)
-js("const s = document.getElementById('mDisplayKey'); if(s.value !== 'NN'){ s.value = 'NN'; s.dispatchEvent(new Event('change', {bubbles:true})); }")
-time.sleep(0.6)
 
 # ---- 8. Export Chart picker ----
 js("document.getElementById('btnExport').click()")
@@ -268,16 +254,16 @@ js("localStorage.removeItem('wcb_setlist_v1'); localStorage.removeItem('wcb_setl
 wait_for("document.querySelector('.slb-backdrop')")
 js("""
 const rows = Array.from(document.querySelectorAll('.slb-row'));
-const romans = rows.find(r => r.textContent.includes('Romans 11'));
+const mighty = rows.find(r => r.textContent.includes('Mighty'));
 const grace = rows.find(r => r.textContent.includes('Amazing Grace'));
-romans.querySelector('.slb-add').click();
+mighty.querySelector('.slb-add').click();
 grace.querySelector('.slb-add').click();
-romans.querySelector('.slb-add').click();
+mighty.querySelector('.slb-add').click();
 """)
 time.sleep(0.4)
 js("""
 const keys = document.querySelectorAll('.slb-key');
-keys[0].value = 'G'; keys[0].dispatchEvent(new Event('change'));
+keys[0].value = 'A'; keys[0].dispatchEvent(new Event('change'));
 const capos = document.querySelectorAll('.slb-capo');
 capos[1].value = '3'; capos[1].dispatchEvent(new Event('change'));
 const name = document.querySelector('#slbSetName'); name.value = 'Sunday, Aug 24'; name.dispatchEvent(new Event('input'));
