@@ -885,6 +885,9 @@ Was [6m]blind but [5]now I [1]see
             <label style="display:flex; align-items:center; gap:5px; font-size:11px; text-transform:none;">
               <input type="checkbox" id="toggle2col" style="width:auto;"> 2-column layout
             </label>
+            <label style="display:flex; align-items:center; gap:5px; font-size:11px; text-transform:none;" title="Print repeated sections in full, in performance order, instead of only marking them in the song map — saved with the song">
+              <input type="checkbox" id="toggleExpandRepeats" style="width:auto;"> Write out repeats
+            </label>
           </div>
         </div>
         <div id="previewScroll"></div>
@@ -1743,29 +1746,41 @@ const Renderer = (() => {
   // A section with an empty body whose label exactly matches (case-
   // insensitive) an earlier section that DID have content is a repeat
   // marker — e.g. a second bare "Chorus:" header reprising a chorus already
-  // printed earlier in the chart. Repeats are dropped from the chart body
-  // entirely (no header line, no chords) since the song map badge already
-  // marks where they happen; only a genuinely unique/edited section (a
-  // different label, like "Chorus 2") ever prints its own content.
-  function isRepeatSection(sec, seenLabels){
+  // printed earlier in the chart. By default repeats are dropped from the
+  // chart body entirely (no header line, no chords) since the song map
+  // badge already marks where they happen. With expandRepeats (the
+  // "Write out repeats" toggle, saved per song) the reprise instead prints
+  // in full, carrying the earlier section's lines — for musicians who want
+  // every section on the page in performance order. Either way, only a
+  // genuinely unique/edited section (a different label, like "Chorus 2")
+  // ever has content of its own.
+  function resolveRepeats(sections, expandRepeats){
     // sec.lines here are already-parsed line objects (see ChordParser.parse),
     // not raw strings — only the 'blank' type carries no real content.
-    const key = sec.label ? sec.label.trim().toLowerCase() : null;
-    const hasContent = sec.lines.some(l => l.type !== 'blank');
-    if(hasContent){
-      if(key) seenLabels.add(key);
-      return false;
-    }
-    return !!(key && seenLabels.has(key));
+    const seen = new Map();
+    const out = [];
+    sections.forEach(sec => {
+      const key = sec.label ? sec.label.trim().toLowerCase() : null;
+      const hasContent = sec.lines.some(l => l.type !== 'blank');
+      if(hasContent){
+        if(key) seen.set(key, sec.lines);
+        out.push(sec);
+      } else if(key && seen.has(key)){
+        if(expandRepeats) out.push(Object.assign({}, sec, { lines: seen.get(key) }));
+        // else: a collapsed repeat — the song map badge is its only trace
+      } else {
+        out.push(sec); // header-only section with nothing earlier to repeat (e.g. an instrumental)
+      }
+    });
+    return out;
   }
 
-  function renderSections(sections, displayKey, capo){
+  function renderSections(sections, displayKey, capo, expandRepeats){
     // Running total of every {Key Change: N} marker encountered so far —
     // persists across section boundaries (a key change isn't scoped to one
     // section) and keeps accumulating until a later marker changes it again.
     let keyChangeSemitones = 0;
-    const seenLabels = new Set();
-    return sections.filter(sec => !isRepeatSection(sec, seenLabels)).map(sec => {
+    return resolveRepeats(sections, expandRepeats).map(sec => {
       // If the section's FIRST content line is chords-only (a lead-in
       // progression, or the entire content for something like a pure-
       // instrumental Outro), render those chords INLINE with the label on
@@ -1827,7 +1842,7 @@ const Renderer = (() => {
       ${song.churchCcli ? `<div class="cs-permission" style="text-align:${titleAlign};">Used by Permission CCLI #: ${escapeHtml(song.churchCcli)}</div>` : ''}
       ${roadmap ? `<div class="cs-roadmap" style="justify-content:${titleAlign==='center'?'center':(titleAlign==='right'?'flex-end':'flex-start')};">${roadmap}</div>` : ''}
       ${metaBits.length ? `<div class="cs-meta">${metaBits.map(escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
-      ${renderSections(sections, song.key, song.capo)}
+      ${renderSections(sections, song.key, song.capo, !!song.expandRepeats)}
     `;
     container.classList.toggle('cols-2', !!opts.twoCol);
     return sections;
@@ -2453,7 +2468,7 @@ const App = (() => {
     // yet, loadIntoForm's default-key logic just shows NN, same as any
     // other song that's never been saved with a letter key showing.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(), bodyAlign:'left',
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(), bodyAlign:'left', expandRepeats:false,
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
@@ -2589,6 +2604,7 @@ const App = (() => {
     setNotationStyle(currentSong.notationStyle || 'roman', false);
     setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
     setBodyAlign(currentSong.bodyAlign || 'left', false);
+    el('toggleExpandRepeats').checked = !!currentSong.expandRepeats;
     originalKey = usableKey;
     liveKey = usableKey;
     el('origKeyNote').textContent = '';
@@ -4112,7 +4128,7 @@ const App = (() => {
     const importedLibraries = normalizeLibraries(libraryName ? [libraryName] : song.libraries);
     const toSave = {
       title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||'left',
+      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||'left', expandRepeats: !!song.expandRepeats,
       tags: song.tags||[], libraries: importedLibraries, content: importedContent,
       versions: song.versions||[],
       createdAt: Date.now(), updatedAt: Date.now()
@@ -4195,6 +4211,7 @@ const App = (() => {
       capo: el('mCapo').value,
       titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
       bodyAlign: (currentSong && currentSong.bodyAlign) || 'left',
+      expandRepeats: !!(currentSong && currentSong.expandRepeats),
       tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
       libraries: (currentSong && currentSong.libraries) || [],
       content: el('editor').value
@@ -6085,6 +6102,12 @@ ${versesXml}
     el('editor')._lastValue = '';
 
     el('toggle2col').addEventListener('change', renderPreview);
+    el('toggleExpandRepeats').addEventListener('change', (e) => {
+      if(!currentSong) return;
+      currentSong.expandRepeats = e.target.checked;
+      dirty = true; updateSaveStatus();
+      renderPreview();
+    });
 
     // Chart text-size stepper (pane-head) — see setFontScale/bumpFontScale above.
     const FONT_SCALE_STEP = 5;
