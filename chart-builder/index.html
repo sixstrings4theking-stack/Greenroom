@@ -386,6 +386,19 @@ small{color:var(--text-faint);}
 .pane-head{display:flex; justify-content:space-between; align-items:center; padding:6px 12px; min-height:42px; background:var(--bg-panel-2); font-size:11px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); flex-shrink:0;}
 .pane-head .hint{text-transform:none; letter-spacing:0; font-size:11px;}
 .pane-head-left{display:flex; align-items:center; gap:10px;}
+/* Arrangement control in the editor pane-head (see renderArrangementControl) */
+.arr-control{display:inline-flex; align-items:center; gap:3px; text-transform:none; letter-spacing:0;}
+.arr-btn{padding:2px 8px; font-size:11px; font-weight:600; color:var(--accent); border-color:var(--border);}
+.arr-add{padding:1px 7px; font-size:13px; line-height:1.2;}
+.arr-menu{position:fixed; z-index:600; min-width:230px; background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.5); padding:4px; font-size:12px; text-transform:none; letter-spacing:0; color:var(--text);}
+.arr-menu.hidden{display:none;}
+.arr-menu .item{padding:6px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;}
+.arr-menu .item:hover{background:var(--bg-input);}
+.arr-menu .item.active{color:var(--accent); font-weight:600;}
+.arr-menu .item.disabled{color:var(--text-faint); cursor:default;}
+.arr-menu .sep{border-top:1px solid var(--border-soft); margin:4px 0;}
+.song-item .si-arr{background:rgba(121,194,255,.12); color:#79c2ff; border-color:rgba(121,194,255,.35);}
+.song-item .si-arr.active{background:rgba(121,194,255,.28);}
 #editor{
   flex:1; resize:none; border:none; border-radius:0; background:var(--bg); color:var(--text);
   font-family:var(--mono); font-size:calc(14px * var(--editor-zoom, 1)); line-height:1.6; padding:14px; white-space:pre; overflow:auto;
@@ -430,6 +443,8 @@ small{color:var(--text-faint);}
 .cs-title{font-size:20px; font-weight:700; margin:0 0 2px; color:#111;}
 .cs-artist{font-size:8pt; color:#555; margin:0 0 2px;}
 .cs-meta{font-size:10.5px; color:#888; display:flex; gap:14px; border-top:1px solid #ddd; padding-top:4px; margin-bottom:10px; flex-wrap:wrap;}
+/* Arrangement name, opposite Key/Capo on the same line (see arrangementLabelFor) */
+.cs-meta-arr{margin-left:auto; color:#555; font-weight:600;}
 .cs-copyright{font-size:8pt; color:#666; margin:0 0 3px;}
 .cs-permission{font-size:8pt; color:#666; margin:0 0 3px;}
 /* The "song map" — round black-on-white section-marker badges (see
@@ -669,6 +684,7 @@ small{color:var(--text-faint);}
   <div class="ssn-text"><b>ChartBench is built for a laptop or desktop.</b> On a screen this size the editor and preview can't sit side by side — a larger tablet in landscape works, a phone won't. Charts printed or exported from a computer read fine anywhere.</div>
   <button type="button" id="smallScreenDismiss">Got it</button>
 </div>
+<div id="arrMenu" class="arr-menu hidden"></div>
 <div id="topbar">
   <div class="brand">Chart<span>Bench</span></div>
   <div class="tb-group">
@@ -902,6 +918,10 @@ small{color:var(--text-faint);}
         <div class="pane-head">
           <span class="pane-head-left">
             <span>Editor</span>
+            <span class="arr-control" title="Arrangement — which playable form of this song is in the editor (Main, Acoustic, Short…). Switch, rename or delete from the menu; + adds one as a copy of what's showing. Title, author, licensing and tags are shared by all arrangements.">
+              <button type="button" id="arrMenuBtn" class="arr-btn">Main ▾</button>
+              <button type="button" id="arrAddBtn" class="icon arr-add" title="New arrangement — a copy of the one showing">+</button>
+            </span>
             <span class="hint" id="editorClickHint"></span>
           </span>
           <div style="display:flex; align-items:center; gap:14px;">
@@ -1124,7 +1144,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-22 18:30';
+const APP_BUILD = '2026-08-22 19:15';
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
@@ -2926,6 +2946,7 @@ const App = (() => {
     // hasn't set one yet) — see setFontScale/currentZoomPct.
     FontScaleStore.apply(currentZoomPct());
     updateFontScaleLabel();
+    renderArrangementControl();
     renderPreview();
     renderParseStatus();
     updateDynamicSectionButtons();
@@ -3006,7 +3027,7 @@ const App = (() => {
     if(song.ccli) artistLineParts.push('CCLI Song #' + Renderer.escapeHtml(song.ccli));
     const copyrightText = Renderer.buildCopyrightText(song);
     const roadmap = Renderer.buildRoadmap(ChordParser.parse(song.content || ''));
-    return {metaBits, artistLineParts, copyrightText, roadmap};
+    return {metaBits, artistLineParts, copyrightText, roadmap, arrangementLabel: arrangementLabelFor(song)};
   }
   function buildPageHeaderHtml(song, pageIndex, parts){
     if(pageIndex !== 0){
@@ -3019,7 +3040,7 @@ const App = (() => {
       ${parts.copyrightText ? `<div class="cs-copyright" style="text-align:${ta};">${Renderer.escapeHtml(parts.copyrightText)}</div>` : ''}
       ${song.churchCcli ? `<div class="cs-permission" style="text-align:${ta};">Used by Permission CCLI #: ${Renderer.escapeHtml(song.churchCcli)}</div>` : ''}
       ${parts.roadmap ? `<div class="cs-roadmap" style="justify-content:${ta==='center'?'center':(ta==='right'?'flex-end':'flex-start')};">${parts.roadmap}</div>` : ''}
-      ${parts.metaBits.length ? `<div class="cs-meta">${parts.metaBits.map(Renderer.escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
+      ${(parts.metaBits.length || parts.arrangementLabel) ? `<div class="cs-meta">${parts.metaBits.map(Renderer.escapeHtml).join(' &nbsp;•&nbsp; ')}${parts.arrangementLabel ? `<span class="cs-meta-arr">${Renderer.escapeHtml(parts.arrangementLabel)}</span>` : ''}</div>` : ''}
     `;
   }
 
@@ -3681,6 +3702,7 @@ const App = (() => {
           <div class="si-title">${Renderer.escapeHtml(s.title || 'Untitled')}</div>
           <div class="si-meta"><span>${Renderer.escapeHtml(s.artist||'')}</span>${(s.preferredKeys&&s.preferredKeys.length)?`<span>· Key${s.preferredKeys.length>1?'s':''} ${Renderer.escapeHtml(s.preferredKeys.join(', '))}</span>`:''}${s.ccli?`<span>· CCLI ${Renderer.escapeHtml(s.ccli)}</span>`:''}</div>
           ${ (s.tags&&s.tags.length) ? `<div class="si-tags">${s.tags.map(t=>`<span class="si-tag">${Renderer.escapeHtml(t)}</span>`).join('')}</div>` : ''}
+          ${ arrangementsOf(s).length > 1 ? `<div class="si-tags">${arrangementsOf(s).map(a=>`<span class="si-tag si-arr${a.id===activeArrangementId(s)?' active':''}" title="Arrangement">${Renderer.escapeHtml(a.name||'Main')}</span>`).join('')}</div>` : ''}
         </div>
         <button type="button" class="si-delete" title="Remove from library (doesn't touch any original file)">✕</button>
       `;
@@ -3851,8 +3873,71 @@ const App = (() => {
     toast(`Removed "${s.title || 'Untitled'}"`);
   }
 
-  async function saveCurrent(){
-    if(!currentSong) return;
+  /* ---------------- Arrangements ----------------
+     One song, several playable forms (Main / Acoustic / Short…). An
+     arrangement owns the chart and everything that hangs off it —
+     ARR_FIELDS below; the song owns the identity (title, author, CCLI,
+     licensing, tags, preferred keys, libraries). The ACTIVE arrangement's
+     fields always also live at the song's top level, so every existing
+     reader (print, export, mirror, Greenroom, older builds) keeps working
+     unchanged: switching = stash the top-level fields into the current
+     arrangement object, then copy the target's fields up. A song with no
+     `arrangements` array is one implicit arrangement called "Main"; the
+     array only appears once a second one is added. */
+  const ARR_FIELDS = ['content', 'lyricsContent', 'lyricsSourceSnapshot', 'previewZoom', 'bodyAlign', 'expandRepeats', 'lastDisplayedKey', 'lastDisplayedNN', 'capo', 'versions'];
+  const MAIN_ARR_ID = 'main';
+  function arrangementsOf(song){
+    if(song && Array.isArray(song.arrangements) && song.arrangements.length) return song.arrangements;
+    return [{ id: MAIN_ARR_ID, name: 'Main' }];
+  }
+  function activeArrangementId(song){
+    const arrs = arrangementsOf(song);
+    return arrs.some(a => a.id === song.activeArrangementId) ? song.activeArrangementId : arrs[0].id;
+  }
+  function activeArrangement(song){ const id = activeArrangementId(song); return arrangementsOf(song).find(a => a.id === id); }
+  // What the chart header / file names show: the name whenever there's more
+  // than one arrangement, or a lone one that isn't just "Main". Empty for a
+  // plain song, so nothing changes for anyone who never uses this.
+  function arrangementLabelFor(song){
+    if(!song) return '';
+    const arrs = arrangementsOf(song);
+    const a = activeArrangement(song);
+    if(arrs.length > 1) return a.name || 'Main';
+    return (a.name && a.name !== 'Main') ? a.name : '';
+  }
+  function ensureArrangementsArray(song){
+    if(Array.isArray(song.arrangements) && song.arrangements.length) return;
+    const main = { id: MAIN_ARR_ID, name: 'Main' };
+    ARR_FIELDS.forEach(f => { if(f in song) main[f] = song[f]; });
+    song.arrangements = [main];
+    song.activeArrangementId = MAIN_ARR_ID;
+  }
+  function stashActiveArrangement(song){
+    if(!Array.isArray(song.arrangements) || !song.arrangements.length) return;
+    const a = activeArrangement(song);
+    ARR_FIELDS.forEach(f => { if(f in song) a[f] = song[f]; else delete a[f]; });
+  }
+  function applyArrangement(song, id){
+    const a = arrangementsOf(song).find(x => x.id === id);
+    if(!a) return false;
+    ARR_FIELDS.forEach(f => { if(f in a) song[f] = a[f]; else delete song[f]; });
+    song.activeArrangementId = id;
+    return true;
+  }
+  // A copy of a stored song with one of its arrangements made active — for
+  // set-list entries that call for something other than the song's current
+  // arrangement. Never mutates the stored record.
+  function songWithArrangement(song, arrId){
+    if(!song || !arrId || arrId === activeArrangementId(song)) return song;
+    const copy = Object.assign({}, song);
+    if(!applyArrangement(copy, arrId)) return song;
+    return copy;
+  }
+
+  // The meta bar and editor, read back into currentSong — the part of Save
+  // that doesn't persist anything. Also what an arrangement switch runs
+  // first, so unsaved edits travel with the arrangement they were made in.
+  function readMetaFormIntoSong(){
     currentSong.title = el('mTitle').value.trim() || 'Untitled';
     currentSong.artist = el('mArtist').value.trim();
     currentSong.ccli = el('mCCLI').value.trim();
@@ -3860,7 +3945,121 @@ const App = (() => {
     currentSong.copyrightMode = currentSong.copyrightMode || '©';
     currentSong.notationStyle = currentSong.notationStyle || 'roman';
     currentSong.churchCcli = el('mChurchCCLI').value.trim();
+    currentSong.tags = el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean);
+  }
+  function readArrangementStateIntoSong(){
     currentSong.capo = el('mCapo').value;
+    currentSong.lastDisplayedNN = el('mDisplayKey').value === 'NN';
+    currentSong.lastDisplayedKey = el('mDisplayKey').value;
+    currentSong.expandRepeats = !!el('toggleExpandRepeats').checked;
+    currentSong.content = resolveCanonicalContent();
+  }
+
+  function refreshAfterArrangementChange(wasLyrics){
+    undoStack = []; redoStack = []; lyricsUndoStack = []; lyricsRedoStack = [];
+    loadIntoForm(); // exits Lyrics view; re-enter below so the new arrangement's slides show
+    if(wasLyrics) toggleLyricsOnlyView();
+    renderArrangementControl();
+    renderSongList();
+  }
+  function switchArrangement(id){
+    if(!currentSong || id === activeArrangementId(currentSong)) return;
+    const wasLyrics = inLyricsView();
+    readMetaFormIntoSong(); readArrangementStateIntoSong();
+    ensureArrangementsArray(currentSong);
+    stashActiveArrangement(currentSong);
+    if(!applyArrangement(currentSong, id)) return;
+    refreshAfterArrangementChange(wasLyrics);
+  }
+  function addArrangement(){
+    if(!currentSong) return;
+    const name = (prompt('Name for the new arrangement — it starts as a copy of the one showing (e.g. Acoustic, Short, Christmas Eve):', '') || '').trim();
+    if(!name) return;
+    const wasLyrics = inLyricsView();
+    readMetaFormIntoSong(); readArrangementStateIntoSong();
+    ensureArrangementsArray(currentSong);
+    stashActiveArrangement(currentSong);
+    const copy = JSON.parse(JSON.stringify(activeArrangement(currentSong)));
+    copy.id = newUid(); copy.name = name; copy.versions = [];
+    currentSong.arrangements.push(copy);
+    applyArrangement(currentSong, copy.id);
+    refreshAfterArrangementChange(wasLyrics);
+    dirty = true; updateSaveStatus();
+    toast(`Arrangement "${name}" added — edit away, the others are untouched`);
+  }
+  function renameArrangement(){
+    if(!currentSong) return;
+    ensureArrangementsArray(currentSong);
+    const a = activeArrangement(currentSong);
+    const name = (prompt('Rename this arrangement:', a.name || 'Main') || '').trim();
+    if(!name || name === a.name) return;
+    a.name = name;
+    dirty = true; updateSaveStatus();
+    renderArrangementControl(); renderPreview(); renderSongList();
+  }
+  function deleteArrangement(){
+    if(!currentSong) return;
+    const arrs = arrangementsOf(currentSong);
+    if(arrs.length <= 1){ toast('A song always keeps at least one arrangement'); return; }
+    const a = activeArrangement(currentSong);
+    if(!confirm(`Delete the arrangement "${a.name}"?\n\nThe song's other arrangement${arrs.length > 2 ? 's' : ''} and its title, author, licensing and tags are untouched.`)) return;
+    const wasLyrics = inLyricsView();
+    readMetaFormIntoSong();
+    currentSong.arrangements = currentSong.arrangements.filter(x => x.id !== a.id);
+    applyArrangement(currentSong, currentSong.arrangements[0].id);
+    refreshAfterArrangementChange(wasLyrics);
+    dirty = true; updateSaveStatus();
+    toast(`Deleted arrangement "${a.name}"`);
+  }
+
+  // Editor pane-head control: "Main ▾" opens the menu (switch / rename /
+  // delete); "+" adds one as a copy of what's showing.
+  function renderArrangementControl(){
+    const btn = el('arrMenuBtn');
+    if(!btn) return;
+    const a = currentSong ? activeArrangement(currentSong) : null;
+    btn.textContent = (a ? (a.name || 'Main') : 'Main') + ' ▾';
+    btn.disabled = !currentSong; el('arrAddBtn').disabled = !currentSong;
+  }
+  function openArrangementMenu(){
+    if(!currentSong) return;
+    const menu = el('arrMenu');
+    const arrs = arrangementsOf(currentSong);
+    const activeId = activeArrangementId(currentSong);
+    menu.innerHTML = arrs.map(a => `<div class="item${a.id === activeId ? ' active' : ''}" data-id="${Renderer.escapeHtml(a.id)}">${a.id === activeId ? '✓ ' : ''}${Renderer.escapeHtml(a.name || 'Main')}</div>`).join('')
+      + `<div class="sep"></div>
+         <div class="item" data-act="add">＋ New arrangement (copy of this one)…</div>
+         <div class="item" data-act="rename">Rename…</div>
+         <div class="item${arrs.length > 1 ? '' : ' disabled'}" data-act="delete">Delete this arrangement</div>`;
+    const r = el('arrMenuBtn').getBoundingClientRect();
+    menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 4) + 'px';
+    menu.classList.remove('hidden');
+    menu.querySelectorAll('.item').forEach(it => {
+      it.onclick = () => {
+        closeArrangementMenu();
+        if(it.dataset.id) switchArrangement(it.dataset.id);
+        else if(it.dataset.act === 'add') addArrangement();
+        else if(it.dataset.act === 'rename') renameArrangement();
+        else if(it.dataset.act === 'delete' && !it.classList.contains('disabled')) deleteArrangement();
+      };
+    });
+    setTimeout(() => document.addEventListener('mousedown', arrMenuOutsideClick, true), 0);
+  }
+  function closeArrangementMenu(){
+    el('arrMenu').classList.add('hidden');
+    document.removeEventListener('mousedown', arrMenuOutsideClick, true);
+  }
+  function arrMenuOutsideClick(e){ if(!el('arrMenu').contains(e.target) && e.target !== el('arrMenuBtn')) closeArrangementMenu(); }
+
+  async function saveCurrent(){
+    if(!currentSong) return;
+    readMetaFormIntoSong();
+    // The arrangement-owned state (capo, what the Display Key was showing,
+    // Repeated Sections, the canonical chart) — see readArrangementStateInto
+    // Song. preferredKey is NOT derived from Display Key: the meta-bar
+    // picker is the one explicit place that sets it. currentSong.libraries
+    // is kept live by the sidebar widget — nothing to read back here.
+    readArrangementStateIntoSong();
     // Once a song's canonical storage is Nashville Numbers, `key` stays 'NN'
     // permanently — the dropdown is purely a display choice from here on
     // and must never flip the storage format back to a letter key just
@@ -3868,21 +4067,6 @@ const App = (() => {
     // songs keep the original pre-migration behavior, where the dropdown
     // value IS the storage key.
     if(currentSong.key !== 'NN') currentSong.key = el('mDisplayKey').value;
-    // Remembers exactly what this song was showing at save time, so
-    // reopening it later defaults to the same thing (see loadIntoForm) —
-    // NN if NN was showing, or the song's first Preferred Key if a letter
-    // key was showing.
-    currentSong.lastDisplayedNN = el('mDisplayKey').value === 'NN';
-    currentSong.lastDisplayedKey = el('mDisplayKey').value;
-    // preferredKey is no longer derived from Display Key on save — the
-    // meta-bar picker (see keyPickerLetterClick etc.) is the one explicit
-    // place that sets it now, so a manual pick there survives regardless of
-    // whatever key happens to be showing when Save is hit.
-    currentSong.tags = el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean);
-    // currentSong.libraries is kept live by the sidebar's "This song's
-    // libraries" widget (add/remove mutate it directly, like Preferred
-    // Key(s)) — nothing to read back from a form field here.
-    currentSong.content = resolveCanonicalContent();
     currentSong.titleAlign = currentSong.titleAlign || DefaultAlignStore.get();
     currentSong.bodyAlign = currentSong.bodyAlign || DefaultBodyAlignStore.get();
     currentSong.updatedAt = Date.now();
@@ -3890,6 +4074,7 @@ const App = (() => {
     currentSong.versions = currentSong.versions || [];
     currentSong.versions.push({ts: Date.now(), content: currentSong.content, key: currentSong.key, note:'Autosave on save'});
     if(currentSong.versions.length > 25) currentSong.versions = currentSong.versions.slice(-25);
+    stashActiveArrangement(currentSong); // the active arrangement object mirrors the top level
     await persistSong(currentSong);
     dirty = false;
     updateSaveStatus();
@@ -4804,6 +4989,14 @@ const App = (() => {
       if(typeof song.lyricsSourceSnapshot === 'string') toSave.lyricsSourceSnapshot = song.lyricsSourceSnapshot;
     }
     if(typeof song.lastDisplayedNN === 'boolean') toSave.lastDisplayedNN = song.lastDisplayedNN;
+    if(Array.isArray(song.arrangements) && song.arrangements.length && song.arrangements.every(a => a && typeof a === 'object' && typeof a.id === 'string' && typeof a.name === 'string')){
+      toSave.arrangements = song.arrangements.map(a => {
+        const c = Object.assign({}, a);
+        if(statedKey && statedKey !== 'NN' && typeof c.content === 'string') c.content = NashvilleSystem.contentToNumbers(c.content, statedKey.replace(/m$/,''));
+        return c;
+      });
+      if(toSave.arrangements.some(a => a.id === song.activeArrangementId)) toSave.activeArrangementId = song.activeArrangementId;
+    }
     if(SLB_KEY_OPTIONS.includes(song.lastDisplayedKey)){
       toSave.lastDisplayedKey = song.lastDisplayedKey;
     } else if(statedKey && statedKey !== 'NN'){
@@ -4930,6 +5123,7 @@ const App = (() => {
       expandRepeats: !!(currentSong && currentSong.expandRepeats),
       tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
       libraries: (currentSong && currentSong.libraries) || [],
+      arrangements: currentSong && currentSong.arrangements, activeArrangementId: currentSong && currentSong.activeArrangementId,
       // The editor shows the chart only outside Lyrics view (see
       // resolveCanonicalContent); in Lyrics view the chart is the stored one.
       content: inLyricsView() ? ((currentSong && currentSong.content) || '') : el('editor').value
@@ -4955,6 +5149,8 @@ const App = (() => {
   // must re-import to exactly the song it came from. `id` is dropped: an
   // import always creates a new record.
   function fullSongForExport(){
+    readArrangementStateIntoSong();
+    stashActiveArrangement(currentSong);
     const full = Object.assign({}, currentSong, currentSongSnapshot(), {
       key: currentSong.key === 'NN' ? 'NN' : el('mDisplayKey').value,
       content: resolveCanonicalContent(),
@@ -4971,7 +5167,8 @@ const App = (() => {
   function exportCurrent(fmt){
     if(!currentSong) return;
     const song = currentSongSnapshot();
-    const base = (song.title || 'song').replace(/[^\w\-]+/g,'_');
+    const arrSuffix = arrangementLabelFor(currentSong) ? ' - ' + arrangementLabelFor(currentSong) : '';
+    const base = ((song.title || 'song') + arrSuffix).replace(/[^\w\-]+/g,'_');
     if(fmt === 'json'){
       downloadBlob(`${base}.json`, JSON.stringify(fullSongForExport(), null, 2), 'application/json');
     } else if(fmt === 'txt'){
@@ -5111,7 +5308,7 @@ ${versesXml}
     ensureLyricsContentSynced();
     const snapshot = Object.assign({}, currentSongSnapshot(), { preferredKeys: currentSong.preferredKeys || [] });
     const xml = buildOpenLyricsXml(snapshot, currentSong.lyricsContent || '');
-    const base = (snapshot.title || 'song').replace(/[^\w\-]+/g,'_');
+    const base = ((snapshot.title || 'song') + (arrangementLabelFor(currentSong) ? ' - ' + arrangementLabelFor(currentSong) : '')).replace(/[^\w\-]+/g,'_');
     downloadBlob(`${base}.xml`, xml, 'application/xml');
     toast('Exported OpenLyrics XML');
   }
@@ -5180,7 +5377,7 @@ ${versesXml}
     const lyrics = currentSong.lyricsContent || '';
     if(buildLyricsSlidesFrom(lyrics).length === 0){ toast('No lyrics to export'); return; }
     const song = currentSongSnapshot();
-    downloadBlob(`${presentationFilename(song.title)}.txt`, buildProPresenterText(song, lyrics), 'text/plain;charset=utf-8');
+    downloadBlob(`${presentationFilename(song.title + (arrangementLabelFor(currentSong) ? ' - ' + arrangementLabelFor(currentSong) : ''))}.txt`, buildProPresenterText(song, lyrics), 'text/plain;charset=utf-8');
     toast('Exported ProPresenter text');
   }
 
@@ -5303,7 +5500,7 @@ ${versesXml}
       pptx.author = song.artist || 'ChartBench';
       pptxAddSong(pptx, spec, song, lyrics, null);
       const blob = await pptx.write({ outputType: 'blob' });
-      downloadBlob(`${presentationFilename(song.title)}.pptx`, blob, PPTX_MIME);
+      downloadBlob(`${presentationFilename(song.title + (arrangementLabelFor(currentSong) ? ' - ' + arrangementLabelFor(currentSong) : ''))}.pptx`, blob, PPTX_MIME);
       toast('Exported PowerPoint');
     }catch(err){
       console.error(err);
@@ -5331,7 +5528,7 @@ ${versesXml}
       let exported = 0, skipped = 0;
       const titleCounts = {};
       setList.forEach(entry => {
-        const stored = songs.find(s => s.id === entry.songId);
+        const stored = songWithArrangement(songs.find(s => s.id === entry.songId), entry.arrangementId);
         if(!stored){ skipped++; return; }
         const lyrics = lyricsContentFor(stored);
         if(buildLyricsSlidesFrom(lyrics).length === 0){ skipped++; return; }
@@ -5520,7 +5717,7 @@ ${versesXml}
     return setList.map(e => {
       if(e.type === 'pdf') return Object.assign({}, e);
       const s = songs.find(x => x.id === e.songId);
-      return { songId: e.songId, uid: s ? s.uid : undefined, key: e.key || 'NN', capo: e.capo || '' };
+      return { songId: e.songId, uid: s ? s.uid : undefined, key: e.key || 'NN', capo: e.capo || '', arrangementId: e.arrangementId || undefined };
     });
   }
   // Back to working-set form: songs by uid first, then id; anything gone
@@ -5535,7 +5732,9 @@ ${versesXml}
       let s = e.uid ? songs.find(x => x.uid === e.uid) : null;
       if(!s) s = songs.find(x => x.id === e.songId);
       if(!s){ missing++; continue; }
-      out.push({ songId: s.id, key: e.key || 'NN', capo: e.capo || '' });
+      const entry = { songId: s.id, key: e.key || 'NN', capo: e.capo || '' };
+      if(e.arrangementId && arrangementsOf(s).some(a => a.id === e.arrangementId)) entry.arrangementId = e.arrangementId;
+      out.push(entry);
     }
     return { entries: out, missing };
   }
@@ -5845,12 +6044,14 @@ ${versesXml}
           <span class="slb-handle" title="Drag to reorder">⠿</span>
           <span class="slb-idx">${i+1}.</span>
           <span class="slb-entry-title">${Renderer.escapeHtml(stored ? (stored.title || 'Untitled') : '(missing song)')}</span>
+          ${stored && arrangementsOf(stored).length > 1 ? `<select class="slb-arr" title="Which arrangement of this song the set uses">${arrangementsOf(stored).map(a => `<option value="${Renderer.escapeHtml(a.id)}"${(entry.arrangementId || activeArrangementId(stored)) === a.id ? ' selected' : ''}>${Renderer.escapeHtml(a.name || 'Main')}</option>`).join('')}</select>` : ''}
           <span class="lbl">Key:</span>
           <select class="slb-key">${SLB_KEY_OPTIONS.map(k => `<option value="${k}"${entry.key===k?' selected':''}>${k}</option>`).join('')}</select>
           <span class="lbl">Capo:</span>
           <select class="slb-capo"><option value="">None</option>${[1,2,3,4,5,6,7,8].map(n=>`<option value="${n}"${String(entry.capo)===String(n)?' selected':''}>${n}</option>`).join('')}</select>
           <button type="button" class="slb-remove" title="Remove from set">✕</button>`;
         row.querySelector('.slb-key').onchange = e => { entry.key = e.target.value; slbSave(); };
+        const arrSel = row.querySelector('.slb-arr'); if(arrSel) arrSel.onchange = e => { entry.arrangementId = e.target.value; slbSave(); };
         row.querySelector('.slb-capo').onchange = e => { entry.capo = e.target.value; slbSave(); };
       }
       row.querySelector('.slb-remove').onclick = async () => { await slbRemoveEntry(i); slbSave(); renderSlbSet(backdrop); };
@@ -5931,7 +6132,7 @@ ${versesXml}
   // converted to NN or transposed to the picked letter key here — the same
   // two conversions the editor itself uses for that same distinction.
   function setListRenderSong(entry){
-    const stored = songs.find(s => s.id === entry.songId);
+    const stored = songWithArrangement(songs.find(s => s.id === entry.songId), entry.arrangementId);
     if(!stored) return null;
     const key = entry.key || 'NN';
     let content = stored.content || '';
@@ -6174,7 +6375,7 @@ ${versesXml}
     let exported = 0, skipped = 0;
     for(let i = 0; i < setList.length; i++){
       const entry = setList[i];
-      const stored = songs.find(s => s.id === entry.songId);
+      const stored = songWithArrangement(songs.find(s => s.id === entry.songId), entry.arrangementId);
       if(!stored){ skipped++; continue; }
       const lyrics = lyricsContentFor(stored);
       if(buildOpenLyricsVerses(lyrics).verseDefs.length === 0){ skipped++; continue; }
@@ -6202,7 +6403,7 @@ ${versesXml}
     const done = new Set();
     for(let i = 0; i < setList.length; i++){
       const entry = setList[i];
-      const stored = songs.find(s => s.id === entry.songId);
+      const stored = songWithArrangement(songs.find(s => s.id === entry.songId), entry.arrangementId);
       if(!stored){ skipped++; continue; }
       if(done.has(stored.id)) continue;
       done.add(stored.id);
@@ -7256,7 +7457,8 @@ ${versesXml}
         <button data-restore="${idx}">Restore</button>
       </div>`;
     }).join('');
-    openDrawer('Version History', `<div id="versionRows">${rows}</div>`, (drawer) => {
+    const arrTitle = arrangementsOf(currentSong).length > 1 ? ` — ${activeArrangement(currentSong).name}` : '';
+    openDrawer('Version History' + arrTitle, `<div id="versionRows">${rows}</div>`, (drawer) => {
       drawer.querySelectorAll('[data-restore]').forEach(btn => {
         btn.onclick = () => {
           const v = currentSong.versions[Number(btn.dataset.restore)];
@@ -7440,6 +7642,8 @@ ${versesXml}
     el('mirrorNudgeGo').onclick = mirrorReconnect;
     el('btnCircle').onclick = openCircleOfFifths;
     el('btnGuide').onclick = openUserGuide;
+    el('arrMenuBtn').onclick = openArrangementMenu;
+    el('arrAddBtn').onclick = addArrangement;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
     el('slideViewModeControl').querySelectorAll('button').forEach(btn => {
       btn.onclick = () => { LyricsSlideViewStore.set(btn.dataset.mode); renderLyricsRibbon(); renderPreview(); };
