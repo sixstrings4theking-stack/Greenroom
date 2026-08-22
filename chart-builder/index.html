@@ -1091,6 +1091,12 @@ const ChordSpacingStore = (() => {
 // clickable for now, kept functional for testing.
 const WEB_HOSTED_COPY = true;
 
+// Build stamp — shown in Settings > Data and in the feedback email so it's
+// always clear WHICH copy of the file is running (a cached page, a stale
+// download, the repo). Bumped with every change, same as the version
+// snapshot in chart-builder/versions/.
+const APP_BUILD = '2026-08-22 17:20';
+
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
 // "clear cookies and site data" wipes — so the app keeps track of when a
@@ -3149,7 +3155,7 @@ const App = (() => {
     const mirrorTxt = FolderMirror.isConnected()
       ? `Library folder <b>${Renderer.escapeHtml(FolderMirror.folderName())}</b> is mirroring every save — that folder is your durable copy.`
       : 'Songs live in browser site data — clearing “cookies and site data” erases them, so back up regularly (or set a Library Folder below).';
-    st.innerHTML = `<small>Storage: ${persistTxt}.<br>Last full backup: <b>${lastTxt}</b>. ${mirrorTxt}</small>`;
+    st.innerHTML = `<small>ChartBench build <b>${APP_BUILD}</b> · ${WEB_HOSTED_COPY ? 'hosted copy' : 'downloaded local copy'}.<br>Storage: ${persistTxt}.<br>Last full backup: <b>${lastTxt}</b>. ${mirrorTxt}</small>`;
   }
 
   // Reflects SongSortStore into a sort toggle (sidebar or builder). Clicks
@@ -6205,6 +6211,7 @@ ${versesXml}
       '',
       '-----',
       'ChartBench: ' + where,
+      'Build: ' + APP_BUILD,
       'Browser: ' + navigator.userAgent,
       'Page size: ' + PageSizeStore.get().toUpperCase(),
       'Songs in library: ' + songs.length,
@@ -7577,6 +7584,7 @@ ${versesXml}
     }
     updateEditorClickHint();
     updateRomanButtonVisibility();
+    el('btnSettings').title = 'Settings & Parameters — build ' + APP_BUILD; // hover ⚙ to see which copy this is
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
     EditorZoomStore.apply(EditorZoomStore.get());
