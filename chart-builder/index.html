@@ -551,6 +551,21 @@ small{color:var(--text-faint);}
 .slb-row .slb-row-meta{font-size:11px; color:var(--text-faint); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 .slb-row .slb-add{flex-shrink:0; padding:3px 9px; font-size:13px;}
 .slb-set{flex:1; display:flex; flex-direction:column; min-width:0; min-height:0;}
+/* Set-name bar over the set: name the set, save it, open the saved-sets
+   panel. The panel lists snapshots with Load/Delete, newest first. */
+.slb-set-bar{display:flex; align-items:center; gap:6px; padding:8px 10px; border-bottom:1px solid var(--border-soft); flex-shrink:0;}
+.slb-set-bar input{flex:1; min-width:0;}
+.slb-set-bar button{white-space:nowrap; flex-shrink:0;}
+.slb-set-bar #slbSavedToggle.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+.slb-saved{border-bottom:1px solid var(--border-soft); background:var(--bg-panel-2); max-height:42%; overflow-y:auto; flex-shrink:0;}
+.slb-saved-empty{padding:14px; font-size:12px; color:var(--text-faint); text-align:center;}
+.slb-saved-row{display:flex; align-items:center; gap:8px; padding:7px 12px; border-bottom:1px solid var(--border-soft); font-size:12.5px;}
+.slb-saved-row:last-child{border-bottom:none;}
+.slb-saved-row .slb-saved-name{flex:1; min-width:0; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.slb-saved-row .slb-saved-meta{font-size:11px; color:var(--text-faint); white-space:nowrap;}
+.slb-saved-row button{padding:3px 9px; font-size:11.5px; flex-shrink:0;}
+.slb-saved-row .slb-saved-del{color:var(--danger); border-color:transparent;}
+.slb-saved-row .slb-saved-del:hover{border-color:var(--danger);}
 .slb-set-list{flex:1; overflow-y:auto; padding:8px;}
 .slb-set-empty{color:var(--text-faint); font-size:12.5px; text-align:center; padding:40px 20px; border:2px dashed var(--border); border-radius:10px; margin:12px;}
 .slb-entry{display:flex; align-items:center; gap:8px; padding:7px 9px; border:1px solid var(--border-soft); border-radius:8px; margin-bottom:6px; background:var(--bg-input);}
@@ -5143,7 +5158,7 @@ ${versesXml}
       });
       if(exported === 0){ toast('Nothing to export — no lyrics in this set'); return; }
       const blob = await pptx.write({ outputType: 'blob' });
-      downloadBlob(`Set_List_${dateStr}.pptx`, blob, PPTX_MIME);
+      downloadBlob(`${setListFileBase()}.pptx`, blob, PPTX_MIME);
       toast(skipped
         ? `Exported a ${exported}-song PowerPoint (${skipped} skipped — no lyrics)`
         : `Exported a ${exported}-song PowerPoint`);
@@ -5290,7 +5305,144 @@ ${versesXml}
   async function slbRemoveEntry(i){
     const entry = setList[i];
     setList.splice(i, 1);
-    if(entry && entry.type === 'pdf'){ try{ await DB.delPref(slbPdfPrefKey(entry.pdfId)); }catch(e){} }
+    if(entry && entry.type === 'pdf') await slbDropPdfIfUnreferenced(entry.pdfId);
+  }
+
+  /* ---- Saved set lists ----
+     The builder's working set is scratch space that survives reloads.
+     "Save set" snapshots it under a name (DB prefs, saved_setlists_v1):
+     entries keep the song's uid as well as its id, so a set still resolves
+     after the library was re-imported or mirrored to another machine.
+     Saving under an existing name updates that set. Attached-PDF bytes are
+     shared between the working set and any saved sets that reference them,
+     and are only dropped once nothing references them. */
+  const SavedSetListsStore = (() => {
+    const KEY = 'saved_setlists_v1';
+    async function all(){ const v = await DB.getPref(KEY, null); return Array.isArray(v) ? v : []; }
+    async function write(list){ await DB.setPref(KEY, list); }
+    return { all, write };
+  })();
+  const SetNameStore = (() => {
+    const KEY = 'wcb_setlist_name_v1';
+    return { get(){ return localStorage.getItem(KEY) || ''; }, set(v){ localStorage.setItem(KEY, v || ''); } };
+  })();
+
+  function defaultSetName(){
+    return new Date().toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+  }
+  function snapshotSetEntries(){
+    return setList.map(e => {
+      if(e.type === 'pdf') return Object.assign({}, e);
+      const s = songs.find(x => x.id === e.songId);
+      return { songId: e.songId, uid: s ? s.uid : undefined, key: e.key || 'NN', capo: e.capo || '' };
+    });
+  }
+  // Back to working-set form: songs by uid first, then id; anything gone
+  // from the library (or a PDF whose bytes were cleared) is dropped.
+  async function resolveSavedEntries(entries){
+    const out = []; let missing = 0;
+    for(const e of entries || []){
+      if(e.type === 'pdf'){
+        if(await DB.getPref(slbPdfPrefKey(e.pdfId), null)) out.push(Object.assign({}, e)); else missing++;
+        continue;
+      }
+      let s = e.uid ? songs.find(x => x.uid === e.uid) : null;
+      if(!s) s = songs.find(x => x.id === e.songId);
+      if(!s){ missing++; continue; }
+      out.push({ songId: s.id, key: e.key || 'NN', capo: e.capo || '' });
+    }
+    return { entries: out, missing };
+  }
+  async function pdfReferenced(pdfId, ignoreSavedId){
+    if(setList.some(e => e.type === 'pdf' && e.pdfId === pdfId)) return true;
+    const saved = await SavedSetListsStore.all();
+    return saved.some(s => s.id !== ignoreSavedId && (s.entries || []).some(e => e.type === 'pdf' && e.pdfId === pdfId));
+  }
+  async function slbDropPdfIfUnreferenced(pdfId, ignoreSavedId){
+    if(await pdfReferenced(pdfId, ignoreSavedId)) return;
+    try{ await DB.delPref(slbPdfPrefKey(pdfId)); }catch(e){}
+  }
+
+  async function saveCurrentSetList(backdrop){
+    if(setList.length === 0){ toast('The set is empty — add songs first'); return; }
+    const nameInput = backdrop.querySelector('#slbSetName');
+    let name = nameInput.value.trim();
+    if(!name){ name = defaultSetName(); nameInput.value = name; SetNameStore.set(name); }
+    const saved = await SavedSetListsStore.all();
+    const existing = saved.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
+    const now = Date.now();
+    if(existing){
+      if(!confirm(`A saved set named "${existing.name}" already exists. Update it with this set?`)) return;
+      // PDFs the old version referenced but this one doesn't may now be orphaned.
+      const oldPdfIds = (existing.entries || []).filter(e => e.type === 'pdf').map(e => e.pdfId);
+      existing.entries = snapshotSetEntries();
+      existing.name = name;
+      existing.updatedAt = now;
+      await SavedSetListsStore.write(saved);
+      for(const id of oldPdfIds) await slbDropPdfIfUnreferenced(id);
+      toast(`Updated saved set "${name}"`);
+    } else {
+      saved.push({ id: newUid(), name, createdAt: now, updatedAt: now, entries: snapshotSetEntries() });
+      await SavedSetListsStore.write(saved);
+      toast(`Saved set "${name}"`);
+    }
+    await renderSavedSetsPanel(backdrop);
+  }
+
+  async function loadSavedSetList(backdrop, id){
+    const saved = await SavedSetListsStore.all();
+    const s = saved.find(x => x.id === id);
+    if(!s) return;
+    if(setList.length && !confirm(`Replace the current set with "${s.name}"?\n\n(The current set isn't saved unless you've clicked Save set.)`)) return;
+    const { entries, missing } = await resolveSavedEntries(s.entries);
+    setList = entries; slbSave();
+    SetNameStore.set(s.name); backdrop.querySelector('#slbSetName').value = s.name;
+    renderSlbSet(backdrop);
+    toast(missing ? `Loaded "${s.name}" — ${missing} entr${missing === 1 ? 'y' : 'ies'} no longer in the library` : `Loaded "${s.name}"`);
+  }
+
+  async function deleteSavedSetList(backdrop, id){
+    const saved = await SavedSetListsStore.all();
+    const s = saved.find(x => x.id === id);
+    if(!s) return;
+    if(!confirm(`Delete the saved set "${s.name}"?\n\nThe songs themselves stay in the library; only this set is removed.`)) return;
+    await SavedSetListsStore.write(saved.filter(x => x.id !== id));
+    for(const e of (s.entries || [])){ if(e.type === 'pdf') await slbDropPdfIfUnreferenced(e.pdfId, id); }
+    toast(`Deleted saved set "${s.name}"`);
+    await renderSavedSetsPanel(backdrop);
+  }
+
+  async function renderSavedSetsPanel(backdrop){
+    const panel = backdrop.querySelector('#slbSavedPanel');
+    const toggle = backdrop.querySelector('#slbSavedToggle');
+    const saved = (await SavedSetListsStore.all()).slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    toggle.textContent = saved.length ? `Saved sets (${saved.length})` : 'Saved sets';
+    if(panel.classList.contains('hidden')) return;
+    if(saved.length === 0){
+      panel.innerHTML = `<div class="slb-saved-empty">No saved sets yet — name the current set above and click Save set.</div>`;
+      return;
+    }
+    panel.innerHTML = '';
+    saved.forEach(s => {
+      const n = (s.entries || []).length;
+      const row = document.createElement('div');
+      row.className = 'slb-saved-row';
+      row.innerHTML = `
+        <span class="slb-saved-name" title="${Renderer.escapeHtml(s.name)}">${Renderer.escapeHtml(s.name)}</span>
+        <span class="slb-saved-meta">${n} item${n === 1 ? '' : 's'} · ${new Date(s.updatedAt || s.createdAt).toLocaleDateString()}</span>
+        <button type="button" class="slb-saved-load" title="Bring this set back into the builder">Load</button>
+        <button type="button" class="ghost slb-saved-del" title="Delete this saved set">✕</button>`;
+      row.querySelector('.slb-saved-load').onclick = () => loadSavedSetList(backdrop, s.id);
+      row.querySelector('.slb-saved-del').onclick = () => deleteSavedSetList(backdrop, s.id);
+      panel.appendChild(row);
+    });
+  }
+
+  // Export file names carry the set's name when it has one.
+  function setListFileBase(){
+    const name = SetNameStore.get().trim();
+    const safe = name.replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return safe ? `Set List - ${safe}` : `Set_List_${new Date().toISOString().slice(0,10)}`;
   }
 
   async function openSetListBuilder(){
@@ -5339,6 +5491,12 @@ ${versesXml}
             </div>
           </div>
           <div class="slb-set">
+            <div class="slb-set-bar">
+              <input type="text" id="slbSetName" placeholder="Set name — e.g. Sunday Aug 24" title="Name this set, then Save set to keep it. Saving under an existing name updates that set." maxlength="80">
+              <button type="button" id="slbSaveSet" title="Save this set (name, order, keys, capos) so it can be brought back later">Save set</button>
+              <button type="button" id="slbSavedToggle" class="ghost" title="Show saved sets — load one back into the builder, or delete it">Saved sets</button>
+            </div>
+            <div class="slb-saved hidden" id="slbSavedPanel"></div>
             <div class="slb-set-list" id="slbSetList"></div>
           </div>
         </div>
@@ -5347,9 +5505,26 @@ ${versesXml}
     backdrop.addEventListener('click', e => { if(e.target === backdrop) backdrop.remove(); });
     backdrop.querySelector('#slbClose').onclick = () => backdrop.remove();
     backdrop.querySelector('#slbClear').onclick = async () => {
-      for(const e of setList){ if(e.type === 'pdf'){ try{ await DB.delPref(slbPdfPrefKey(e.pdfId)); }catch(err){} } }
-      setList = []; slbSave(); renderSlbSet(backdrop);
+      if(setList.length && !confirm('Clear the current set?\n\nSaved sets are not affected — only what\'s in the builder right now.')) return;
+      const pdfIds = setList.filter(e => e.type === 'pdf').map(e => e.pdfId);
+      setList = []; slbSave();
+      for(const id of pdfIds) await slbDropPdfIfUnreferenced(id);
+      SetNameStore.set(''); backdrop.querySelector('#slbSetName').value = '';
+      renderSlbSet(backdrop);
     };
+    const nameInput = backdrop.querySelector('#slbSetName');
+    nameInput.value = SetNameStore.get();
+    nameInput.addEventListener('input', () => SetNameStore.set(nameInput.value));
+    nameInput.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); saveCurrentSetList(backdrop); } });
+    backdrop.querySelector('#slbSaveSet').onclick = () => saveCurrentSetList(backdrop);
+    backdrop.querySelector('#slbSavedToggle').onclick = async () => {
+      const panel = backdrop.querySelector('#slbSavedPanel');
+      const toggle = backdrop.querySelector('#slbSavedToggle');
+      panel.classList.toggle('hidden');
+      toggle.classList.toggle('active', !panel.classList.contains('hidden'));
+      await renderSavedSetsPanel(backdrop);
+    };
+    renderSavedSetsPanel(backdrop);
     const pdfInput = backdrop.querySelector('#slbPdfInput');
     backdrop.querySelector('#slbAttachPdf').onclick = () => pdfInput.click();
     pdfInput.addEventListener('change', async () => {
@@ -5686,7 +5861,7 @@ ${versesXml}
       const imgH = canvas.height * CONTENT_W / canvas.width;
       pdf.addImage(imgData, 'PNG', MARGIN, MARGIN, CONTENT_W, Math.min(imgH, CONTENT_H), undefined, 'FAST');
     }
-    pdf.save(`Set_List_${new Date().toISOString().slice(0,10)}.pdf`);
+    pdf.save(`${setListFileBase()}.pdf`);
     area.classList.add('hidden');
     toast('Set list PDF exported');
   }
