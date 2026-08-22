@@ -247,7 +247,18 @@
 <p>In Lyrics mode the structure bar becomes slide controls: <b>Slide View</b> (Individual / Collective), <b>Aspect Ratio</b> (16:9 / 4:3), and <b>Theme</b> (Dark / Light — white text on black, or the inverse).</p>
 <h3>Exporting lyrics</h3>
 <div class="fig narrow"><img src="guide-assets/11-lyrics-export-picker.png" alt="Lyrics export picker"><div class="cap">Fig. 12 — In Lyrics mode the Export button turns green and offers presentation formats.</div></div>
-<p>In Lyrics mode the <b>Export</b> button flips green — its job has changed. <b>OpenLyrics XML</b> is the working format: the open worship-song standard that presentation software (OpenLP and others) imports directly. Your slide boundaries travel with the file — sections become verses, paragraph breaks become grouped line blocks, the song's structure becomes the verse order, and the performance key rides along. The song leader's parsing work arrives done for whoever runs the presentation. ProPresenter and PowerPoint formats are on the roadmap (visibly parked behind "soon" badges).</p>
+<p>In Lyrics mode the <b>Export</b> button flips green — its job has changed. Two formats are live; both are built from this parsed Lyrics view, never the raw chart, so the song leader's slide-break work arrives done for whoever runs the presentation.</p>
+<ul>
+  <li><b>OpenLyrics XML</b> — the open worship-song standard that OpenLP and others import directly. Sections become verses, paragraph breaks become grouped line blocks, the song's structure becomes the verse order, and the performance key rides along.</li>
+  <li><b>ProPresenter — .txt</b> — plain text written to the exact grammar ProPresenter's own text importer reads, so the import needs zero clean-up. The file <i>is</i> the Lyrics view's slides: every paragraph break you set is a slide, each section name becomes a ProPresenter <b>Group</b> (<code>Verse 1</code>, <code>Chorus</code>, <code>Pre-Chorus 2</code>, <code>Bridge</code>, <code>Tag</code>, <code>Intro</code>, <code>Interlude</code>, <code>Outro</code>), and a repeated section is written out again in song order so the deck plays top to bottom with no Arrangement to assemble. Only lyrics go in — leader notes, chords, and the song map never appear, and copyright/CCLI stay in ProPresenter's own document fields. A custom section name has no ProPresenter group, so its slides simply continue the previous group rather than risk a stray label on screen.</li>
+</ul>
+<h3>Importing into ProPresenter</h3>
+<ol>
+  <li>In ProPresenter choose <b>File › Import › File…</b> and pick the <code>.txt</code> (select several at once for a whole set).</li>
+  <li>In the import dialog leave the parsing at <b>Slides delimited by: Blank Line</b>, one delimiter per slide.</li>
+  <li>Pick your <b>Template</b>, slide <b>Size</b>, and destination <b>Library</b>, then Import. The presentation arrives titled, grouped, and paginated exactly as the Lyrics view showed it.</li>
+</ol>
+<p>PowerPoint is on the roadmap (visibly parked behind a "soon" badge).</p>
 
 <!-- ============================ 15 ============================ -->
 <h2 class="chapter">15 &nbsp;The Set List Builder</h2>
@@ -258,7 +269,7 @@
   <li><b>Per-entry key &amp; capo</b> — every entry defaults to Nashville Numbers and carries its own Key and Capo dropdowns. What's selected is what gets generated.</li>
   <li><b>Duplicates welcome</b> — the same song can appear twice (an opener reprised in a new key at the close); each copy is independent.</li>
   <li><b>Reorder</b> — drag entries by their ⠿ handle; remove with ✕.</li>
-  <li><b>Output</b> — <b>Print</b> and <b>PDF</b> produce every chart in set order, each song starting on a fresh page in its chosen key/capo at its own saved text size. <b>Export Lyrics</b> writes one OpenLyrics file per entry, numbered in set order (<code>01_…</code>, <code>02_…</code>), with each entry's key included.</li>
+  <li><b>Output</b> — <b>Print</b> and <b>PDF</b> produce every chart in set order, each song starting on a fresh page in its chosen key/capo at its own saved text size. <b>Export Lyrics</b> offers the same two formats as the Lyrics view (chapter 14): OpenLyrics writes one file per entry, numbered in set order (<code>01_…</code>, <code>02_…</code>) with each entry's key included; ProPresenter writes one <code>.txt</code> per song, named by title, ready for File › Import — a song that appears twice in the set exports once, since its lyrics are the same in any key.</li>
   <li><b>It keeps</b> — the set survives closing the popup and even reloading the app, until you Clear it.</li>
 </ul>
 

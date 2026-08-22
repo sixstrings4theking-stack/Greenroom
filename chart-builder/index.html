@@ -4472,6 +4472,74 @@ ${versesXml}
     toast('Exported OpenLyrics XML');
   }
 
+  /* ---------------- ProPresenter text export ---------------- */
+  // ProPresenter's File > Import reads plain text by a small documented
+  // grammar (Renewed Vision, "Import options for text files and
+  // SongSelect"): a "Title:" line names the presentation (and splits
+  // documents), a blank line is a slide break, and a line holding nothing
+  // but a stanza name — the SongSelect vocabulary: "Verse 1", "Chorus",
+  // "Pre-Chorus 2", "Bridge", "Tag", "Intro", "Interlude", "Outro" — starts
+  // a Group with that label. Writing to exactly that grammar is what makes
+  // the import need zero clean-up: the operator picks their Template in the
+  // import dialog and the deck is done.
+  //
+  // Our section families map onto that vocabulary one-to-one. A custom
+  // label has no ProPresenter equivalent and returns null — its slides
+  // still export, they just continue the preceding group, because an
+  // unrecognized label line would land on screen as lyric text.
+  function proPresenterGroupName(label){
+    const m = matchSectionFamily(label);
+    if(!m) return null;
+    return m.family + (m.num ? ' ' + m.num : '');
+  }
+
+  // ProPresenter falls back to the file name for the presentation's title,
+  // so unlike the other exports this keeps the title's spaces and
+  // punctuation, dropping only what a file system refuses.
+  function presentationFilename(title){
+    const clean = String(title || '').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim();
+    return clean || 'Untitled';
+  }
+
+  // The file is literally the Lyrics view's slides — built by the same
+  // buildLyricsSlidesFrom the preview renders from, so every paragraph
+  // break the song leader set is a slide and nothing else is. Repeats are
+  // written out in song order (a reprised chorus appears again in full),
+  // so the deck plays top to bottom with no Arrangement to assemble. Only
+  // lyrics go in: ProPresenter keeps copyright/CCLI in its own document
+  // fields, and any other line in the file would become slide text.
+  // Lines are trimmed (indentation would shift centered text), LF-only,
+  // UTF-8 without BOM (a BOM would corrupt the Title line).
+  function buildProPresenterText(song, lyricsContent){
+    const slides = buildLyricsSlidesFrom(lyricsContent);
+    const blocks = [];
+    let lastSection = -1;
+    slides.forEach(s => {
+      const lines = [];
+      if(s.section !== lastSection){
+        const group = proPresenterGroupName(s.label);
+        if(group) lines.push(group);
+        lastSection = s.section;
+      }
+      s.lines.forEach(l => lines.push(l.trim()));
+      blocks.push(lines.join('\n'));
+    });
+    const title = String(song.title || 'Untitled').replace(/\s+/g, ' ').trim() || 'Untitled';
+    return `Title: ${title}\n\n${blocks.join('\n\n')}\n`;
+  }
+
+  // Lyrics view's Export > ProPresenter (single song) — same source as the
+  // OpenLyrics export: the hand-parsed lyricsContent, never the chart.
+  function exportProPresenterText(){
+    if(!currentSong) return;
+    ensureLyricsContentSynced();
+    const lyrics = currentSong.lyricsContent || '';
+    if(buildLyricsSlidesFrom(lyrics).length === 0){ toast('No lyrics to export'); return; }
+    const song = currentSongSnapshot();
+    downloadBlob(`${presentationFilename(song.title)}.txt`, buildProPresenterText(song, lyrics), 'text/plain;charset=utf-8');
+    toast('Exported ProPresenter text');
+  }
+
   /* ---------------- Print / PDF (phrase-aware pagination) ---------------- */
   // Paginates one song object into print pages. fontScalePct (optional)
   // pins --chart-font-scale for the measurement pass — needed when the song
@@ -4630,7 +4698,7 @@ ${versesXml}
           <h3>Set List Builder</h3>
           <div class="slb-actions">
             <button type="button" id="slbClear" class="ghost" title="Remove every song from the set">Clear</button>
-            <button type="button" id="slbExportLyrics" class="lyrics-btn" title="Export each song's lyrics as an OpenLyrics XML file (one file per song, numbered in set order) — the same format as the Lyrics view's Export">Export Lyrics</button>
+            <button type="button" id="slbExportLyrics" class="lyrics-btn" title="Export each song's lyrics for presentation software — OpenLyrics XML or ProPresenter text, one file per song — the same formats as the Lyrics view's Export">Export Lyrics</button>
             <button type="button" id="slbPrint" title="Print the whole set in order, each song in its selected key/capo">Print</button>
             <button type="button" id="slbPDF" title="Export the whole set as one PDF, each song in its selected key/capo">PDF</button>
             <button type="button" id="slbClose" class="icon" title="Close (the set is kept for next time)">✕</button>
@@ -4677,7 +4745,7 @@ ${versesXml}
     });
     backdrop.querySelector('#slbPrint').onclick = setListPrint;
     backdrop.querySelector('#slbPDF').onclick = setListPDF;
-    backdrop.querySelector('#slbExportLyrics').onclick = () => openLyricsExportPicker(setListExportLyrics);
+    backdrop.querySelector('#slbExportLyrics').onclick = () => openLyricsExportPicker(setListExportLyrics, setListExportProPresenter);
     backdrop.querySelector('#slbSearch').addEventListener('input', () => renderSlbLibrary(backdrop));
     wireSortControl('slbSortControl', backdrop, () => { renderSlbLibrary(backdrop); renderSongList(); });
     wireSlbSetPane(backdrop);
@@ -5036,12 +5104,12 @@ ${versesXml}
 
   // Shown whenever a lyrics export is engaged — from the Lyrics view's
   // Export button (single song) or the Set List Builder's Export Lyrics
-  // (whole set). runOpenLyrics is whichever of those two actions should
-  // fire if the working format is chosen.
-  function openLyricsExportPicker(runOpenLyrics){
+  // (whole set). runOpenLyrics / runProPresenter are whichever of those
+  // two contexts' actions should fire for the chosen format.
+  function openLyricsExportPicker(runOpenLyrics, runProPresenter){
     openFormatPicker('Export Lyrics As…', [
       {name:'OpenLyrics — XML', desc:'The open worship-song XML standard (openlyrics.org). Imports into OpenLP and other presentation software.', run: runOpenLyrics},
-      {name:'ProPresenter', desc:'Native ProPresenter presentation file.'},
+      {name:'ProPresenter — .txt', desc:'Plain text laid out for ProPresenter\'s File › Import. Every slide break you set here becomes a slide and section names become Groups (Verse 1, Chorus…) — nothing to fix up after import.', run: runProPresenter},
       {name:'PowerPoint', desc:'Slide deck (.pptx), one slide per lyric block.'}
     ]);
   }
@@ -5141,6 +5209,34 @@ ${versesXml}
     toast(skipped
       ? `Exported ${exported} lyrics file${exported===1?'':'s'} (${skipped} skipped — no lyrics)`
       : `Exported ${exported} lyrics file${exported===1?'':'s'}`);
+  }
+
+  // Set List Builder's Export Lyrics > ProPresenter: one .txt per song,
+  // named by title (ProPresenter may take the presentation name from the
+  // file name, so no set-order prefix — the set order lives on the printed
+  // set list and in the operator's playlist). A song that appears twice in
+  // the set exports once: the lyrics are the same in any key, and
+  // ProPresenter wants one presentation per song. Attached PDFs and songs
+  // with no lyric content are skipped.
+  async function setListExportProPresenter(){
+    if(setList.length === 0){ toast('The set list is empty'); return; }
+    let exported = 0, skipped = 0;
+    const done = new Set();
+    for(let i = 0; i < setList.length; i++){
+      const entry = setList[i];
+      const stored = songs.find(s => s.id === entry.songId);
+      if(!stored){ skipped++; continue; }
+      if(done.has(stored.id)) continue;
+      done.add(stored.id);
+      const lyrics = lyricsContentFor(stored);
+      if(buildLyricsSlidesFrom(lyrics).length === 0){ skipped++; continue; }
+      if(exported > 0) await new Promise(r => setTimeout(r, 200));
+      downloadBlob(`${presentationFilename(stored.title)}.txt`, buildProPresenterText(stored, lyrics), 'text/plain;charset=utf-8');
+      exported++;
+    }
+    toast(skipped
+      ? `Exported ${exported} ProPresenter file${exported===1?'':'s'} (${skipped} skipped — no lyrics)`
+      : `Exported ${exported} ProPresenter file${exported===1?'':'s'}`);
   }
 
   /* ---------------- Drawers: Settings / Versions ---------------- */
@@ -5764,7 +5860,7 @@ ${versesXml}
     el('structBarLyrics').classList.toggle('hidden', !turningOn);
     el('btnExport').classList.toggle('export-lyrics-mode', turningOn);
     el('btnExport').title = turningOn
-      ? 'Export OpenLyrics XML, built from this parsed Lyrics view'
+      ? 'Export lyrics for presentation software (OpenLyrics XML or ProPresenter text), built from this parsed Lyrics view'
       : '';
     updateEditorClickHint();
     if(turningOn){
@@ -5866,10 +5962,20 @@ ${versesXml}
   // badges are.
   function buildLyricsSlides(){
     if(!currentSong) return [];
-    const sections = ChordParser.parseSections(currentSong.lyricsContent || '');
+    return buildLyricsSlidesFrom(currentSong.lyricsContent || '');
+  }
+
+  // The actual slide builder, parameterized on the lyrics text so the
+  // ProPresenter export (buildProPresenterText) can run the SAME code over
+  // a stored song's lyrics — what that file contains is, by construction,
+  // exactly the slides this preview shows. Each slide also records which
+  // section (by index) it came from, so consumers can tell "Chorus sung
+  // twice in a row" apart from one long chorus.
+  function buildLyricsSlidesFrom(lyricsContent){
+    const sections = ChordParser.parseSections(lyricsContent || '');
     const slides = [];
     const paragraphsByLabel = {};
-    sections.forEach(sec => {
+    sections.forEach((sec, sectionIndex) => {
       const paragraphs = [];
       let current = [];
       (sec.lines || []).forEach(line => {
@@ -5888,7 +5994,7 @@ ${versesXml}
       if(paragraphs.length > 0 && key){
         paragraphsByLabel[key] = paragraphs;
       }
-      effectiveParagraphs.forEach(p => slides.push({label: sec.label, lines: p}));
+      effectiveParagraphs.forEach(p => slides.push({label: sec.label, lines: p, section: sectionIndex}));
     });
     return slides;
   }
@@ -6159,7 +6265,7 @@ ${versesXml}
       e.target.value='';
     };
     el('btnExport').onclick = () => {
-      if(el('btnLyricsOnly').classList.contains('active')) openLyricsExportPicker(exportOpenLyrics);
+      if(el('btnLyricsOnly').classList.contains('active')) openLyricsExportPicker(exportOpenLyrics, exportProPresenterText);
       else openChartExportPicker();
     };
     el('btnPrint').onclick = doPrint;
