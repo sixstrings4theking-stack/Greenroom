@@ -543,6 +543,12 @@ small{color:var(--text-faint);}
    attach control pinned under the set list. */
 .slb-entry.slb-entry-pdf{border-style:dashed;}
 .slb-attach{display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:8px 10px; border-top:1px solid var(--border-soft); font-size:11.5px; color:var(--text-faint); flex-shrink:0;}
+/* Library / Key / Tags chip filters under the builder's search box —
+   same .tag-chip look and OR semantics as the sidebar's. */
+.slb-filters{border-bottom:1px solid var(--border-soft); padding:4px 10px 6px; flex-shrink:0;}
+.slb-filter-row{display:flex; align-items:flex-start; gap:8px; padding:3px 0;}
+.slb-filter-lbl{font-size:10px; text-transform:uppercase; letter-spacing:.4px; color:var(--text-faint); min-width:44px; padding-top:5px;}
+.slb-chips{display:flex; flex-wrap:wrap; gap:4px;}
 .slb-attach button{font-size:12px; padding:5px 10px;}
 /* Attached PDF pages in print/PDF output: the rasterized page fills the
    content width, keeps its aspect ratio, and never exceeds the page. */
@@ -4478,15 +4484,20 @@ ${versesXml}
         <div class="slb-body">
           <div class="slb-library">
             <div class="slb-search"><input type="text" id="slbSearch" placeholder="Search title, artist, lyrics…"></div>
+            <div class="slb-filters" id="slbFilters">
+              <div class="slb-filter-row hidden" id="slbLibRow"><span class="slb-filter-lbl">Library</span><div class="slb-chips" id="slbLibChips"></div></div>
+              <div class="slb-filter-row hidden" id="slbKeyRow"><span class="slb-filter-lbl">Key</span><div class="slb-chips" id="slbKeyChips"></div></div>
+              <div class="slb-filter-row hidden" id="slbTagRow"><span class="slb-filter-lbl">Tags</span><div class="slb-chips" id="slbTagChips"></div></div>
+            </div>
             <div class="slb-library-list" id="slbLibraryList"></div>
-          </div>
-          <div class="slb-set">
-            <div class="slb-set-list" id="slbSetList"></div>
             <div class="slb-attach">
-              <span>Need a chart that isn't in the library?</span>
+              <span>Not in the library?</span>
               <button type="button" id="slbAttachPdf" title="Insert an existing PDF chart into the set — its pages print/export in sequence with the rest">＋ Attach a PDF…</button>
               <input type="file" id="slbPdfInput" accept="application/pdf,.pdf" multiple class="hidden">
             </div>
+          </div>
+          <div class="slb-set">
+            <div class="slb-set-list" id="slbSetList"></div>
           </div>
         </div>
       </div>`;
@@ -4508,16 +4519,63 @@ ${versesXml}
     backdrop.querySelector('#slbExportLyrics').onclick = () => openLyricsExportPicker(setListExportLyrics);
     backdrop.querySelector('#slbSearch').addEventListener('input', () => renderSlbLibrary(backdrop));
     wireSlbSetPane(backdrop);
+    slbFilters.lib.clear(); slbFilters.key.clear(); slbFilters.tag.clear();
     renderSlbLibrary(backdrop);
     renderSlbSet(backdrop);
   }
 
-  // Left pane: the song library, same search semantics as the sidebar's
-  // search box (title/artist/lyrics/preferred keys/tags all match).
+  // Builder-local filter state — same three filters the sidebar has
+  // (Library / Preferred Key / Tags), same multi-select-OR semantics, but
+  // independent of the sidebar's selections and reset on each open.
+  const slbFilters = { lib: new Set(), key: new Set(), tag: new Set() };
+
+  // One chip row. `values` are the choices; `active` the selected Set;
+  // onChange re-renders. A "✕ Clear" chip appears once anything's selected.
+  function renderSlbChipRow(backdrop, rowId, chipsId, values, active, label, onChange){
+    const row = backdrop.querySelector('#' + rowId);
+    const box = backdrop.querySelector('#' + chipsId);
+    box.innerHTML = '';
+    if(values.length === 0){ row.classList.add('hidden'); return; }
+    row.classList.remove('hidden');
+    values.forEach(v => {
+      const chip = document.createElement('span');
+      chip.className = 'tag-chip' + (active.has(v) ? ' active' : '');
+      chip.textContent = label(v);
+      chip.onclick = () => { if(active.has(v)) active.delete(v); else active.add(v); onChange(); };
+      box.appendChild(chip);
+    });
+    if(active.size){
+      const clear = document.createElement('span');
+      clear.className = 'tag-chip';
+      clear.style.color = 'var(--danger)'; clear.style.borderColor = 'var(--danger)';
+      clear.textContent = '✕ Clear';
+      clear.onclick = () => { active.clear(); onChange(); };
+      box.appendChild(clear);
+    }
+  }
+
+  function renderSlbFilters(backdrop){
+    const rerender = () => renderSlbLibrary(backdrop);
+    const libs = new Set(); songs.forEach(s => (s.libraries||[]).forEach(l => libs.add(l)));
+    const libValues = libs.size > 1 ? [...libs].filter(l => l !== STARTING_LIBRARY).sort() : [];
+    renderSlbChipRow(backdrop, 'slbLibRow', 'slbLibChips', libValues, slbFilters.lib, l => l, rerender);
+    const keys = new Set(); songs.forEach(s => (s.preferredKeys||[]).forEach(k => keys.add(k)));
+    renderSlbChipRow(backdrop, 'slbKeyRow', 'slbKeyChips', [...keys].sort(), slbFilters.key, formatPreferredKeyLabel, rerender);
+    const tags = new Set(); songs.forEach(s => (s.tags||[]).forEach(t => tags.add(t)));
+    renderSlbChipRow(backdrop, 'slbTagRow', 'slbTagChips', [...tags].sort(), slbFilters.tag, t => t, rerender);
+  }
+
+  // Left pane: the song library — the sidebar's search semantics
+  // (title/artist/lyrics/preferred keys/tags all match) plus its three
+  // chip filters, so a big library narrows down the same way in both places.
   function renderSlbLibrary(backdrop){
+    renderSlbFilters(backdrop);
     const q = backdrop.querySelector('#slbSearch').value.trim().toLowerCase();
     const list = backdrop.querySelector('#slbLibraryList');
     const filtered = songs.filter(s => {
+      if(slbFilters.lib.size && !(s.libraries||[]).some(l => slbFilters.lib.has(l))) return false;
+      if(slbFilters.key.size && !(s.preferredKeys||[]).some(k => slbFilters.key.has(k))) return false;
+      if(slbFilters.tag.size && !(s.tags||[]).some(t => slbFilters.tag.has(t))) return false;
       if(!q) return true;
       return (s.title||'').toLowerCase().includes(q) ||
              (s.artist||'').toLowerCase().includes(q) ||
