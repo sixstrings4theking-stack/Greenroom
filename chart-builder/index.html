@@ -672,6 +672,9 @@ small{color:var(--text-faint);}
   <div class="tb-group">
     <button id="btnCircle" class="circle-btn" title="Open Circle of Fifths chord wheel in a new window">⭘ Circle of 5ths</button>
   </div>
+  <div class="tb-group">
+    <button id="btnGuide" title="Open the ChartBench User Guide in a new tab">Guide</button>
+  </div>
   <div class="tb-group" style="border-right:none;">
     <button id="btnSettings" title="Settings & Parameters">⚙</button>
   </div>
@@ -6164,6 +6167,17 @@ ${versesXml}
   // with the few facts that make a bug report traceable (which copy, which
   // browser, page size) and headed blanks for the rest; the address is one
   // constant so it's trivial to change later.
+  // Top-bar Guide button: the HTML user guide ships beside the app in the
+  // repo (docs/user-guide.html), so a copy running from the repo — hosted
+  // or file:// — opens its own. A downloaded single-file copy, or a
+  // deployment that ships only the app, falls back to the published one.
+  const GUIDE_URL_HOSTED = 'https://sixstrings4theking-stack.github.io/Greenroom/docs/user-guide.html';
+  function openUserGuide(){
+    const local = /\/chart-builder\/[^/]*$/.test(location.pathname);
+    const url = (WEB_HOSTED_COPY && local) ? new URL('../docs/user-guide.html', location.href).href : GUIDE_URL_HOSTED;
+    window.open(url, '_blank', 'noopener');
+  }
+
   const FEEDBACK_EMAIL = 'sixstrings4theking@gmail.com';
   function openFeedbackEmail(){
     const where = WEB_HOSTED_COPY ? ('Web copy at ' + location.origin + location.pathname) : 'Downloaded local copy (ChartBench.html)';
@@ -7297,6 +7311,7 @@ ${versesXml}
     el('backupNudgeLater').onclick = () => { BackupStore.snooze(7); renderBackupNudge(); };
     el('mirrorNudgeGo').onclick = mirrorReconnect;
     el('btnCircle').onclick = openCircleOfFifths;
+    el('btnGuide').onclick = openUserGuide;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
     el('slideViewModeControl').querySelectorAll('button').forEach(btn => {
       btn.onclick = () => { LyricsSlideViewStore.set(btn.dataset.mode); renderLyricsRibbon(); renderPreview(); };
