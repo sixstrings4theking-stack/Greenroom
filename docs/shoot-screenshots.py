@@ -26,7 +26,7 @@ opts.add_argument("--hide-scrollbars")
 opts.add_argument("--disable-popup-blocking")
 driver = webdriver.Chrome(options=opts)
 driver.set_window_size(1720, 1100)
-driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': 'window.confirm = () => true;'})
+driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {'source': 'window.confirm = () => true; window.prompt = (m, d) => window.__promptAnswer ?? d;'})
 
 def js(code):
     return driver.execute_script(code)
@@ -361,6 +361,39 @@ document.getElementById('mirrorNudgeText').innerHTML = 'Library folder <b>ChartB
 time.sleep(0.3)
 crop("cu-mirror-nudge.png", "#mirrorNudge", pad=8)
 js("document.getElementById('mirrorNudge').classList.add('hidden')")
+
+# ---- 18. Arrangements (last, so every other figure stays a plain song) ----
+js("""
+const rows = Array.from(document.querySelectorAll('#songList .song-item'));
+rows.find(r => r.textContent.includes('Mighty')).click();
+""")
+wait_for("document.getElementById('mTitle').value.includes('Mighty')", 10)
+js("const s = document.getElementById('mDisplayKey'); if(s.value !== 'NN'){ s.value = 'NN'; s.dispatchEvent(new Event('change', {bubbles:true})); }")
+time.sleep(0.5)
+js("window.__promptAnswer = 'Acoustic'; document.getElementById('arrAddBtn').click()")
+time.sleep(0.8)
+js("const c = document.getElementById('mCapo'); c.value = '2'; c.dispatchEvent(new Event('change', {bubbles:true}));")
+time.sleep(0.4)
+crop("cu-arr-control.png", ["#editorPane .pane-head .pane-head-left"], pad=8)
+js("document.getElementById('arrMenuBtn').click()")
+time.sleep(0.3)
+crop("cu-arr-menu.png", ["#editorPane .pane-head .arr-control", "#arrMenu"], pad=10)
+js("document.body.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))")
+time.sleep(0.2)
+crop_text("cu-arr-header.png", ["#previewScroll .cs-title", "#previewScroll .cs-roadmap", "#previewScroll .cs-meta"], pad=16)
+js("document.getElementById('btnSave').click()")
+time.sleep(0.8)
+crop("cu-arr-chips.png", "#songList .song-item.active", pad=8)
+js("localStorage.removeItem('wcb_setlist_v1'); localStorage.removeItem('wcb_setlist_name_v1'); document.getElementById('btnSetList').click()")
+wait_for("document.querySelector('.slb-backdrop')")
+js("""
+const rows = Array.from(document.querySelectorAll('.slb-row'));
+rows.find(r => r.textContent.includes('Mighty')).querySelector('.slb-add').click();
+""")
+time.sleep(0.4)
+crop("cu-arr-setlist.png", ".slb-entry", pad=8)
+js("document.querySelector('.slb-backdrop #slbClose').click()")
+time.sleep(0.2)
 
 driver.quit()
 print("DONE — all shots saved to", OUT)

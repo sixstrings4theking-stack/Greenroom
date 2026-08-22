@@ -388,7 +388,8 @@ small{color:var(--text-faint);}
 .pane-head-left{display:flex; align-items:center; gap:10px;}
 /* Arrangement control in the editor pane-head (see renderArrangementControl) */
 .arr-control{display:inline-flex; align-items:center; gap:3px; text-transform:none; letter-spacing:0;}
-.arr-btn{padding:2px 8px; font-size:11px; font-weight:600; color:var(--accent); border-color:var(--border);}
+.arr-btn{padding:2px 8px; font-size:11px; font-weight:600; color:var(--accent); border-color:var(--border); white-space:nowrap;}
+.arr-control{flex-shrink:0;}
 .arr-add{padding:1px 7px; font-size:13px; line-height:1.2;}
 .arr-menu{position:fixed; z-index:600; min-width:230px; background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.5); padding:4px; font-size:12px; text-transform:none; letter-spacing:0; color:var(--text);}
 .arr-menu.hidden{display:none;}
@@ -1144,7 +1145,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-22 19:15';
+const APP_BUILD = '2026-08-22 19:45';
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
