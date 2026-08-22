@@ -4257,6 +4257,14 @@ const App = (() => {
     // normalizeLibraries falls back to STARTING_LIBRARY if neither
     // applies.
     const importedLibraries = normalizeLibraries(libraryName ? [libraryName] : song.libraries);
+    // Per-song presentation state a ChartBench JSON carries (see
+    // fullSongForExport) rides along when present and sane: the saved
+    // zoom, the hand-parsed lyrics with their slide breaks (their snapshot
+    // still matches after a letters→NN conversion, since the strip removes
+    // chord tokens either way), and what the song was last showing.
+    // Files from other software simply don't have these and start fresh.
+    const zoom = parseInt(song.previewZoom, 10);
+    const importedZoom = (!isNaN(zoom) && zoom >= FontScaleStore.MIN_PCT && zoom <= FontScaleStore.MAX_PCT) ? zoom : undefined;
     const toSave = {
       title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
       copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||DefaultBodyAlignStore.get(), expandRepeats: !!song.expandRepeats,
@@ -4264,6 +4272,12 @@ const App = (() => {
       versions: song.versions||[],
       createdAt: Date.now(), updatedAt: Date.now()
     };
+    if(importedZoom !== undefined) toSave.previewZoom = importedZoom;
+    if(typeof song.lyricsContent === 'string'){
+      toSave.lyricsContent = song.lyricsContent;
+      if(typeof song.lyricsSourceSnapshot === 'string') toSave.lyricsSourceSnapshot = song.lyricsSourceSnapshot;
+    }
+    if(typeof song.lastDisplayedNN === 'boolean') toSave.lastDisplayedNN = song.lastDisplayedNN;
     const id = await DB.putSong(toSave);
     toSave.id = id;
     return toSave;
@@ -4358,6 +4372,26 @@ const App = (() => {
     URL.revokeObjectURL(url);
   }
 
+  // The JSON export is the full-fidelity one, so it's the WHOLE song as it
+  // would be saved — the stored record (versions, timestamps, previewZoom,
+  // the hand-parsed lyricsContent and its snapshot, lastDisplayedNN,
+  // preferredKeys) with the live form fields layered on top — and its
+  // content/key are the CANONICAL form (Nashville Numbers for an NN song,
+  // via resolveCanonicalContent), never the letters the editor happens to
+  // be displaying. The .txt/ChordPro exports are the WYSIWYG ones; this one
+  // must re-import to exactly the song it came from. `id` is dropped: an
+  // import always creates a new record.
+  function fullSongForExport(){
+    const full = Object.assign({}, currentSong, currentSongSnapshot(), {
+      key: currentSong.key === 'NN' ? 'NN' : el('mDisplayKey').value,
+      content: resolveCanonicalContent(),
+      preferredKeys: currentSong.preferredKeys || [],
+      lastDisplayedNN: el('mDisplayKey').value === 'NN'
+    });
+    delete full.id;
+    return full;
+  }
+
   // fmt comes from the chart export picker (see openChartExportPicker) —
   // the old topbar format dropdown is gone. All three branches are live.
   function exportCurrent(fmt){
@@ -4365,7 +4399,7 @@ const App = (() => {
     const song = currentSongSnapshot();
     const base = (song.title || 'song').replace(/[^\w\-]+/g,'_');
     if(fmt === 'json'){
-      downloadBlob(`${base}.json`, JSON.stringify(song, null, 2), 'application/json');
+      downloadBlob(`${base}.json`, JSON.stringify(fullSongForExport(), null, 2), 'application/json');
     } else if(fmt === 'txt'){
       downloadBlob(`${base}.txt`, IO.toChordsOverLyricsText(song), 'text/plain');
     } else if(fmt === 'chordpro'){
@@ -5383,8 +5417,8 @@ ${versesXml}
   // strip of the chart. Never mutates or persists anything.
   function lyricsContentFor(song){
     const fresh = stripChartToLyrics(song.content || '');
-    if(song.lyricsContent != null && song.lyricsSourceSnapshot === fresh) return capitalizeLineStarts(song.lyricsContent);
-    return fresh;
+    if(song.lyricsContent != null && lyricsSnapshotMatches(song, fresh)) return capitalizeLineStarts(song.lyricsContent);
+    return capitalizeLineStarts(fresh);
   }
 
   // OpenLyrics is strictly one <song> per document, so a set exports as one
@@ -6015,10 +6049,20 @@ ${versesXml}
   // meantime. A real per-line diff/merge would preserve them through
   // unrelated chart edits too, but is real complexity for later, not now.
   function stripChartToLyrics(canonical){
-    return capitalizeLineStarts(canonical.split('\n')
+    return canonical.split('\n')
       .filter(line => !/^\s*#/.test(line))
       .map(line => line.replace(ChordParser.CHORD_TOKEN, '').replace(/[ \t]+$/, ''))
-      .join('\n'));
+      .join('\n');
+  }
+
+  // Does a song's stored lyricsSourceSnapshot still describe its chart?
+  // The snapshot is the RAW strip (no capitalization) so it stays stable
+  // across the capitalization rule; snapshots written while the strip
+  // itself capitalized (briefly, 2026-08-22) are accepted too, so nobody's
+  // hand-set slide breaks get thrown away over a case difference.
+  function lyricsSnapshotMatches(song, fresh){
+    const snap = song.lyricsSourceSnapshot;
+    return snap === fresh || snap === capitalizeLineStarts(fresh);
   }
 
   // Every line of projected lyrics starts with a capital — a new line or
@@ -6042,8 +6086,8 @@ ${versesXml}
   // here too (idempotent, and a view normalization rather than an edit).
   function ensureLyricsContentSynced(){
     const fresh = stripChartToLyrics(currentSong.content || '');
-    if(currentSong.lyricsContent == null || currentSong.lyricsSourceSnapshot !== fresh){
-      currentSong.lyricsContent = fresh;
+    if(currentSong.lyricsContent == null || !lyricsSnapshotMatches(currentSong, fresh)){
+      currentSong.lyricsContent = capitalizeLineStarts(fresh);
       currentSong.lyricsSourceSnapshot = fresh;
       return true;
     }
