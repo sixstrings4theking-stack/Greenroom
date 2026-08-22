@@ -418,6 +418,17 @@ small{color:var(--text-faint);}
 .lyric-row{font-family:var(--mono); font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.5; white-space:pre; color:#111;}
 .chordonly-row{font-family:var(--mono); font-weight:700; color:#1a6fb0; font-size:calc(13px * var(--chart-font-scale)); margin:2px 0;}
 .comment-row{font-family:var(--sans); font-style:italic; color:#888; font-size:calc(12px * var(--chart-font-scale)); margin:2px 0;}
+/* Chart-body justification (song.bodyAlign — the ⟸ ≡ ⟹ buttons in the
+   Live Preview head). Chords sit above lyrics by leading-space column
+   math, so a chord row and its lyric row must move as ONE unit: each
+   .cs-line shrink-wraps to its own width (display:table) and the whole
+   block shifts, instead of each row centering independently and the
+   chords drifting off their syllables. Applied to the .a4-page /
+   .cs-page element so preview, print, PDF and set-list output agree. */
+.cs-body-center .cs-line{display:table; margin-left:auto; margin-right:auto;}
+.cs-body-center .cs-section-label, .cs-body-center .chordonly-row, .cs-body-center .comment-row, .cs-body-center .cs-keychange-row{text-align:center;}
+.cs-body-right .cs-line{display:table; margin-left:auto;}
+.cs-body-right .cs-section-label, .cs-body-right .chordonly-row, .cs-body-right .comment-row, .cs-body-right .cs-keychange-row{text-align:right;}
 .chord-note{font-family:var(--mono); font-weight:800; color:#c0392b; font-style:normal;}
 
 /* Panels (settings / api mocks) shown as overlay drawer */
@@ -856,6 +867,11 @@ Was [6m]blind but [5]now I [1]see
         <div class="pane-head">
           <span>Live Preview</span>
           <div style="display:flex; align-items:center; gap:14px;">
+            <div class="align-controls" id="bodyAlignControls" style="margin-top:0; gap:2px;" title="Justify the chart body (sections, chords, lyrics) on the page — saved with the song">
+              <button type="button" class="align-btn" data-align="left" title="Justify chart left" style="padding:2px 8px;">⟸</button>
+              <button type="button" class="align-btn" data-align="center" title="Center the chart" style="padding:2px 8px;">≡</button>
+              <button type="button" class="align-btn" data-align="right" title="Justify chart right" style="padding:2px 8px;">⟹</button>
+            </div>
             <div style="display:flex; align-items:center; gap:4px; text-transform:none;">
               <button type="button" id="fontScaleDown" class="icon" title="Smaller chart text" style="padding:2px 7px; font-size:11px;">A−</button>
               <span id="fontScaleValue" style="font-size:11px; min-width:34px; text-align:center;"></span>
@@ -2433,7 +2449,7 @@ const App = (() => {
     // yet, loadIntoForm's default-key logic just shows NN, same as any
     // other song that's never been saved with a letter key showing.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(),
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(), bodyAlign:'left',
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
@@ -2568,6 +2584,7 @@ const App = (() => {
     syncUndoBaseline();
     setNotationStyle(currentSong.notationStyle || 'roman', false);
     setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
+    setBodyAlign(currentSong.bodyAlign || 'left', false);
     originalKey = usableKey;
     liveKey = usableKey;
     el('origKeyNote').textContent = '';
@@ -2593,6 +2610,24 @@ const App = (() => {
     });
     if(markDirty){ dirty = true; updateSaveStatus(); }
     renderPreview();
+  }
+
+  // Chart-body justification — distinct from titleAlign (which only moves
+  // the header block). Saved on the song (bodyAlign) so Greenroom and the
+  // set-list output frame the chart the same way the editor showed it.
+  function setBodyAlign(align, markDirty=true){
+    if(!currentSong) return;
+    currentSong.bodyAlign = align;
+    document.querySelectorAll('#bodyAlignControls .align-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.align === align);
+    });
+    if(markDirty){ dirty = true; updateSaveStatus(); }
+    renderPreview();
+  }
+  // CSS hook for the page element (see .cs-body-center / .cs-body-right).
+  function bodyAlignClass(song){
+    const a = (song && song.bodyAlign) || 'left';
+    return a === 'center' ? ' cs-body-center' : (a === 'right' ? ' cs-body-right' : '');
   }
 
   function readFormIntoState(field, value){
@@ -2666,7 +2701,7 @@ const App = (() => {
     const parts = buildPageMetaParts(song);
     const container = el('previewScroll');
     container.innerHTML = pages.map((sections, i) => `
-      <div class="a4-page-wrap"><div class="a4-page${twoCol ? ' cols-2' : ''}">
+      <div class="a4-page-wrap"><div class="a4-page${twoCol ? ' cols-2' : ''}${bodyAlignClass(song)}">
         ${buildPageHeaderHtml(song, i, parts)}
         ${sections.join('')}
       </div></div>
@@ -4072,7 +4107,7 @@ const App = (() => {
     const importedLibraries = normalizeLibraries(libraryName ? [libraryName] : song.libraries);
     const toSave = {
       title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(),
+      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||'left',
       tags: song.tags||[], libraries: importedLibraries, content: importedContent,
       versions: song.versions||[],
       createdAt: Date.now(), updatedAt: Date.now()
@@ -4154,6 +4189,7 @@ const App = (() => {
       notationStyle: (currentSong && currentSong.notationStyle) || 'arabic',
       capo: el('mCapo').value,
       titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
+      bodyAlign: (currentSong && currentSong.bodyAlign) || 'left',
       tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
       libraries: (currentSong && currentSong.libraries) || [],
       content: el('editor').value
@@ -4353,7 +4389,7 @@ ${versesXml}
     const area = el('printArea');
     const parts = buildPageMetaParts(song);
     area.innerHTML = pages.map((sections, i) => `
-      <div class="cs-page">
+      <div class="cs-page${bodyAlignClass(song)}">
         ${buildPageHeaderHtml(song, i, parts)}
         ${sections.join('')}
       </div>
@@ -4789,7 +4825,7 @@ ${versesXml}
       const pages = buildPrintPagesFor(song, scalePct);
       const parts = buildPageMetaParts(song);
       chunks.push(pages.map((sections, i) => `
-        <div class="cs-page" style="--chart-font-scale:${scalePct/100};">
+        <div class="cs-page${bodyAlignClass(song)}" style="--chart-font-scale:${scalePct/100};">
           ${buildPageHeaderHtml(song, i, parts)}
           ${sections.join('')}
         </div>`).join(''));
@@ -5006,7 +5042,7 @@ ${versesXml}
       </div>
       <div class="form-row">
         <label>Chart text size <span id="settingsFontScaleValue"></span></label>
-        <input type="range" id="prefFontScale" min="${FontScaleStore.MIN_PCT}" max="${FontScaleStore.MAX_PCT}" step="10" value="${FontScaleStore.get()}" style="width:100%;">
+        <input type="range" id="prefFontScale" min="${FontScaleStore.MIN_PCT}" max="${FontScaleStore.MAX_PCT}" step="5" value="${FontScaleStore.get()}" style="width:100%;">
       </div>
       <div class="form-row">
         <label>Default alignment for new songs</label>
@@ -6001,6 +6037,9 @@ ${versesXml}
     document.querySelectorAll('#titleAlignControls .align-btn').forEach(btn => {
       btn.onclick = () => setTitleAlign(btn.dataset.align);
     });
+    document.querySelectorAll('#bodyAlignControls .align-btn').forEach(btn => {
+      btn.onclick = () => setBodyAlign(btn.dataset.align);
+    });
     document.querySelectorAll('#copyrightModeControls button').forEach(btn => {
       btn.onclick = () => setCopyrightMode(btn.dataset.mode);
     });
@@ -6043,7 +6082,7 @@ ${versesXml}
     el('toggle2col').addEventListener('change', renderPreview);
 
     // Chart text-size stepper (pane-head) — see setFontScale/bumpFontScale above.
-    const FONT_SCALE_STEP = 10;
+    const FONT_SCALE_STEP = 5;
     updateFontScaleLabel();
     el('fontScaleDown').addEventListener('click', () => bumpFontScale(-FONT_SCALE_STEP));
     el('fontScaleUp').addEventListener('click', () => bumpFontScale(FONT_SCALE_STEP));
