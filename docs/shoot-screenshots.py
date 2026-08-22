@@ -58,6 +58,21 @@ def crop(name, selectors, pad=10, rect=None):
     img.crop(box).save(os.path.join(OUT, name), optimize=True)
     print("crop:", name, box)
 
+# Tight rect around the TEXT inside elements (a centered heading's box spans
+# the whole page; its words don't) — for close-ups that should zoom in.
+TEXT_RECT_JS = """
+const sels = arguments[0];
+const rects = [];
+for(const sel of sels){ for(const e of document.querySelectorAll(sel)){ const r = document.createRange(); r.selectNodeContents(e); for(const rr of r.getClientRects()){ if(rr.width && rr.height) rects.push(rr); } } }
+if(!rects.length) return null;
+const x = Math.min(...rects.map(r=>r.left)), y = Math.min(...rects.map(r=>r.top));
+const x2 = Math.max(...rects.map(r=>r.right)), y2 = Math.max(...rects.map(r=>r.bottom));
+return {x, y, w: x2-x, h: y2-y};
+"""
+def crop_text(name, selectors, pad=12):
+    r = driver.execute_script(TEXT_RECT_JS, selectors if isinstance(selectors, list) else [selectors])
+    crop(name, None, pad=pad, rect=r)
+
 def wait_for(cond_js, timeout=10):
     end = time.time() + timeout
     while time.time() < end:
@@ -132,6 +147,21 @@ shot("04-chord-picker.png")
 crop("cu-chord-picker.png", "#chordPopup", pad=8)
 js("document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))")
 time.sleep(0.3)
+# the same picker in a letter key (C), inserting on a word with no chord yet
+js("const s = document.getElementById('mDisplayKey'); s.value = 'C'; s.dispatchEvent(new Event('change', {bubbles:true}));")
+time.sleep(0.5)
+js("""
+const ta = document.getElementById('editor');
+const idx = ta.value.indexOf('unsearchable');
+ta.focus(); ta.setSelectionRange(idx, idx + 12);
+ta.dispatchEvent(new MouseEvent('dblclick', {bubbles:true, clientX:420, clientY:330}));
+""")
+wait_for("!document.getElementById('chordPopup').classList.contains('hidden')")
+crop("cu-chord-picker-c.png", "#chordPopup", pad=8)
+js("document.dispatchEvent(new KeyboardEvent('keydown', {key:'Escape'}))")
+time.sleep(0.2)
+js("const s = document.getElementById('mDisplayKey'); s.value = 'NN'; s.dispatchEvent(new Event('change', {bubbles:true}));")
+time.sleep(0.5)
 
 # ---- 5. note annotation popup (right-click) ----
 js("""
@@ -182,7 +212,7 @@ js("document.querySelector('#copyrightModeControls [data-mode=\"CC\"]').click()"
 time.sleep(0.4)
 shot("07-cc-picker.png")
 crop("cu-cc-picker.png", ["#copyrightModeControls", "#ccInlineControls"], pad=8)
-crop("cu-cc-chart-line.png", "#previewScroll .cs-title, #previewScroll .cs-artist, #previewScroll .cs-copyright", pad=14)
+crop_text("cu-cc-chart-line.png", ["#previewScroll .cs-title", "#previewScroll .cs-artist", "#previewScroll .cs-copyright"], pad=16)
 js("document.querySelector('#copyrightModeControls [data-mode=\"\\u00a9\"]')?.click()")
 time.sleep(0.3)
 
