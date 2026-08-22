@@ -373,14 +373,14 @@ small{color:var(--text-faint);}
    stripe + tinted background make it visually obvious this isn't the normal
    editable chart, matching the Lyrics button's own color. */
 #editor.lyrics-only-mode{background:#0e1a13; box-shadow:inset 4px 0 0 #6fe0a0;}
-#previewScroll{flex:1; overflow:auto; background:#0e1014; padding:24px; display:flex; flex-direction:column; align-items:center;}
+#previewScroll{flex:1; overflow:auto; background:#0e1014; padding:24px; display:flex; flex-direction:column; align-items:center; gap:24px;}
 /* Live preview pages: the real page dimensions (Settings > Page size) + real 0.25in margin baked in as
    padding (since there's no browser @page mechanism outside of an actual
    print), then visually scaled to fit the pane via JS-computed transform.
    Because it's a uniform CSS transform, fonts/spacing/margins all shrink
    together exactly proportionally — a true miniature of the print output,
    not a separately-tuned approximation. */
-.a4-page-wrap{margin-bottom:24px; flex-shrink:0;}
+.a4-page-wrap{flex-shrink:0;} /* page spacing is the pane's flex gap — no trailing margin to scroll into */
 .a4-page{
   width:var(--page-w); height:var(--page-h); padding:0.25in; box-sizing:border-box;
   background:#fff; color:#111; box-shadow:0 4px 24px rgba(0,0,0,.4); border-radius:2px;
@@ -1095,7 +1095,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-22 17:20';
+const APP_BUILD = '2026-08-22 17:45';
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
@@ -3017,6 +3017,11 @@ const App = (() => {
   // Recomputes only the on-screen scale-to-fit factor — pagination itself is
   // independent of viewport width (A4 is a fixed physical size), so a window
   // resize never needs to re-paginate, only re-scale the already-built pages.
+  // Fit-to-pane: the scale is whichever of width-fit and height-fit is
+  // smaller, measured against the pane's CONTENT box (inside its padding),
+  // so a single page is always entirely visible with no scrolling in either
+  // direction at any window size. A multi-page chart shows each page whole
+  // and scrolls page to page. Never scales above 1:1.
   function scaleA4Pages(){
     const container = el('previewScroll');
     const firstPage = container.querySelector('.a4-page');
@@ -3024,8 +3029,10 @@ const App = (() => {
     const naturalWidth = firstPage.offsetWidth;
     const naturalHeight = firstPage.offsetHeight;
     if(!naturalWidth || !naturalHeight) return;
-    const available = container.clientWidth - 8;
-    const scale = Math.max(0.1, Math.min(1, available / naturalWidth));
+    const cs = getComputedStyle(container);
+    const availW = container.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight) - 2;
+    const availH = container.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) - 2;
+    const scale = Math.max(0.04, Math.min(1, availW / naturalWidth, availH / naturalHeight));
     container.querySelectorAll('.a4-page-wrap').forEach(wrap => {
       const page = wrap.querySelector('.a4-page');
       page.style.transform = `scale(${scale})`;
@@ -7437,6 +7444,13 @@ ${versesXml}
       clearTimeout(resizeTimer);
       resizeTimer = setTimeout(scaleA4Pages, 120);
     });
+    // The pane also changes size without the window doing so — sidebar and
+    // meta-bar collapse, the split moving — so watch the pane itself. Fires
+    // through the collapse animation, which keeps the page fitted the whole
+    // way rather than snapping at the end.
+    if(window.ResizeObserver){
+      new ResizeObserver(() => scaleA4Pages()).observe(el('previewScroll'));
+    }
 
     document.querySelectorAll('#structBar [data-tag]').forEach(btn => {
       btn.onclick = () => insertStructureTag(btn.dataset.tag);
