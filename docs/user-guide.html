@@ -115,7 +115,7 @@
   <li><b>Meta bar</b> — everything <i>about</i> the current song: title (with alignment buttons), author, Preferred Key picker and chips, tags, copyright/licensing, and CCLI numbers. It can be collapsed with the small ▲▲▲ handle to give the editor more room; the Title always stays visible.</li>
   <li><b>Structure bar</b> — one-click section insertion (Intro, Verse, Chorus…), the Key Change button, and the display controls: Display Key with transpose − / +, the RN (Roman numeral) toggle, and Capo.</li>
   <li><b>Editor (center)</b> — the plain-text chart source. Chords live inline in square brackets: <code>[1]Amazing grace</code>. The hint line above it always tells you what double-click and right-click do in the current mode.</li>
-  <li><b>Live Preview (right)</b> — a true print preview: real page-sized sheets, paginated exactly the way Print and PDF will break them, with the text-size stepper (A− / A+) and a 2-column layout toggle in its header.</li>
+  <li><b>Live Preview (right)</b> — a true print preview: real page-sized sheets, paginated exactly the way Print and PDF will break them, with the text-size stepper (A− / A+), a Repeated Sections toggle, and a 2-Column toggle in its header.</li>
 </ul>
 <div class="callout"><b>The Save button is the save indicator.</b> It sits quietly as "Save" when everything is stored, and turns <b>red with the label "Unsaved"</b> the moment anything changes. One click (or <kbd>Ctrl</kbd>+<kbd>S</kbd>) stores the song and it calms back down.</div>
 
@@ -157,7 +157,7 @@
 <p>Every labeled section becomes a round badge under the chart's title — <b>I, V1, C1, V2, C2, B1, T1</b> — in performance order (visible in Fig. 3). This row <i>is</i> the song map: the band sees the whole arrangement at a glance before the first downbeat.</p>
 <h3>Repeats without clutter</h3>
 <p>To repeat a section exactly — a chorus sung again later — insert its bare header with nothing under it. ChartBench understands: by default the chart body <i>doesn't</i> reprint the lyrics (saving page space), but the song map shows the badge in position, and lyrics slides (chapter 14) reuse the original section's content. One written-out chorus, referenced as many times as the arrangement needs.</p>
-<p>Prefer every section on the page in performance order? Tick <b>Insert Repeated Sections</b> in the Live Preview header and each reprise prints in full. It's saved with the song, so print, PDF, and set lists follow whichever way you set it.</p>
+<p>Prefer every section on the page in performance order? Tick <b>Repeated Sections</b> in the Live Preview header and each reprise prints in full. It's saved with the song, so print, PDF, and set lists follow whichever way you set it.</p>
 <h3>Key changes mid-song</h3>
 <p>The purple <b>Key Change</b> button inserts a modulation marker — e.g. up 2 semitones — at the cursor. Everything after it transposes accordingly in letter-key views; in Nashville view the chart shows "Modulate: Up 2 semitones," since numbers themselves are key-independent.</p>
 
@@ -227,7 +227,7 @@
 <p><b>Print</b> (<kbd>Ctrl</kbd>+<kbd>P</kbd>) and <b>PDF</b> produce the chart exactly as the Live Preview shows it — same pages, same breaks, because the preview <i>is</i> the print layout. Pages are <b>US Letter</b> by default; switch to <b>A4</b> in Settings and the preview, print, PDF and set-list output all change together. Pagination is phrase-aware: sections and their lines are kept together sensibly rather than sliced mid-phrase.</p>
 <ul>
   <li><b>Text size</b> — the A− / 100% / A+ stepper above the preview scales the whole chart. The zoom is remembered <i>per song</i>, so the big-print chart for the pianist stays big.</li>
-  <li><b>2-column layout</b> — the checkbox above the preview flows the chart in two columns, handy for compact one-pagers.</li>
+  <li><b>2-Column</b> — the checkbox above the preview flows the chart in two columns, handy for compact one-pagers.</li>
   <li><b>PDF</b> downloads the pages as a single file named after the song. (This one feature needs an internet connection, for its converter library.)</li>
 </ul>
 
