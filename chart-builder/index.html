@@ -4282,7 +4282,15 @@ const App = (() => {
       if(typeof song.lyricsSourceSnapshot === 'string') toSave.lyricsSourceSnapshot = song.lyricsSourceSnapshot;
     }
     if(typeof song.lastDisplayedNN === 'boolean') toSave.lastDisplayedNN = song.lastDisplayedNN;
-    if(SLB_KEY_OPTIONS.includes(song.lastDisplayedKey)) toSave.lastDisplayedKey = song.lastDisplayedKey;
+    if(SLB_KEY_OPTIONS.includes(song.lastDisplayedKey)){
+      toSave.lastDisplayedKey = song.lastDisplayedKey;
+    } else if(statedKey && statedKey !== 'NN'){
+      // A file that states a letter key but no display key — an older
+      // ChartBench export, or ChordPro/OpenSong with a key tag — was being
+      // read in that key, so that's the key it opens in here too.
+      const shown = toDisplayableKey(statedKey);
+      if(SLB_KEY_OPTIONS.includes(shown)){ toSave.lastDisplayedKey = shown; toSave.lastDisplayedNN = false; }
+    }
     const id = await DB.putSong(toSave);
     toSave.id = id;
     return toSave;
