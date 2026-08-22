@@ -202,8 +202,8 @@ small{color:var(--text-faint);}
 .align-controls{display:flex; gap:3px; margin-top:4px;}
 .align-controls .align-btn{flex:1; padding:3px 0; font-size:12px; line-height:1;}
 .align-controls .align-btn.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
-#settingsAlignControls, #settingsBodyAlignControls{margin-top:4px;}
-#settingsAlignControls .align-btn, #settingsBodyAlignControls .align-btn{padding:6px 10px;}
+#settingsAlignControls, #settingsBodyAlignControls, #settingsPageSizeControls{margin-top:4px;}
+#settingsAlignControls .align-btn, #settingsBodyAlignControls .align-btn, #settingsPageSizeControls .align-btn{padding:6px 10px;}
 .copyright-input-row{display:flex; align-items:center; gap:6px;}
 .copyright-input-row input{flex:1 1 auto; min-width:0;}
 .copyright-mode-controls{display:inline-flex; gap:3px; flex-shrink:0;}
@@ -366,7 +366,7 @@ small{color:var(--text-faint);}
    editable chart, matching the Lyrics button's own color. */
 #editor.lyrics-only-mode{background:#0e1a13; box-shadow:inset 4px 0 0 #6fe0a0; cursor:default;}
 #previewScroll{flex:1; overflow:auto; background:#0e1014; padding:24px; display:flex; flex-direction:column; align-items:center;}
-/* Live preview pages: real A4 mm dimensions + real 0.25in margin baked in as
+/* Live preview pages: the real page dimensions (Settings > Page size) + real 0.25in margin baked in as
    padding (since there's no browser @page mechanism outside of an actual
    print), then visually scaled to fit the pane via JS-computed transform.
    Because it's a uniform CSS transform, fonts/spacing/margins all shrink
@@ -374,7 +374,7 @@ small{color:var(--text-faint);}
    not a separately-tuned approximation. */
 .a4-page-wrap{margin-bottom:24px; flex-shrink:0;}
 .a4-page{
-  width:210mm; height:297mm; padding:0.25in; box-sizing:border-box;
+  width:var(--page-w); height:var(--page-h); padding:0.25in; box-sizing:border-box;
   background:#fff; color:#111; box-shadow:0 4px 24px rgba(0,0,0,.4); border-radius:2px;
   overflow:hidden; transform-origin:top left;
 }
@@ -384,11 +384,11 @@ small{color:var(--text-faint);}
    html2canvas while sitting inside a position:fixed #printArea with no width,
    it shrank to fit its longest pre-formatted line instead of the real A4
    content width — a different, narrower box than what Paginator measured
-   sections against (7.77in = A4 8.27in minus the 0.25in side margins) and
+   sections against (page width minus the 0.25in side margins) and
    what the live preview renders at. That mismatch is what made PDF/print
    output scale and paginate differently from the live preview. Matching the
-   same 7.77in content width here keeps every stage consistent.  */
-.cs-page{width:7.77in; background:#fff; box-sizing:border-box;}
+   same content width here keeps every stage consistent.  */
+.cs-page{width:var(--content-w); background:#fff; box-sizing:border-box;}
 /* NOTE: title/artist/meta were previously scoped to #chordSheet only, which
    meant the actual print/PDF output (rendered into .cs-page, a different
    container) never received this styling at all. Made global so preview and
@@ -568,7 +568,7 @@ small{color:var(--text-faint);}
 /* Attached PDF pages in print/PDF output: the rasterized page fills the
    content width, keeps its aspect ratio, and never exceeds the page. */
 .cs-page-pdf{padding:0;}
-.cs-page-pdf img{display:block; width:100%; max-height:11.19in; object-fit:contain; object-position:top left;}
+.cs-page-pdf img{display:block; width:100%; max-height:var(--content-h); object-fit:contain; object-position:top left;}
 
 /* Export format picker (openFormatPicker) — small centered modal shared by
    every export path: the Lyrics view's Export / Set List Builder's Export
@@ -593,8 +593,9 @@ small{color:var(--text-faint);}
 .lxp-modal p{font-size:12.5px; color:var(--text-dim); line-height:1.55; margin:0 0 10px;}
 .lxp-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:4px;}
 
-/* PRINT — A4, fixed 0.25in margins */
-@page{ size: A4; margin: 0.25in; }
+/* PRINT — page size comes from Settings (Letter default / A4); the @page rule
+   lives in #pageRule below so PageSizeStore.apply can rewrite it (CSS custom
+   properties aren't permitted inside @page size). Margins fixed at 0.25in. */
 @media print{
   /* visibility:hidden alone leaves #topbar/#app's full-viewport flex layout
      (body is height:100vh) occupying space even though invisible — Chrome's
@@ -606,11 +607,12 @@ small{color:var(--text-faint);}
   #printArea, #printArea *{visibility:visible;}
   #topbar, #app, .slb-backdrop{display:none !important;}
   body{height:auto; overflow:visible;}
-  #printArea{position:absolute; top:0; left:0; width:7.77in;}
+  #printArea{position:absolute; top:0; left:0; width:var(--content-w);}
   .cs-page{page-break-after:always; padding:0;}
   .cs-page:last-child{page-break-after:auto;}
 }
 </style>
+<style id="pageRule">@page{ size: letter; margin: 0.25in; }</style>
 </head>
 <body>
 
@@ -947,6 +949,38 @@ const NNIntroStore = (() => {
 // (title/artist/copyright/permission/roadmap all follow the same setting).
 // Doesn't touch songs that already have an alignment saved — only the
 // default applied to brand-new ones.
+// Page size (Settings > Page size). One spec feeds everything that has a
+// physical page: the live preview's page dimensions, the paginator's
+// content box, the print @page rule, and jsPDF's format/content box — so
+// preview, print, PDF and set-list output can never disagree. US Letter is
+// the default (the audience is US-first); A4 for everyone else. Margins are
+// 0.25in on every side in both.
+const PageSizeStore = (() => {
+  const KEY = 'wcb_page_size';
+  const MARGIN = 0.25;
+  const SPECS = {
+    letter: { id:'letter', label:'US Letter', widthIn:8.5,  heightIn:11,    pageCss:'letter', jsPdf:'letter', cssW:'8.5in',  cssH:'11in' },
+    a4:     { id:'a4',     label:'A4',        widthIn:8.27, heightIn:11.69, pageCss:'A4',     jsPdf:'a4',     cssW:'210mm', cssH:'297mm' }
+  };
+  function get(){ const v = localStorage.getItem(KEY); return SPECS[v] ? v : 'letter'; }
+  function set(v){ if(SPECS[v]) localStorage.setItem(KEY, v); }
+  function spec(){
+    const s = SPECS[get()];
+    return Object.assign({ margin: MARGIN, contentW: s.widthIn - MARGIN*2, contentH: s.heightIn - MARGIN*2 }, s);
+  }
+  function apply(){
+    const s = spec();
+    const root = document.documentElement.style;
+    root.setProperty('--page-w', s.cssW);
+    root.setProperty('--page-h', s.cssH);
+    root.setProperty('--content-w', s.contentW.toFixed(2) + 'in');
+    root.setProperty('--content-h', s.contentH.toFixed(2) + 'in');
+    const rule = document.getElementById('pageRule');
+    if(rule) rule.textContent = `@page{ size: ${s.pageCss}; margin: ${MARGIN}in; }`;
+  }
+  return { get, set, spec, apply, SPECS };
+})();
+
 // Default CHART-BODY justification for new songs (Settings > Default Chart
 // Justification) — the per-song bodyAlign starts from this. Header
 // justification has its own store below (DefaultAlignStore).
@@ -4402,14 +4436,15 @@ ${versesXml}
     // Render into an offscreen full-width clone to measure section heights.
     const measureHost = document.createElement('div');
     measureHost.style.position='fixed'; measureHost.style.left='-9999px'; measureHost.style.top='0';
-    measureHost.style.width = '7.77in'; // A4 (8.27in) minus 0.25in margins each side
+    const pageSpec = PageSizeStore.spec();
+    measureHost.style.width = pageSpec.contentW.toFixed(2) + 'in'; // page width minus 0.25in margins each side
     if(fontScalePct) measureHost.style.setProperty('--chart-font-scale', fontScalePct / 100);
     measureHost.className = '';
     document.body.appendChild(measureHost);
     const sheet = document.createElement('div');
     measureHost.appendChild(sheet);
     Renderer.renderChordSheet(sheet, song, {twoCol:false});
-    const PAGE_HEIGHT_PX = 11.19 * 96; // A4 (11.69in) minus 0.25in top+bottom margins, at 96dpi
+    const PAGE_HEIGHT_PX = pageSpec.contentH * 96; // page height minus 0.25in top+bottom margins, at 96dpi
     const pages = Paginator.paginate(sheet, PAGE_HEIGHT_PX);
     document.body.removeChild(measureHost);
     return pages;
@@ -4454,8 +4489,9 @@ ${versesXml}
     area.style.position='fixed'; area.style.left='-9999px'; area.style.background='#fff';
     const pageEls = area.querySelectorAll('.cs-page');
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({unit:'in', format:'a4'});
-    const MARGIN = 0.25, CONTENT_W = 8.27 - MARGIN*2, CONTENT_H = 11.69 - MARGIN*2;
+    const ps = PageSizeStore.spec();
+    const pdf = new jsPDF({unit:'in', format:ps.jsPdf});
+    const MARGIN = ps.margin, CONTENT_W = ps.contentW, CONTENT_H = ps.contentH;
     for(let i=0;i<pageEls.length;i++){
       const canvas = await window.html2canvas(pageEls[i], {scale:2, backgroundColor:'#ffffff'});
       const imgData = canvas.toDataURL('image/png');
@@ -4818,7 +4854,7 @@ ${versesXml}
   // at its own saved zoom (previewZoom), pinned inline per-page since the
   // global --chart-font-scale var only tracks the editor's open song.
   // Rasterizes every page of an attached PDF entry with pdf.js at ~190 DPI
-  // across the A4 content width, returning one PNG data URL per page.
+  // across the page content width, returning one PNG data URL per page.
   async function renderPdfEntryPages(entry){
     if(!window.pdfjsLib) return [];
     const blob = await DB.getPref(slbPdfPrefKey(entry.pdfId), null);
@@ -4893,8 +4929,9 @@ ${versesXml}
     area.style.position='fixed'; area.style.left='-9999px'; area.style.background='#fff';
     const pageEls = area.querySelectorAll('.cs-page');
     const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({unit:'in', format:'a4'});
-    const MARGIN = 0.25, CONTENT_W = 8.27 - MARGIN*2, CONTENT_H = 11.69 - MARGIN*2;
+    const ps = PageSizeStore.spec();
+    const pdf = new jsPDF({unit:'in', format:ps.jsPdf});
+    const MARGIN = ps.margin, CONTENT_W = ps.contentW, CONTENT_H = ps.contentH;
     for(let i=0;i<pageEls.length;i++){
       if(i>0) pdf.addPage();
       const pdfImg = pageEls[i].classList.contains('cs-page-pdf') ? pageEls[i].querySelector('img') : null;
@@ -5080,6 +5117,13 @@ ${versesXml}
         <input type="range" id="prefFontScale" min="${FontScaleStore.MIN_PCT}" max="${FontScaleStore.MAX_PCT}" step="5" value="${FontScaleStore.get()}" style="width:100%;">
       </div>
       <div class="form-row">
+        <label>Page size (preview, print &amp; PDF)</label>
+        <div class="align-controls" id="settingsPageSizeControls">
+          <button type="button" class="align-btn" data-size="letter" title="8.5 × 11 in">US Letter</button>
+          <button type="button" class="align-btn" data-size="a4" title="210 × 297 mm">A4</button>
+        </div>
+      </div>
+      <div class="form-row">
         <label>Default Header Justification (new songs)</label>
         <div class="align-controls" id="settingsAlignControls">
           <button type="button" class="align-btn" data-align="left" title="Left">⟸ Left</button>
@@ -5138,6 +5182,17 @@ ${versesXml}
           DefaultAlignStore.set(btn.dataset.align);
           alignBtns.forEach(b => b.classList.toggle('active', b === btn));
           toast(`New songs' header will default to ${btn.dataset.align}`);
+        };
+      });
+      const sizeBtns = drawer.querySelectorAll('#settingsPageSizeControls .align-btn');
+      sizeBtns.forEach(b => b.classList.toggle('active', b.dataset.size === PageSizeStore.get()));
+      sizeBtns.forEach(btn => {
+        btn.onclick = () => {
+          PageSizeStore.set(btn.dataset.size);
+          PageSizeStore.apply();
+          sizeBtns.forEach(b => b.classList.toggle('active', b === btn));
+          renderPreview();
+          toast(`Page size: ${PageSizeStore.spec().label}`);
         };
       });
       const bodyBtns = drawer.querySelectorAll('#settingsBodyAlignControls .align-btn');
@@ -6253,6 +6308,7 @@ ${versesXml}
     // Fire-and-forget: browsers grant or deny by their own heuristics, and
     // Settings > Data reports which it was. Explicit clearing of site data
     // still wipes everything regardless — hence the backup nudge.
+    PageSizeStore.apply();
     BackupStore.firstRun();
     if(navigator.storage && navigator.storage.persist){
       navigator.storage.persist().catch(() => {});
