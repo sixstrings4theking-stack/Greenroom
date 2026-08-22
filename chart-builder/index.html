@@ -2663,13 +2663,16 @@ const App = (() => {
     el('mChurchCCLI').value = currentSong.churchCcli || '';
     el('mCapo').value = currentSong.capo || '';
     setCopyrightMode(currentSong.copyrightMode || '©', false);
-    // A song opens showing whatever it was last saved showing: NN if NN was
-    // showing at save (see saveCurrent's lastDisplayedNN), or its first
-    // remembered Preferred Key (or C) if a letter key was showing — not the
-    // literal letter it was left on, just a sensible starting point.
+    // A song opens showing whatever it was last saved showing — the exact
+    // Display Key recorded at save/export (lastDisplayedKey), so a library
+    // imported from someone's export lands in the keys they had it in.
+    // Older records carry only lastDisplayedNN (a yes/no): those fall back
+    // to NN, or to the first remembered Preferred Key (or C) if a letter
+    // key was showing.
     const wantsKey = currentSong.key || 'C';
-    const wantsPreferredKeyDefault = wantsKey === 'NN' && currentSong.lastDisplayedNN === false;
-    const usableKey = toDisplayableKey(wantsPreferredKeyDefault ? ((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C') : wantsKey);
+    const remembered = (wantsKey === 'NN' && SLB_KEY_OPTIONS.includes(currentSong.lastDisplayedKey)) ? currentSong.lastDisplayedKey : null;
+    const wantsPreferredKeyDefault = wantsKey === 'NN' && !remembered && currentSong.lastDisplayedNN === false;
+    const usableKey = toDisplayableKey(remembered || (wantsPreferredKeyDefault ? ((currentSong.preferredKeys && currentSong.preferredKeys[0]) || 'C') : wantsKey));
     el('mDisplayKey').value = usableKey;
     el('mTags').value = (currentSong.tags || []).join(', ');
     renderCurrentSongLibraries();
@@ -3347,6 +3350,7 @@ const App = (() => {
     // NN if NN was showing, or the song's first Preferred Key if a letter
     // key was showing.
     currentSong.lastDisplayedNN = el('mDisplayKey').value === 'NN';
+    currentSong.lastDisplayedKey = el('mDisplayKey').value;
     // preferredKey is no longer derived from Display Key on save — the
     // meta-bar picker (see keyPickerLetterClick etc.) is the one explicit
     // place that sets it now, so a manual pick there survives regardless of
@@ -4278,6 +4282,7 @@ const App = (() => {
       if(typeof song.lyricsSourceSnapshot === 'string') toSave.lyricsSourceSnapshot = song.lyricsSourceSnapshot;
     }
     if(typeof song.lastDisplayedNN === 'boolean') toSave.lastDisplayedNN = song.lastDisplayedNN;
+    if(SLB_KEY_OPTIONS.includes(song.lastDisplayedKey)) toSave.lastDisplayedKey = song.lastDisplayedKey;
     const id = await DB.putSong(toSave);
     toSave.id = id;
     return toSave;
@@ -4386,7 +4391,8 @@ const App = (() => {
       key: currentSong.key === 'NN' ? 'NN' : el('mDisplayKey').value,
       content: resolveCanonicalContent(),
       preferredKeys: currentSong.preferredKeys || [],
-      lastDisplayedNN: el('mDisplayKey').value === 'NN'
+      lastDisplayedNN: el('mDisplayKey').value === 'NN',
+      lastDisplayedKey: el('mDisplayKey').value
     });
     delete full.id;
     return full;
