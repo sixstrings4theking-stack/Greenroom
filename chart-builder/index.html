@@ -372,7 +372,7 @@ small{color:var(--text-faint);}
 /* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
    stripe + tinted background make it visually obvious this isn't the normal
    editable chart, matching the Lyrics button's own color. */
-#editor.lyrics-only-mode{background:#0e1a13; box-shadow:inset 4px 0 0 #6fe0a0; cursor:default;}
+#editor.lyrics-only-mode{background:#0e1a13; box-shadow:inset 4px 0 0 #6fe0a0;}
 #previewScroll{flex:1; overflow:auto; background:#0e1014; padding:24px; display:flex; flex-direction:column; align-items:center;}
 /* Live preview pages: the real page dimensions (Settings > Page size) + real 0.25in margin baked in as
    padding (since there's no browser @page mechanism outside of an actual
@@ -2869,6 +2869,7 @@ const App = (() => {
     el('editor')._lastValue = el('editor').value;
   }
   function onEditorInput(e){
+    if(el('btnLyricsOnly').classList.contains('active')){ onLyricsInput(); return; }
     dirty = true; updateSaveStatus();
     readFormIntoState('content', resolveCanonicalContent());
     renderPreview();
@@ -2878,8 +2879,16 @@ const App = (() => {
   function onEditorBeforeInputDebounced(){
     clearTimeout(undoTimer);
     const snapshot = el('editor')._lastValue;
+    const lyricsMode = el('btnLyricsOnly').classList.contains('active');
     undoTimer = setTimeout(()=>{
-      pushUndo(snapshot);
+      if(lyricsMode){
+        // Same debounce, the lyrics-only stack (see insertLyricsBreak) —
+        // a typing burst in Lyrics view undoes as one step, and never
+        // lands on the chart's history.
+        if(snapshot !== el('editor').value) pushLyricsUndo(snapshot);
+      } else {
+        pushUndo(snapshot);
+      }
       el('editor')._lastValue = el('editor').value;
     }, 400);
   }
@@ -5349,7 +5358,7 @@ ${versesXml}
   // strip of the chart. Never mutates or persists anything.
   function lyricsContentFor(song){
     const fresh = stripChartToLyrics(song.content || '');
-    if(song.lyricsContent != null && song.lyricsSourceSnapshot === fresh) return song.lyricsContent;
+    if(song.lyricsContent != null && song.lyricsSourceSnapshot === fresh) return capitalizeLineStarts(song.lyricsContent);
     return fresh;
   }
 
@@ -5965,22 +5974,37 @@ ${versesXml}
   /* ---------------- Lyrics-only view ---------------- */
   // ARCHITECTURE: Lyrics view does NOT edit the chart. currentSong.lyricsContent
   // is an independent copy of the song's lyrics (chords/note-annotations/
-  // comments stripped out), and double-click/right-click breaks edit THAT
-  // field only — currentSong.content (the actual chart) is never touched
-  // from here. The two stay linked one-directionally: whenever the chart's
-  // own lyrics change, lyricsContent is regenerated from scratch on the next
-  // trip into Lyrics view (see ensureLyricsContentSynced) so new sections/
-  // lines always show up here. The tradeoff is coarse-grained: ANY change to
-  // the chart's lyrics text since lyricsContent was last derived wipes and
-  // regenerates the whole thing, so manual line/paragraph breaks only
+  // comments stripped out), and everything done in this view — typing,
+  // double-click/right-click breaks, undo — edits THAT field only;
+  // currentSong.content (the actual chart) is never touched from here. The
+  // point of letting it be typed in at all is screen-specific polish: a
+  // comma or "oh," that reads fine on a chart can look wrong projected, and
+  // fixing it here leaves the chart exactly as the musicians read it. The
+  // two stay linked one-directionally: whenever the chart's own lyrics
+  // change, lyricsContent is regenerated from scratch on the next trip into
+  // Lyrics view (see ensureLyricsContentSynced) so new sections/lines
+  // always show up here. The tradeoff is coarse-grained: ANY change to the
+  // chart's lyrics text since lyricsContent was last derived wipes and
+  // regenerates the whole thing, so lyrics-view edits and breaks only
   // survive as long as you don't go edit the chart's lyrics in the
-  // meantime. A real per-line diff/merge would preserve breaks through
+  // meantime. A real per-line diff/merge would preserve them through
   // unrelated chart edits too, but is real complexity for later, not now.
   function stripChartToLyrics(canonical){
-    return canonical.split('\n')
+    return capitalizeLineStarts(canonical.split('\n')
       .filter(line => !/^\s*#/.test(line))
       .map(line => line.replace(ChordParser.CHORD_TOKEN, '').replace(/[ \t]+$/, ''))
-      .join('\n');
+      .join('\n'));
+  }
+
+  // Every line of projected lyrics starts with a capital — a new line or
+  // paragraph in Lyrics view is, on screen, a new sentence. Applied to
+  // freshly derived lyrics, to every keystroke in the view, and after a
+  // break is inserted (so the word a break lands in front of capitalizes
+  // itself). Leading quotes/brackets are skipped over so `"amazing` still
+  // becomes `"Amazing`. Case-only changes never move a character, so the
+  // caret position survives the rewrite untouched.
+  function capitalizeLineStarts(text){
+    return (text || '').replace(/(^|\n)([ \t"'“‘(\[]*)(\p{Ll})/gu, (m, brk, lead, ch) => brk + lead + ch.toUpperCase());
   }
 
   // Regenerates currentSong.lyricsContent from the chart if (and only if)
@@ -5989,6 +6013,8 @@ ${versesXml}
   // taken at derivation time. Returns true if it regenerated (caller uses
   // this to know whether to also reset the lyrics undo history, since old
   // undo entries for a just-discarded lyricsContent make no sense to keep).
+  // Lyrics saved before the capitalization rule existed get it applied
+  // here too (idempotent, and a view normalization rather than an edit).
   function ensureLyricsContentSynced(){
     const fresh = stripChartToLyrics(currentSong.content || '');
     if(currentSong.lyricsContent == null || currentSong.lyricsSourceSnapshot !== fresh){
@@ -5996,7 +6022,32 @@ ${versesXml}
       currentSong.lyricsSourceSnapshot = fresh;
       return true;
     }
+    currentSong.lyricsContent = capitalizeLineStarts(currentSong.lyricsContent);
     return false;
+  }
+
+  // Typing in Lyrics view (see onEditorInput's branch): the textarea IS
+  // lyricsContent verbatim here, so its value is taken as the new text —
+  // after the capitalization pass — and nothing else in the song moves.
+  function onLyricsInput(){
+    if(!currentSong) return;
+    const editor = el('editor');
+    const fixed = capitalizeLineStarts(editor.value);
+    if(fixed !== editor.value){
+      const s = editor.selectionStart, e = editor.selectionEnd;
+      editor.value = fixed;
+      editor.setSelectionRange(s, e);
+    }
+    currentSong.lyricsContent = editor.value;
+    dirty = true; updateSaveStatus();
+    renderPreview();
+    renderParseStatus();
+  }
+
+  function pushLyricsUndo(prevValue){
+    lyricsUndoStack.push(prevValue);
+    if(lyricsUndoStack.length > 100) lyricsUndoStack.shift();
+    lyricsRedoStack = [];
   }
 
   // Editor pane-head hint — what double-click/right-click do changes
@@ -6006,22 +6057,21 @@ ${versesXml}
   function updateEditorClickHint(){
     const hint = el('editorClickHint');
     if(el('btnLyricsOnly').classList.contains('active')){
-      hint.textContent = 'Double-click: line break · Right-click: paragraph break';
+      hint.textContent = 'Double-click: line break · Right-click: paragraph break · Edits here never touch the chart';
     } else {
       hint.textContent = 'Double-click: insert/edit a chord · Right-click: insert a note';
     }
   }
 
-  // Read-only by design, EXCEPT for two specific structural edits — a line
-  // break (double-click) and a paragraph break (right-click), see
-  // onLyricsDoubleClick/onLyricsContextMenu below, which edit
-  // currentSong.lyricsContent only (see the architecture note above).
-  // Everything else about this view is look-don't-touch: no typing, no
-  // chord/note popups. Also swaps the struct bar over to the slide-view
-  // ribbon and switches Live Preview to the slide render — see the mission
-  // note: inserted STRUCTURE (new sections) only ever happens in the chart
-  // editor; this view can only ever reshape how existing lyrics break into
-  // lines/slides.
+  // A plain text editor over currentSong.lyricsContent (see the
+  // architecture note above): typing edits the wording for the screen,
+  // double-click/right-click insert a line/paragraph break (see
+  // onLyricsDoubleClick/onLyricsContextMenu), and none of it reaches the
+  // chart. No chord/note popups here. Also swaps the struct bar over to
+  // the slide-view ribbon and switches Live Preview to the slide render —
+  // see the mission note: inserted STRUCTURE (new sections) still happens
+  // in the chart editor; this view reshapes how existing lyrics read and
+  // break on screen.
   function toggleLyricsOnlyView(){
     if(!currentSong) return;
     const btn = el('btnLyricsOnly');
@@ -6039,12 +6089,11 @@ ${versesXml}
       const regenerated = ensureLyricsContentSynced();
       if(regenerated){ lyricsUndoStack = []; lyricsRedoStack = []; }
       editor.value = currentSong.lyricsContent;
-      editor.readOnly = true;
+      syncUndoBaseline(); // typing's debounced snapshots start from the lyrics text, not the chart's
       editor.classList.add('lyrics-only-mode');
       lyricsSlideIndex = 0;
       renderLyricsRibbon();
     } else {
-      editor.readOnly = false;
       editor.classList.remove('lyrics-only-mode');
       if(currentSong.key === 'NN' && liveKey && liveKey !== 'NN'){
         const preferFlat = Transposer.FLAT_KEYS.has(liveKey);
@@ -6066,7 +6115,6 @@ ${versesXml}
     if(!btn.classList.contains('active')) return;
     btn.classList.remove('active');
     el('editor').classList.remove('lyrics-only-mode');
-    el('editor').readOnly = false;
     el('structBarChart').classList.remove('hidden');
     el('structBarLyrics').classList.add('hidden');
     el('btnExport').classList.remove('export-lyrics-mode');
@@ -6080,13 +6128,12 @@ ${versesXml}
   // Pushes the pre-edit state onto the lyrics-only undo stack first.
   function insertLyricsBreak(pos, breakStr){
     if(!currentSong) return;
-    lyricsUndoStack.push(currentSong.lyricsContent);
-    if(lyricsUndoStack.length > 100) lyricsUndoStack.shift();
-    lyricsRedoStack = [];
+    pushLyricsUndo(currentSong.lyricsContent);
     const text = currentSong.lyricsContent || '';
-    currentSong.lyricsContent = text.slice(0, pos) + breakStr + text.slice(pos);
+    currentSong.lyricsContent = capitalizeLineStarts(text.slice(0, pos) + breakStr + text.slice(pos));
     dirty = true; updateSaveStatus();
     el('editor').value = currentSong.lyricsContent;
+    syncUndoBaseline();
     const newPos = pos + breakStr.length;
     el('editor').setSelectionRange(newPos, newPos);
     el('editor').focus();
@@ -6592,6 +6639,7 @@ ${versesXml}
         lyricsRedoStack.push(currentSong.lyricsContent);
         currentSong.lyricsContent = lyricsUndoStack.pop();
         el('editor').value = currentSong.lyricsContent;
+        syncUndoBaseline();
         dirty = true; updateSaveStatus();
         renderPreview(); renderParseStatus();
         return;
@@ -6608,6 +6656,7 @@ ${versesXml}
         lyricsUndoStack.push(currentSong.lyricsContent);
         currentSong.lyricsContent = lyricsRedoStack.pop();
         el('editor').value = currentSong.lyricsContent;
+        syncUndoBaseline();
         dirty = true; updateSaveStatus();
         renderPreview(); renderParseStatus();
         return;
@@ -6627,8 +6676,10 @@ ${versesXml}
       else if(mod && e.shiftKey && e.key.toLowerCase()==='z'){ e.preventDefault(); el('btnRedo').click(); }
       else if(mod && e.key.toLowerCase()==='p'){ e.preventDefault(); doPrint(); }
       // Left/Right flips through slides in Individual view — the natural
-      // "presentation clicker" gesture, on top of the prev/next buttons.
-      else if(!mod && el('btnLyricsOnly').classList.contains('active') && LyricsSlideViewStore.get()==='individual' && (e.key==='ArrowLeft' || e.key==='ArrowRight')){
+      // "presentation clicker" gesture, on top of the prev/next buttons —
+      // unless the caret is in a text field, where the arrows are the
+      // arrows (the Lyrics editor is typeable).
+      else if(!mod && el('btnLyricsOnly').classList.contains('active') && LyricsSlideViewStore.get()==='individual' && (e.key==='ArrowLeft' || e.key==='ArrowRight') && !(e.target && /^(TEXTAREA|INPUT)$/.test(e.target.tagName))){
         e.preventDefault();
         if(e.key==='ArrowLeft') lyricsPrevSlide(); else lyricsNextSlide();
       }
