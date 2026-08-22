@@ -271,7 +271,7 @@
 <ul>
   <li><b>Display preferences</b> — prefer flats when transposing ambiguous keys; editor font size; chord-to-lyric spacing; chart text size (the same control as the preview's A−/A+); default title alignment for new songs; and a button to replay the welcome explanation.</li>
   <li><b>Church CCLI License Number</b> — set once; every new song pre-fills its Church CCLI # field (chapter 9).</li>
-  <li><b>Data</b> — <b>Version history</b> for the current song (a snapshot is kept every time you Save; restore any of the last 25), <b>Export entire library</b> as one JSON backup, and <b>Clear local database</b> (the nuclear option — export first!).</li>
+  <li><b>Data</b> — a <b>storage status</b> line (whether the browser has granted persistent storage, and the date of your last full backup), <b>Version history</b> for the current song (a snapshot is kept every time you Save; restore any of the last 25), <b>Export entire library</b> as one JSON backup, and <b>Clear local database</b> (the nuclear option — export first!).</li>
   <li><b>Local Backup Folder</b> — point ChartBench at a folder on your computer and it can write every song there as individual JSON files on demand: real files you can sync, back up, or commit anywhere.</li>
 </ul>
 
@@ -281,8 +281,9 @@
 <ul>
   <li><b>Private by default.</b> Nothing you write leaves your machine. There is no account and no server.</li>
   <li><b>Per-place.</b> The website, a downloaded copy, and a second browser each have separate libraries. Songs don't follow you automatically — move them with Export → Import, or the whole library at once via Settings.</li>
-  <li><b>As durable as your browser data.</b> Clearing the browser's site data clears the library with it. For anything you care about, use <b>Export entire library</b> or the <b>Local Backup Folder</b> — both take seconds.</li>
+  <li><b>As durable as your browser data.</b> It is <i>site data</i> (not cookies) — but the browser's "clear cookies and site data" control wipes it just the same, as do private windows and a "clear on exit" setting. For anything you care about, use <b>Export entire library</b> or the <b>Local Backup Folder</b> — both take seconds.</li>
 </ul>
+<p>ChartBench helps on both fronts. On startup it asks the browser for <b>persistent storage</b>, which exempts the library from automatic eviction when disk space runs low (Settings → Data shows whether the browser agreed). And once it's been two weeks since your last full backup — with real songs in the library — a quiet <b>reminder strip</b> appears above the song list with a one-click path to Settings; "Remind me in a week" snoozes it, and any full backup clears it.</p>
 
 <!-- ============================ 19 ============================ -->
 <h2 class="chapter">19 &nbsp;Keyboard shortcuts</h2>
