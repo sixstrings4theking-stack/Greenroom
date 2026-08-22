@@ -4,6 +4,10 @@
   "ccli": "",
   "copyright": "",
   "copyrightMode": "CC",
+  "ccLicense": {
+    "monetization": "no",
+    "modification": "yes_sa"
+  },
   "churchCcli": "",
   "key": "G",
   "notationStyle": "arabic",
