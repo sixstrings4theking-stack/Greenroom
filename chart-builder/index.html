@@ -3372,27 +3372,25 @@ const App = (() => {
   }
 
   /* ---------------- Transposition ---------------- */
+  // The ± buttons walk one semitone at a time through the common key-name
+  // spellings — Db not C#, F# not Gb, flats for Eb/Ab/Bb — so from C they
+  // go C → Db → D → Eb → E → F → F# → G → Ab → A → Bb → B and back. A key
+  // picked under its other name (C#, Gb) still steps from the right pitch;
+  // the neighbor just lands on its common spelling. The step is then
+  // handed to handleKeySelectChange exactly as if the dropdown had been
+  // set, so the editor reflows (NN songs) or transposes (legacy songs)
+  // with chords spelled for the NEW key, the same way a dropdown pick does.
+  const TRANSPOSE_STEP_KEYS = ['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
   function transposeBySemitones(semis){
     if(!currentSong) return;
     const fromKey = liveKey || el('mDisplayKey').value;
     if(fromKey === 'NN'){
-      toast('Nashville Numbers are key-relative — no transposition needed');
+      toast('Nashville Numbers are key-relative — pick a Display Key to transpose from');
       return;
     }
-    const preferFlat = Transposer.FLAT_KEYS.has(fromKey);
-    commitPendingUndo(); // any typing burst is banked before the text is rewritten
-    const newContent = Transposer.transposeText(el('editor').value, semis, preferFlat);
-    el('editor').value = newContent;
-    syncUndoBaseline();
-    // fromKey is always major now (Display Key is major-only — see
-    // toDisplayableKey), so no minor-suffix bookkeeping needed here.
-    const toKeyIdx = ((Transposer.SHARP_SCALE.indexOf(fromKey) + semis) % 12 + 12) % 12;
-    const scale = preferFlat ? Transposer.FLAT_SCALE : Transposer.SHARP_SCALE;
-    const newKey = scale[toKeyIdx];
-    el('mDisplayKey').value = newKey;
-    liveKey = el('mDisplayKey').value;
-    updateCapoNote();
-    onEditorInput();
+    const fromIdx = ((Transposer.semitoneDelta('C', fromKey.replace(/m$/, '')) % 12) + 12) % 12;
+    el('mDisplayKey').value = TRANSPOSE_STEP_KEYS[((fromIdx + semis) % 12 + 12) % 12];
+    handleKeySelectChange();
   }
 
   // Fires when the user picks a different key directly from the dropdown.
