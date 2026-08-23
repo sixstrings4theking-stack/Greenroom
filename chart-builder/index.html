@@ -5007,12 +5007,30 @@ const App = (() => {
       const shown = toDisplayableKey(statedKey);
       if(SLB_KEY_OPTIONS.includes(shown)){ toSave.lastDisplayedKey = shown; toSave.lastDisplayedNN = false; }
     }
-    // An import is always a NEW song here — it gets its own uid (see
-    // ensureSongUid) rather than inheriting one from the file, so importing
-    // a file twice gives two songs, never two records claiming one mirror
-    // file. (Songs arriving via the library folder itself keep their uid —
-    // that's mirrorSync's path, not this one.)
+    // A ChartBench JSON carries the song's uid — the same identity the
+    // library folder files it under. Importing one of those again (an
+    // export round-trip, or "Import Folder" pointed at the mirror folder
+    // itself) used to mint a fresh uid every time, so each run cloned the
+    // song AND wrote a new file beside the old one — doubling the folder on
+    // every pass. Now a uid that's already in the library UPDATES that
+    // song in place (keeping its id, uid and createdAt, so it stays one
+    // record and one file), and an unknown uid is kept rather than
+    // replaced, so the file it lands in is the one it came from. Files
+    // from other software have no uid and stay brand-new songs.
+    const incomingUid = (typeof song.uid === 'string' && song.uid) ? song.uid : null;
+    const existing = incomingUid ? songs.find(s => s.uid === incomingUid) : null;
+    if(existing){
+      const keep = { id: existing.id, uid: existing.uid, createdAt: existing.createdAt || toSave.createdAt, mirroredAt: existing.mirroredAt };
+      for(const k of Object.keys(existing)){ if(!(k in toSave) && !(k in keep)) delete existing[k]; }
+      Object.assign(existing, toSave, keep);
+      await persistSong(existing);
+      return existing;
+    }
+    if(incomingUid) toSave.uid = incomingUid;
     await persistSong(toSave);
+    // Visible to the rest of this import batch (refreshLibrary only runs
+    // once at the end), so a uid repeated within one run still upserts.
+    songs.push(toSave);
     return toSave;
   }
 
@@ -7625,6 +7643,16 @@ ${versesXml}
         // never exposes a real filesystem path, but the top-level folder
         // name the user picked is enough to auto-name a Library after it.
         const folderName = supported[0].webkitRelativePath.split('/')[0] || 'Imported Folder';
+        // The connected library folder is already the library — importing
+        // it would only re-stamp every song into a Library named after the
+        // folder (and, before imports upserted by uid, clone every one).
+        // Same name as the mirror folder is a strong enough signal to stop
+        // and point at Sync, which is the operation actually wanted.
+        if(FolderMirror.isConnected() && folderName === FolderMirror.folderName()){
+          toast(`"${folderName}" is your connected library folder — it's already in the library. Use Settings → "Sync now" to pick up changes made on disk.`);
+          e.target.value='';
+          return;
+        }
         handleImportFiles(supported, folderName);
       }
       else toast('No supported chart files (.json/.txt/.chordpro/.cho/.pro/.xml) found in that folder');
