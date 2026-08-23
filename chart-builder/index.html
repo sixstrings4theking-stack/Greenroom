@@ -1158,7 +1158,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-23 15:20';
+const APP_BUILD = '2026-08-23 15:45';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1169,6 +1169,7 @@ const VERSION_NOTES = [
       'Version number and this Version Notes popup in Settings.',
     ]],
     ['Changed', [
+      'Song map circles on the chart are 20% smaller to save header space; the letter codes inside stay full size.',
       'Library folder files are now named after the song — "Hotel California.json" — instead of carrying a code suffix. Two different songs with one title are told apart by "(Artist)" or "(2)". Old suffixed files are renamed automatically on the next sync.',
       'In the song list\u2019s right-click library popup, Full Catalog is no longer offered as a library chip; a "Remove from all libraries" line does what it used to.',
       'The Guide button in downloaded copies opens the guide on thechartbench.com.',
@@ -1395,11 +1396,15 @@ function roadmapCodes(sections){
 // black letter code centered with the dy="0.35em" baseline trick
 // (dominant-baseline renders inconsistently across font weights in Chrome).
 // Print-friendly by design, since these render on the chart's white page.
-// sizePx controls the rendered footprint; the internal font-size steps down
-// as the code gets longer (I / V1 / PC2) so longer codes still fit.
+// sizePx controls the rendered footprint of the CIRCLE only — the letter
+// code renders at a fixed on-screen size (12 / 9.5 / 7.5 px, stepping down
+// as the code gets longer: I / V1 / PC2) regardless of circle size, so
+// shrinking the badges doesn't shrink their legibility. The viewBox is
+// 72 units across, so a letter's SVG font-size is px * 72 / sizePx.
 function sectionBadgeSvg(code, sizePx){
   const len = code.length;
-  const fontSize = len <= 2 ? 24 : (len === 3 ? 19 : 15);
+  const letterPx = len <= 2 ? 12 : (len === 3 ? 9.5 : 7.5);
+  const fontSize = (letterPx * 72 / sizePx).toFixed(1);
   return `<svg class="section-badge" viewBox="0 0 72 72" width="${sizePx}" height="${sizePx}" style="flex-shrink:0;"><circle cx="36" cy="36" r="33" fill="#fff" stroke="#000" stroke-width="3"/><text x="36" y="36" text-anchor="middle" dy="0.35em" font-family="-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="700" fill="#000">${code}</text></svg>`;
 }
 
@@ -2031,7 +2036,7 @@ const Renderer = (() => {
     }).join('');
   }
 
-  const ROADMAP_BADGE_SIZE = 36; // bigger than the inline Key Change badge — the song map is the headline element
+  const ROADMAP_BADGE_SIZE = 29; // was 36; circles trimmed 20% to save header space — letter size inside is fixed (see sectionBadgeSvg)
 
   // Builds the "song map": the row of round section-marker badges under the
   // chart's title/meta block, one per labeled section in the order it
