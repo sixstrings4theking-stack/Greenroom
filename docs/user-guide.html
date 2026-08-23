@@ -87,7 +87,7 @@
     one file, no install, your songs stay on your device.<br><br>
     <b>thechartbench.com</b><br>
     Free &amp; open source · Creative Commons BY-NC-SA<br>
-    Guide edition: August 22, 2026<br>
+    Guide edition: August 23, 2026<br>
     <span class="screen-only"><a href="ChartBench-User-Guide.pdf">Download this guide as a PDF</a></span>
   </div>
 </div>
@@ -165,7 +165,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-img"><img src="guide-assets/cu-topbar-left.png" alt="Left top-bar group"></div>
   <div class="cu-text">
     <h4>File actions</h4>
-    <p><b>＋ New</b> starts a blank song. <b>Saved / Unsaved</b> is both the Save button and the save indicator (below). <b>↶ ↷</b> are Undo and Redo. <b>Import</b> takes one or many chart files; <b>Import Folder</b> takes a whole directory and creates a library named after it.</p>
+    <p><b>＋ New</b> starts a blank song. <b>Saved / Unsaved</b> is both the Save button and the save indicator (below). <b>↶ ↷</b> are Undo and Redo. <b>Import</b> takes one or many chart files; <b>Import Folder</b> takes a whole directory and files every song in it under a library named after the folder (chapter 11).</p>
   </div>
 </div>
 <div class="cu flip">
@@ -368,7 +368,8 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>The song list</h4>
     <p>Each row shows title, author, preferred keys and tags; the open song is highlighted. <b>Click</b> to open, <b>right-click</b> to assign or unassign libraries, <b>✕</b> to remove a song from the app (and, if a Library Folder is connected, its file).</p>
-    <p><b>Libraries</b> are the broad, parent grouping — whole repertoires, e.g. two different bands. Every song starts in <i>Full Catalog</i>. Create one from the box at the top of the sidebar with a song open, or with Import Folder. The demo songs arrive in a "Demo Songs" library; delete them whenever you like — <b>Settings → Data → Restore demo songs</b> brings any of them back.</p>
+    <p>The right-click popup lists every library as a chip — click to add the song, click again to take it out — with a box to create a new one. <i>Full Catalog</i> is never offered as a chip, because it isn't a library you add songs to: it's where every song lives by default. When a song is in at least one library the popup ends with <b>Remove from all libraries</b>, which clears them and leaves the song in Full Catalog only.</p>
+    <p><b>Libraries</b> are the broad, parent grouping — whole repertoires, e.g. two different bands. Every song starts in <i>Full Catalog</i>, which always shows every song and is the only grouping the app makes on its own — in particular, a connected Library Folder (chapter 18) is <i>not</i> a library; it's where the files live. Create a library from the box at the top of the sidebar with a song open, from the right-click popup, or with Import Folder. The demo songs arrive in a "Demo Songs" library; delete them whenever you like — <b>Settings → Data → Restore demo songs</b> brings any of them back.</p>
     <div class="cap">Fig. 21 — Three songs, one open.</div>
   </div>
 </div>
@@ -376,9 +377,10 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 <!-- ============================ 11 ============================ -->
 <h2 class="chapter" id="c11">11 &nbsp;Importing songs</h2>
 <p><b>Import</b> accepts one or many files at once; <b>Import Folder</b> takes a whole directory and additionally creates a library named after the folder — one folder in, one repertoire out. Every imported song is saved to the library immediately. Four formats are understood:</p>
+<div class="callout"><b>Import Folder and libraries:</b> the name of the folder you pick becomes the library name for <i>every</i> song in the import, subfolders included — it overrides any library a ChartBench file already names. So name the folder what you want the library called. It can't be run on your connected Library Folder (chapter 18): that folder already <i>is</i> the library — use <b>Sync now</b> in Settings to pick up files added there by hand.</div>
 <table>
   <tr><th>Format</th><th>Extensions</th><th>How ChartBench handles it</th></tr>
-  <tr><td>ChartBench JSON</td><td>.json</td><td>The app's own export — full fidelity: chart, lyrics slide breaks, preferred keys, the key it was last shown in, its text-size zoom, and its version history all round-trip. A whole-library export (one file holding every song) imports every song in it.</td></tr>
+  <tr><td>ChartBench JSON</td><td>.json</td><td>The app's own export — full fidelity: chart, lyrics slide breaks, preferred keys, the key it was last shown in, its text-size zoom, and its version history all round-trip. A whole-library export (one file holding every song) imports every song in it. Each file carries the song's identity, so importing one that's already in the library <b>updates that song</b> rather than adding a second copy.</td></tr>
   <tr><td>ChordPro</td><td>.cho .chordpro .pro</td><td>Reads <code>{title}</code>, <code>{artist}</code>, <code>{key}</code>, <code>{capo}</code>, <code>{ccli}</code>, <code>{copyright}</code>; the <code>[C]word</code> body is native.</td></tr>
   <tr><td>OpenSong XML</td><td>.xml</td><td>Reads title/author/key/CCLI/copyright; converts OpenSong's dot-prefixed chord lines and [V1]-style markers.</td></tr>
   <tr><td>Chords over lyrics</td><td>.txt</td><td>Plain text with chord lines above lyric lines (letters or Nashville numbers) — merged automatically onto the right syllables. Title/author from the first two lines; <code>Key:</code> and <code>Capo:</code> lines respected.</td></tr>
@@ -520,10 +522,11 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-img"><img src="guide-assets/cu-settings-folder.png" alt="Library Folder settings"></div>
   <div class="cu-text">
     <h4>Settings → Library Folder</h4>
-    <p>Click <b>Choose folder…</b> and pick any folder on your computer. From that moment your library <i>lives there</i> as one <code>.json</code> file per song (saved set lists in a <code>Set Lists</code> subfolder), kept in step automatically:</p>
+    <p>Click <b>Choose folder…</b> and pick any folder on your computer. From that moment your library <i>lives there</i> as one <code>.json</code> file per song, named after the song — <code>Hotel California.json</code> — with saved set lists in a <code>Set Lists</code> subfolder, kept in step automatically:</p>
     <ul>
       <li><b>Save</b> writes the song's file (rename a song and the file renames).</li>
       <li><b>Delete</b> removes the file. <b>Import</b> adds one.</li>
+      <li>Two <i>different</i> songs with the same title get told apart by artist — <code>Amazing Grace (Chris Tomlin).json</code> — or, failing that, a number. The file name is only a label: what ties a file to its song is an identity stored inside the file, so renaming a file by hand is harmless, and files from an earlier ChartBench that ended in a code (<code>Title--2a1c5e85.json</code>) are renamed to the plain form on the next sync.</li>
       <li>Every <b>launch</b> reconciles both ways: a newer file wins over the browser copy, a newer browser copy is written out, new files appear in the sidebar. If files were deleted on another machine, ChartBench <b>asks</b> before removing them here — so a cloud folder that hasn't finished downloading can never silently empty your library.</li>
     </ul>
     <p><b>Sync now</b> runs the reconcile on demand; <b>Forget</b> stops mirroring (the files stay where they are).</p>
