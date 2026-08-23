@@ -1145,7 +1145,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-23 13:30';
+const APP_BUILD = '2026-08-23 14:10';
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
@@ -2188,9 +2188,10 @@ const DB = (() => {
    re-opening a stored handle needs permission, which Chrome can remember
    ("Allow on every visit") or re-ask for once per session.
 
-   Files: "<Title>--<uid8>.json" — the uid suffix is what ties a file to a
-   song across machines and title changes (song.uid is a UUID minted on
-   first save; DB ids are per-machine and never written to the folder).
+   Files: "<Title>.json" — the song's uid (a UUID minted on first save,
+   stored inside the JSON) is what ties a file to a song across machines
+   and title changes; DB ids are per-machine and never written to the
+   folder. Two different songs with one title get "(Artist)" / "(2)".
 --------------------------------------------------------------------------- */
 const FolderMirror = (() => {
   const PREF_KEY = 'backupDirHandle';
@@ -2225,6 +2226,7 @@ const FolderMirror = (() => {
     if(!supported()) throw new Error('File System Access API not supported in this browser');
     const handle = await window.showDirectoryPicker({id:'wcbBackupFolder', mode:'readwrite'});
     dirHandle = handle;
+    index = null; setIndex = null; // a different folder — rebuild the name indexes on first use
     connected = true;
     await DB.setPref(PREF_KEY, handle);
     return handle;
@@ -2250,8 +2252,48 @@ const FolderMirror = (() => {
     return (String(title || '').replace(/[<>:"/\\|?*\x00-\x1f]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)) || 'Untitled';
   }
   const uid8 = uid => String(uid).replace(/-/g, '').slice(0, 8).toLowerCase();
-  function fileNameFor(song){ return `${safeTitle(song.title)}--${uid8(song.uid)}.json`; }
-  function uid8FromName(name){ const m = name.match(/--([0-9a-f]{8})\.json$/i); return m ? m[1].toLowerCase() : null; }
+
+  // Files are named by TITLE — "Hotel California.json" — because that's
+  // what a person browsing the folder wants to see. The song's uid (which
+  // is what actually ties a file to a song, across renames and machines)
+  // lives INSIDE the JSON, not in the name; earlier builds put a uid8
+  // suffix on every name ("Title--2a1c5e85.json"), which made the folder
+  // unreadable for no real gain. To know which file holds which uid
+  // without re-parsing the folder on every save, an index (uid → current
+  // filename) is built on the first read/write and kept current by
+  // writeSong/removeSong. Two DIFFERENT songs with the same title share a
+  // name only by disambiguating the second: "(Artist)" if that differs,
+  // else "(2)", "(3)"… Old suffixed names are renamed to the clean form
+  // on the next sync (normalizeNames) — one-time, uid-safe.
+  let index = null; // Map<uid, filename>
+  async function ensureIndex(){
+    if(index) return index;
+    index = new Map();
+    for(const f of await listJsonFiles()){
+      try{
+        const data = JSON.parse(await (await f.handle.getFile()).text());
+        if(data && typeof data.uid === 'string' && data.uid && !index.has(data.uid)) index.set(data.uid, f.name);
+      }catch(e){ /* not a song file, ignore */ }
+    }
+    return index;
+  }
+  function nameTaken(name, uid){
+    for(const [u, n] of index){ if(n.toLowerCase() === name.toLowerCase() && u !== uid) return true; }
+    return false;
+  }
+  // The name this song SHOULD have: its current file if already indexed
+  // under a matching title, else the first free title-based name.
+  function fileNameFor(song){
+    const base = safeTitle(song.title);
+    const artist = safeTitle(song.artist || '');
+    const cands = [`${base}.json`];
+    if(artist && artist !== 'Untitled') cands.push(`${base} (${artist}).json`);
+    for(let i = 2; i < 100; i++) cands.push(`${base} (${i}).json`);
+    const current = index && index.get(song.uid);
+    if(current && cands.some(c => c.toLowerCase() === current.toLowerCase())) return current;
+    for(const c of cands){ if(!index || !nameTaken(c, song.uid)) return c; }
+    return `${base}--${uid8(song.uid)}.json`;
+  }
 
   // The file form of a song: the whole record minus the two per-machine
   // fields (DB id, and when this machine last mirrored it).
@@ -2276,41 +2318,69 @@ const FolderMirror = (() => {
     return out;
   }
 
-  // Writes the song under its canonical name and clears any older file of
-  // the same uid left under a previous title.
+  // Writes the song under its canonical name and clears the file it lived
+  // in before if the title (and so the name) changed.
   async function writeSong(song){
+    await ensureIndex();
+    const prev = index.get(song.uid);
     const name = fileNameFor(song);
     await writeFile(name, serialize(song));
-    const u = uid8(song.uid);
-    for(const f of await listJsonFiles()){
-      if(f.name !== name && uid8FromName(f.name) === u) await dirHandle.removeEntry(f.name);
-    }
+    index.set(song.uid, name);
+    if(prev && prev !== name){ try{ await dirHandle.removeEntry(prev); }catch(e){} }
+    return name;
   }
 
   async function removeSong(uid){
-    const u = uid8(uid);
-    for(const f of await listJsonFiles()){
-      if(uid8FromName(f.name) === u) await dirHandle.removeEntry(f.name);
-    }
+    await ensureIndex();
+    const name = index.get(uid);
+    if(name){ try{ await dirHandle.removeEntry(name); }catch(e){} index.delete(uid); }
   }
 
-  async function removeFile(name){ await dirHandle.removeEntry(name); }
+  async function removeFile(name){
+    await dirHandle.removeEntry(name);
+    if(index){ for(const [u, n] of index){ if(n === name) index.delete(u); } }
+  }
+
+  // One-time tidy, run by every sync: any song file not under its
+  // canonical title-based name (the old "Title--uid8.json" form, or a
+  // title that changed while this machine was offline) is rewritten under
+  // the right name and the old file removed. `files` is readAll()'s list;
+  // each entry's name is updated in place so the rest of the sync sees
+  // the new one. Returns how many were renamed.
+  async function normalizeNames(files){
+    await ensureIndex();
+    let renamed = 0;
+    for(const f of files){
+      if(typeof f.song.uid !== 'string' || !f.song.uid) continue;
+      if(!index.has(f.song.uid)) index.set(f.song.uid, f.name);
+      const want = fileNameFor(f.song);
+      if(want === f.name) continue;
+      await writeFile(want, serialize(f.song));
+      try{ await dirHandle.removeEntry(f.name); }catch(e){}
+      index.set(f.song.uid, want);
+      f.name = want; renamed++;
+    }
+    return renamed;
+  }
 
   // Every readable ChartBench song file in the folder. Anything that isn't
   // one (other JSON, a corrupt file) is skipped and left alone.
   async function readAll(){
     const out = [];
+    const fresh = new Map(); // a full read is the authoritative name index
     for(const f of await listJsonFiles()){
       try{
         const file = await f.handle.getFile();
         const data = JSON.parse(await file.text());
         if(data && typeof data === 'object' && !Array.isArray(data) && typeof data.title === 'string' && typeof data.content === 'string'){
           out.push({name: f.name, song: data, lastModified: file.lastModified});
+          if(typeof data.uid === 'string' && data.uid && !fresh.has(data.uid)) fresh.set(data.uid, f.name);
         }
       }catch(e){
         console.warn('Library folder: skipped unreadable file', f.name, e.message);
       }
     }
+    index = fresh;
     return out;
   }
 
@@ -2326,8 +2396,34 @@ const FolderMirror = (() => {
     try{ return await dirHandle.getDirectoryHandle(SETS_DIR, {create: !!create}); }
     catch(e){ return null; }
   }
-  function setFileNameFor(set){ return `${safeTitle(set.name)}--${uid8(set.id)}.setlist.json`; }
-  function setId8FromName(name){ const m = name.match(/--([0-9a-f]{8})\.setlist\.json$/i); return m ? m[1].toLowerCase() : null; }
+  // Set list files follow the same title-only rule as songs: the set's id
+  // is inside the JSON, and setIndex (id → filename) is what finds the
+  // file. Seeded by readAllSets, kept current by writeSet/removeSet.
+  let setIndex = null;
+  async function ensureSetIndex(){
+    if(setIndex) return setIndex;
+    setIndex = new Map();
+    const dir = await setsDir(false);
+    if(!dir) return setIndex;
+    for await (const [n, h] of dir.entries()){
+      if(h.kind !== 'file' || !/\.setlist\.json$/i.test(n)) continue;
+      try{ const d = JSON.parse(await (await h.getFile()).text()); if(d && typeof d.id === 'string' && !setIndex.has(d.id)) setIndex.set(d.id, n); }catch(e){}
+    }
+    return setIndex;
+  }
+  function setFileNameFor(set){
+    const base = safeTitle(set.name);
+    const cands = [`${base}.setlist.json`];
+    for(let i = 2; i < 100; i++) cands.push(`${base} (${i}).setlist.json`);
+    const current = setIndex && setIndex.get(set.id);
+    if(current && cands.some(c => c.toLowerCase() === current.toLowerCase())) return current;
+    for(const c of cands){
+      let taken = false;
+      if(setIndex) for(const [id, n] of setIndex){ if(n.toLowerCase() === c.toLowerCase() && id !== set.id){ taken = true; break; } }
+      if(!taken) return c;
+    }
+    return `${base}--${uid8(set.id)}.setlist.json`;
+  }
   function serializeSet(set){
     const copy = Object.assign({ chartbench: 'setlist' }, set);
     delete copy.mirroredAt;
@@ -2335,26 +2431,26 @@ const FolderMirror = (() => {
   }
   async function writeSet(set){
     const dir = await setsDir(true);
+    await ensureSetIndex();
     const name = setFileNameFor(set);
     const fh = await dir.getFileHandle(name, {create:true});
     const w = await fh.createWritable(); await w.write(serializeSet(set)); await w.close();
-    const u = uid8(set.id);
-    for await (const [n, h] of dir.entries()){
-      if(h.kind === 'file' && n !== name && setId8FromName(n) === u) await dir.removeEntry(n);
-    }
+    const prev = setIndex.get(set.id);
+    setIndex.set(set.id, name);
+    if(prev && prev !== name){ try{ await dir.removeEntry(prev); }catch(e){} }
   }
   async function removeSet(id){
     const dir = await setsDir(false);
     if(!dir) return;
-    const u = uid8(id);
-    for await (const [n, h] of dir.entries()){
-      if(h.kind === 'file' && setId8FromName(n) === u) await dir.removeEntry(n);
-    }
+    await ensureSetIndex();
+    const name = setIndex.get(id);
+    if(name){ try{ await dir.removeEntry(name); }catch(e){} setIndex.delete(id); }
   }
   async function readAllSets(){
     const out = [];
     const dir = await setsDir(false);
     if(!dir) return out;
+    const fresh = new Map();
     for await (const [n, h] of dir.entries()){
       if(h.kind !== 'file' || !/\.setlist\.json$/i.test(n)) continue;
       try{
@@ -2362,8 +2458,19 @@ const FolderMirror = (() => {
         if(data && typeof data === 'object' && typeof data.id === 'string' && typeof data.name === 'string' && Array.isArray(data.entries)){
           delete data.chartbench; delete data.mirroredAt;
           out.push({name: n, set: data});
+          if(!fresh.has(data.id)) fresh.set(data.id, n);
         }
       }catch(e){ console.warn('Library folder: skipped unreadable set list', n, e.message); }
+    }
+    setIndex = fresh;
+    // Same one-time tidy as songs: old "Name--id8" files get clean names.
+    for(const f of out){
+      const want = setFileNameFor(f.set);
+      if(want === f.name) continue;
+      const fh = await dir.getFileHandle(want, {create:true});
+      const w = await fh.createWritable(); await w.write(serializeSet(f.set)); await w.close();
+      try{ await dir.removeEntry(f.name); }catch(e){}
+      setIndex.set(f.set.id, want); f.name = want;
     }
     return out;
   }
@@ -2377,6 +2484,7 @@ const FolderMirror = (() => {
 
   async function forget(){
     dirHandle = null;
+    index = null; setIndex = null;
     connected = false;
     await DB.setPref(PREF_KEY, null);
     await DB.setPref(TOMB_KEY, null);
@@ -2384,7 +2492,7 @@ const FolderMirror = (() => {
   }
 
   return { supported, currentStatus, chooseFolder, ensurePermission, isConnected, folderName,
-           fileNameFor, uid8, uid8FromName, serialize, writeSong, removeSong, removeFile, readAll,
+           fileNameFor, uid8, serialize, writeSong, removeSong, removeFile, readAll, normalizeNames,
            writeSet, removeSet, readAllSets,
            getTombstones, setTombstones, addTombstone, lastSync, markSynced, forget };
 })();
@@ -3301,7 +3409,7 @@ const App = (() => {
   async function mirrorSync(reason){
     if(!FolderMirror.isConnected() || mirrorSyncing) return null;
     mirrorSyncing = true;
-    const stats = {pulled:0, pushed:0, removedLocal:0, removedRemote:0, adopted:0, pulledSets:0, pushedSets:0};
+    const stats = {pulled:0, pushed:0, removedLocal:0, removedRemote:0, adopted:0, renamed:0, pulledSets:0, pushedSets:0};
     try{
       const now = Date.now();
       const files = await FolderMirror.readAll();
@@ -3322,9 +3430,12 @@ const App = (() => {
         const candidates = dbSongs.filter(s => !s.mirroredAt && (s.title || '').trim().toLowerCase() === t && (s.artist || '').trim().toLowerCase() === a);
         f.song.uid = candidates.length === 1 ? candidates[0].uid : newUid();
         delete f.song.id; delete f.song.mirroredAt;
-        await FolderMirror.writeSong(f.song);
-        if(f.name !== FolderMirror.fileNameFor(f.song)) await FolderMirror.removeFile(f.name);
-        f.name = FolderMirror.fileNameFor(f.song);
+        // A uid-less file is by definition not in the name index, so write
+        // it fresh and drop the old file if the canonical name differs
+        // (a hand-made "Title.json" usually IS the canonical name already).
+        const newName = await FolderMirror.writeSong(f.song);
+        if(f.name !== newName) await FolderMirror.removeFile(f.name);
+        f.name = newName;
         stats.adopted++;
       }
 
@@ -3338,6 +3449,10 @@ const App = (() => {
         fileByUid.set(f.song.uid, winner);
         try{ await FolderMirror.removeFile(loser.name); }catch(e){}
       }
+
+      // --- tidy names: "Title--uid8.json" (older builds) or a file left
+      // under a stale title is renamed to the clean title-based form ---
+      stats.renamed = await FolderMirror.normalizeNames([...fileByUid.values()]);
 
       // --- folder → browser ---
       for(const [uid, f] of fileByUid){
@@ -3448,6 +3563,7 @@ const App = (() => {
     if(stats.removedLocal) parts.push(`${stats.removedLocal} removed here`);
     if(stats.removedRemote) parts.push(`${stats.removedRemote} removed from folder`);
     if(stats.adopted) parts.push(`${stats.adopted} older file${stats.adopted === 1 ? '' : 's'} adopted`);
+    if(stats.renamed) parts.push(`${stats.renamed} file${stats.renamed === 1 ? "" : "s"} renamed to title-only names`);
     if(stats.pulledSets) parts.push(`${stats.pulledSets} set list${stats.pulledSets === 1 ? '' : 's'} from folder`);
     if(stats.pushedSets) parts.push(`${stats.pushedSets} set list${stats.pushedSets === 1 ? '' : 's'} written`);
     return parts.length ? parts.join(', ') : 'already in sync';
