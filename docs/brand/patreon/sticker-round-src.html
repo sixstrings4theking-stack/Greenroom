@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  html, body { margin:0; padding:0; background:transparent; }
+  body { width:1100px; height:1100px; overflow:hidden; }
+  svg { display:block; }
+  .word { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; }
+  .tier { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; letter-spacing:10px; }
+  .num  { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; }
+</style></head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1100" viewBox="0 0 1100 1100">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#222835"/>
+      <stop offset="1" stop-color="#12151b"/>
+    </radialGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2b85a"/>
+      <stop offset="1" stop-color="#e8a13f"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="16" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .45 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <circle cx="550" cy="550" r="530" fill="#f4f2ec"/>
+  <circle cx="550" cy="550" r="490" fill="url(#bg)"/>
+  <defs>
+    <path id="arcTop" d="M 550,550 m -400,0 a 400,400 0 0 1 800,0" fill="none"/>
+    <path id="arcBot" d="M 550,550 m -400,0 a 400,400 0 0 0 800,0" fill="none"/>
+  </defs>
+  <text class="tier" font-size="92" fill="#e7e9ee" letter-spacing="26"><textPath href="#arcTop" startOffset="50%" text-anchor="middle">CHARTBENCH</textPath></text>
+  <text class="word" font-size="54" fill="#8b93a3" letter-spacing="6" font-weight="600"><textPath href="#arcBot" startOffset="50%" text-anchor="middle">thechartbench.com</textPath></text>
+  <g filter="url(#glow)">
+    <circle cx="550" cy="560" r="205" fill="none" stroke="url(#amber)" stroke-width="28"/>
+    <text x="541" y="560" text-anchor="middle" dominant-baseline="central" dy="-15"
+          class="num" font-size="270" fill="url(#amber)">1</text>
+  </g>
+</svg></body></html>

@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  html, body { margin:0; padding:0; background:transparent; }
+  body { width:1400px; height:560px; overflow:hidden; }
+  svg { display:block; }
+  .word { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; }
+  .tier { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; letter-spacing:10px; }
+  .num  { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; }
+</style></head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#222835"/>
+      <stop offset="1" stop-color="#12151b"/>
+    </radialGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2b85a"/>
+      <stop offset="1" stop-color="#e8a13f"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="10" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .4 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="10" y="10" width="1380" height="540" rx="120" fill="#f4f2ec"/>
+  <rect x="42" y="42" width="1316" height="476" rx="92" fill="url(#bg)"/>
+  <g filter="url(#glow)">
+    <circle cx="330" cy="240" r="115" fill="none" stroke="url(#amber)" stroke-width="18"/>
+    <text x="325" y="240" text-anchor="middle" dominant-baseline="central" dy="-8" class="num" font-size="150" fill="url(#amber)">1</text>
+    <circle cx="700" cy="240" r="115" fill="none" stroke="url(#amber)" stroke-width="18"/>
+    <text x="698" y="240" text-anchor="middle" dominant-baseline="central" dy="-8" class="num" font-size="150" fill="url(#amber)">4</text>
+    <circle cx="1070" cy="240" r="115" fill="none" stroke="url(#amber)" stroke-width="18"/>
+    <text x="1070" y="240" text-anchor="middle" dominant-baseline="central" dy="-8" class="num" font-size="150" fill="url(#amber)">5</text>
+  </g>
+  <text x="700" y="455" text-anchor="middle" class="word" font-size="54">
+    <tspan fill="#8b93a3" font-weight="600">Know these three, play anything. · </tspan><tspan fill="#e7e9ee">Chart</tspan><tspan fill="#e8a13f">Bench</tspan>
+  </text>
+</svg></body></html>
