@@ -646,6 +646,16 @@ small{color:var(--text-faint);}
 .lxp-modal{background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; width:min(400px, 92vw); box-shadow:0 12px 40px rgba(0,0,0,.5); padding:14px 16px 16px;}
 .lxp-head{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
 .lxp-head h3{margin:0; font-size:14px;}
+.vn-modal{width:min(520px, 92vw);}
+.vn-scroll{max-height:min(65vh, 560px); overflow-y:auto; padding-right:6px;}
+.vn-release{margin-bottom:14px;}
+.vn-release:last-child{margin-bottom:2px;}
+.vn-head{display:flex; align-items:baseline; gap:8px; border-bottom:1px solid var(--border); padding-bottom:3px; margin-bottom:6px;}
+.vn-head b{font-size:13px;}
+.vn-head span{font-size:10.5px; color:var(--text-dim);}
+.vn-label{font-size:10.5px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; color:var(--text-dim); margin:6px 0 2px;}
+.vn-release ul{margin:2px 0 6px; padding-left:18px;}
+.vn-release li{font-size:11.5px; line-height:1.45; color:var(--text); margin-bottom:3px;}
 .lxp-option{display:block; width:100%; text-align:left; padding:10px 12px; margin-bottom:8px; border-radius:10px; border:1px solid var(--border); background:var(--bg-input);}
 .lxp-option:last-child{margin-bottom:0;}
 .lxp-option:not(:disabled):hover{border-color:#6fe0a0; background:rgba(111,224,160,.08);}
@@ -1148,7 +1158,33 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-23 14:55';
+const APP_BUILD = '2026-08-23 15:20';
+// Semantic version, adopted at MVP. Bump on every release alongside a new
+// VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
+// renders straight from this list, so the notes ship inside the app itself.
+const APP_VERSION = '1.1.0';
+const VERSION_NOTES = [
+  { version: '1.1.0', date: 'August 23, 2026', sections: [
+    ['New', [
+      'Version number and this Version Notes popup in Settings.',
+    ]],
+    ['Changed', [
+      'Library folder files are now named after the song — "Hotel California.json" — instead of carrying a code suffix. Two different songs with one title are told apart by "(Artist)" or "(2)". Old suffixed files are renamed automatically on the next sync.',
+      'In the song list\u2019s right-click library popup, Full Catalog is no longer offered as a library chip; a "Remove from all libraries" line does what it used to.',
+      'The Guide button in downloaded copies opens the guide on thechartbench.com.',
+      'User Guide updated for all of the above (edition August 23, 2026).',
+    ]],
+    ['Fixed', [
+      'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
+      'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
+    ]],
+  ]},
+  { version: '1.0.0', date: 'August 22, 2026', sections: [
+    ['', [
+      'MVP launch at thechartbench.com: Nashville Number charts with letter-key display, capo shapes and Roman numerals; song maps, arrangements and key changes; lyrics slides and exports (OpenLP, ProPresenter, PowerPoint); Set List Builder with per-entry keys and PDF/print output; libraries, tags and preferred keys; the Library Folder mirror; demo songs and the User Guide.',
+    ]],
+  ]},
+];
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
@@ -6461,6 +6497,32 @@ ${versesXml}
   // copy), and saves it as ChartBench.html. The needle is built by
   // concatenation so this function's own source can never match it; the
   // flag's declaration line is the only contiguous occurrence in the file.
+  // Settings → About → Version Notes: what changed, release by release.
+  // Rendered from VERSION_NOTES so the notes travel with the app (a
+  // downloaded copy shows the notes for the build it actually is).
+  function openVersionNotesPopup(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'lxp-backdrop';
+    const body = VERSION_NOTES.map(rel => `
+      <div class="vn-release">
+        <div class="vn-head"><b>${Renderer.escapeHtml(rel.version)}</b><span>${Renderer.escapeHtml(rel.date)}</span></div>
+        ${rel.sections.map(([label, items]) => `
+          ${label ? `<div class="vn-label">${Renderer.escapeHtml(label)}</div>` : ''}
+          <ul>${items.map(i => `<li>${Renderer.escapeHtml(i)}</li>`).join('')}</ul>
+        `).join('')}
+      </div>
+    `).join('');
+    backdrop.innerHTML = `
+      <div class="lxp-modal vn-modal">
+        <div class="lxp-head"><h3>Version Notes</h3><button type="button" class="icon" id="vnClose">✕</button></div>
+        <div class="vn-scroll">${body}</div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.addEventListener('click', e => { if(e.target === backdrop) close(); });
+    backdrop.querySelector('#vnClose').onclick = close;
+  }
+
   function openDownloadAppPopup(){
     const backdrop = document.createElement('div');
     backdrop.className = 'lxp-backdrop';
@@ -6653,7 +6715,7 @@ ${versesXml}
       '',
       '-----',
       'ChartBench: ' + where,
-      'Build: ' + APP_BUILD,
+      'Version: ' + APP_VERSION + ' (build ' + APP_BUILD + ')',
       'Browser: ' + navigator.userAgent,
       'Page size: ' + PageSizeStore.get().toUpperCase(),
       'Songs in library: ' + songs.length,
@@ -6733,7 +6795,7 @@ ${versesXml}
       <h4>About ChartBench</h4>
       <div class="mock-note" id="aboutChartBench">
         <b>ChartBench</b> — designed and built by <b>Matthew L. Lee</b>, 2026.<br>
-        Build <b>${APP_BUILD}</b> · ${WEB_HOSTED_COPY ? 'hosted copy' : 'downloaded local copy'}.<br>
+        Version <b>${APP_VERSION}</b> · build ${APP_BUILD} · ${WEB_HOSTED_COPY ? 'hosted copy' : 'downloaded local copy'} · <a href="#" id="versionNotesLink">Version Notes</a><br>
         Free and open source under <b>Creative Commons BY-NC-SA</b>: use it, share it, build on it non-commercially, keeping the same license. The songs you write in it are entirely yours.<br>
         <a href="#" id="aboutGuideLink">User Guide</a> · <a href="https://thechartbench.com" target="_blank" rel="noopener">thechartbench.com</a>
       </div>
@@ -6741,6 +6803,7 @@ ${versesXml}
     openDrawer('Settings', body, (drawer) => {
       drawer.querySelector('#feedbackBtn').onclick = openFeedbackEmail;
       drawer.querySelector('#aboutGuideLink').onclick = (e) => { e.preventDefault(); openUserGuide(); };
+      drawer.querySelector('#versionNotesLink').onclick = (e) => { e.preventDefault(); openVersionNotesPopup(); };
       drawer.querySelector('#restoreDemosBtn').onclick = async () => { await restoreDemoSongs(); renderStorageStatus(); };
       const fontSlider = drawer.querySelector('#prefFontSize');
       fontSlider.oninput = () => setEditorZoom(parseInt(fontSlider.value, 10));
@@ -8061,7 +8124,7 @@ ${versesXml}
     }
     updateEditorClickHint();
     updateRomanButtonVisibility();
-    el('btnSettings').title = 'Settings & Parameters — build ' + APP_BUILD; // hover ⚙ to see which copy this is
+    el('btnSettings').title = 'Settings & Parameters — v' + APP_VERSION + ', build ' + APP_BUILD; // hover ⚙ to see which copy this is
     ChordSpacingStore.apply(ChordSpacingStore.get());
     FontScaleStore.apply(FontScaleStore.get());
     EditorZoomStore.apply(EditorZoomStore.get());
