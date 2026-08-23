@@ -553,6 +553,9 @@ small{color:var(--text-faint);}
 #libraryAssignPopup .lap-add-row{display:flex; gap:4px;}
 #libraryAssignPopup .lap-add-row input{flex:1; min-width:0; font-size:11px; padding:4px 6px;}
 #libraryAssignPopup .lap-add-row button{font-size:11px; padding:4px 8px; white-space:nowrap;}
+#libraryAssignPopup .lap-none{font-size:10.5px; color:var(--text-dim); font-style:italic;}
+#libraryAssignPopup .lap-reset{display:block; width:100%; margin-top:8px; font-size:10.5px; padding:4px 6px; background:none; border:1px dashed var(--border); border-radius:6px; color:var(--text-dim); cursor:pointer; text-align:left;}
+#libraryAssignPopup .lap-reset:hover{color:var(--text); border-color:var(--text-dim);}
 
 /* Set List Builder — full-screen two-pane popup (library on the left, the
    set being built on the right). Library rows drag into the set pane (or
@@ -1145,7 +1148,7 @@ const WEB_HOSTED_COPY = true;
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-23 14:10';
+const APP_BUILD = '2026-08-23 14:40';
 
 // Backup bookkeeping for the sidebar nudge (see renderBackupNudge) and the
 // Settings > Data status line. Songs live in browser site data, which a
@@ -3880,19 +3883,28 @@ const App = (() => {
     songs.forEach(s => (s.libraries||[]).forEach(l => allLibs.add(l)));
     if(currentSong) (currentSong.libraries||[]).forEach(l => allLibs.add(l)); // include not-yet-saved additions
     const memberOf = new Set(song.libraries || []);
+    // Full Catalog is the automatic default, not a library a song is added
+    // to — it's never offered as a chip. Leaving every real library is a
+    // separate reset line below, shown only when there's something to leave.
+    allLibs.delete(STARTING_LIBRARY);
+    const inAny = [...memberOf].some(l => l !== STARTING_LIBRARY);
     popup.innerHTML = `
       <div class="lap-label">Add "${Renderer.escapeHtml(song.title || 'Untitled')}" to a library</div>
       <div class="lap-chips">
-        ${[...allLibs].sort().map(l => `<button type="button" class="lap-chip${memberOf.has(l)?' active':''}" data-lib="${Renderer.escapeHtml(l)}" ${l===STARTING_LIBRARY?'title="Selecting this clears any other library for this song"':''}>${Renderer.escapeHtml(l)}</button>`).join('')}
+        ${[...allLibs].sort().map(l => `<button type="button" class="lap-chip${memberOf.has(l)?' active':''}" data-lib="${Renderer.escapeHtml(l)}">${Renderer.escapeHtml(l)}</button>`).join('')}
+        ${allLibs.size ? '' : '<span class="lap-none">No libraries yet — add one below.</span>'}
       </div>
       <div class="lap-add-row">
         <input type="text" id="lapInput" placeholder="New library…">
         <button type="button" id="lapAdd">+ Add</button>
       </div>
+      ${inAny ? `<button type="button" class="lap-reset" id="lapReset" title="Clears every library from this song; it stays in Full Catalog, which always holds every song">Remove from all libraries (back to ${Renderer.escapeHtml(STARTING_LIBRARY)} only)</button>` : ''}
     `;
     popup.querySelectorAll('.lap-chip').forEach(btn => {
       btn.onclick = () => toggleSongLibraryMembership(btn.dataset.lib);
     });
+    const reset = popup.querySelector('#lapReset');
+    if(reset) reset.onclick = () => toggleSongLibraryMembership(STARTING_LIBRARY);
     popup.querySelector('#lapAdd').onclick = addNewLibraryToSong;
     popup.querySelector('#lapInput').addEventListener('keydown', (e) => {
       if(e.key === 'Enter'){ e.preventDefault(); addNewLibraryToSong(); }
