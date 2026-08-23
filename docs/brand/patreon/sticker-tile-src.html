@@ -2,14 +2,14 @@
 <html><head><meta charset="UTF-8">
 <style>
   html, body { margin:0; padding:0; background:transparent; }
-  body { width:1000px; height:1150px; overflow:hidden; }
+  body { width:1100px; height:1100px; overflow:hidden; }
   svg { display:block; }
   .word { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; }
   .tier { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; letter-spacing:10px; }
   .num  { font-family:'Segoe UI','Segoe UI Variable',-apple-system,Roboto,Helvetica,Arial,sans-serif; font-weight:800; }
 </style></head>
 <body>
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="1150" viewBox="0 0 1000 1150">
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="1100" viewBox="0 0 1100 1100">
   <defs>
     <radialGradient id="bg" cx="50%" cy="38%" r="75%">
       <stop offset="0" stop-color="#222835"/>
@@ -20,21 +20,22 @@
       <stop offset="1" stop-color="#e8a13f"/>
     </linearGradient>
     <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
-      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feGaussianBlur stdDeviation="16" result="b"/>
       <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 .45 0" result="g"/>
       <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
     </filter>
   </defs>
 
-  <path d="M 455,1000 C 280,860 90,650 90,390 C 90,160 270,52 500,52 C 730,52 910,160 910,390 C 910,650 720,860 545,1000 Q 500,1046 455,1000 Z" fill="#f4f2ec"/>
-  <path d="M 462,952 C 308,825 128,640 128,392 C 128,182 292,90 500,90 C 708,90 872,182 872,392 C 872,640 692,825 538,952 Q 500,990 462,952 Z" fill="url(#bg)"/>
+  <rect x="10" y="10" width="1080" height="1080" rx="240" fill="#f4f2ec"/>
+  <rect x="48" y="48" width="1004" height="1004" rx="205" fill="url(#bg)"/>
+  <rect x="51" y="51" width="998" height="998" rx="203" fill="none" stroke="#2e3440" stroke-width="6"/>
   <g filter="url(#glow)">
-    <text x="496" y="400" text-anchor="middle" dominant-baseline="central" dy="-24" class="num" style="letter-spacing:-14px" font-size="380">
+    <text x="546" y="500" text-anchor="middle" dominant-baseline="central" dy="-35" class="num" style="letter-spacing:-21px" font-size="560">
       <tspan fill="#e7e9ee">C</tspan><tspan fill="url(#amber)">B</tspan>
     </text>
   </g>
-  <text x="500" y="700" text-anchor="middle" class="word" font-size="80" letter-spacing="-3">
+  <text x="550" y="900" text-anchor="middle" class="word" font-size="72" letter-spacing="-2">
     <tspan fill="#e7e9ee">Chart</tspan><tspan fill="#e8a13f">Bench</tspan>
   </text>
-  <text x="500" y="780" text-anchor="middle" class="word" font-size="38" font-weight="600" fill="#8b93a3">thechartbench.com</text>
+  <text x="550" y="970" text-anchor="middle" class="word" font-size="36" font-weight="600" fill="#8b93a3">thechartbench.com</text>
 </svg></body></html>
