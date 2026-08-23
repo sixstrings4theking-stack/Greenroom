@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8">
+<style>
+  html, body { margin:0; padding:0; background:transparent; }
+  body { width:1024px; height:1024px; overflow:hidden; }
+  svg { display:block; }
+  .word { font-family:'Segoe UI', 'Segoe UI Variable', -apple-system, Roboto, Helvetica, Arial, sans-serif; font-weight:800; letter-spacing:-3px; }
+  .tier { font-family:'Segoe UI', 'Segoe UI Variable', -apple-system, Roboto, Helvetica, Arial, sans-serif; font-weight:800; letter-spacing:10px; }
+  .num  { font-family:'Segoe UI', 'Segoe UI Variable', -apple-system, Roboto, Helvetica, Arial, sans-serif; font-weight:800; }
+</style></head>
+<body>
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="38%" r="75%">
+      <stop offset="0" stop-color="#222835"/>
+      <stop offset="1" stop-color="#12151b"/>
+    </radialGradient>
+    <linearGradient id="amber" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f2b85a"/>
+      <stop offset="1" stop-color="#e8a13f"/>
+    </linearGradient>
+    <filter id="glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="b"/>
+      <feColorMatrix in="b" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 0.35 0" result="g"/>
+      <feMerge><feMergeNode in="g"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect x="0" y="0" width="1024" height="1024" rx="190" ry="190" fill="url(#bg)"/>
+  <rect x="3" y="3" width="1018" height="1018" rx="188" ry="188" fill="none" stroke="#2e3440" stroke-width="6"/>
+
+  <g filter="url(#glow)">
+    <circle cx="512" cy="430" r="230" fill="none" stroke="url(#amber)" stroke-width="32"/>
+    <text x="512" y="430" text-anchor="middle" dominant-baseline="central" dy="14"
+          class="num" font-size="300" fill="url(#amber)">1</text>
+  </g>
+
+  <text x="512" y="812" text-anchor="middle" class="tier" font-size="86" fill="#e7e9ee">THE ONE</text>
+  <text x="512" y="920" text-anchor="middle" class="word" font-size="56" letter-spacing="0">
+    <tspan fill="#8b93a3" style="letter-spacing:0px; font-weight:600;">Patreon Supporter · </tspan><tspan fill="#e7e9ee">Chart</tspan><tspan fill="#e8a13f">Bench</tspan>
+  </text>
+</svg>
+</body></html>
