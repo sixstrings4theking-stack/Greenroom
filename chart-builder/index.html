@@ -576,6 +576,12 @@ small{color:var(--text-faint);}
 #btnDownloadApp:hover{border-color:#f7ecad; background:rgba(240,224,138,.1);}
 #btnDownloadApp.local-copy{opacity:.45; color:var(--text-faint); border-color:var(--border); font-weight:400;}
 #btnDownloadApp.local-copy:hover{background:var(--bg-input); border-color:var(--border);}
+/* Support ChartBench — warm rose, same outline-button family as the purple
+   Circle of 5ths / mint Lyrics / blue Set List / yellow Download. Floats
+   centered between the import and download groups (spacer either side);
+   opens openSupportPopup, which points at the Patreon page. */
+#btnSupport{color:#f38fb4; border-color:#f38fb4; font-weight:600;}
+#btnSupport:hover{border-color:#f8b3cc; background:rgba(243,143,180,.1);}
 .slb-backdrop{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:55; display:flex; align-items:center; justify-content:center;}
 .slb-modal{background:var(--bg-panel); border:1px solid var(--border); border-radius:12px; width:min(1060px, 94vw); height:min(700px, 90vh); box-shadow:0 12px 40px rgba(0,0,0,.5); display:flex; flex-direction:column; overflow:hidden;}
 .slb-head{display:flex; align-items:center; justify-content:space-between; gap:10px; padding:12px 16px; border-bottom:1px solid var(--border-soft); flex-shrink:0;}
@@ -712,6 +718,10 @@ small{color:var(--text-faint);}
     <input type="file" id="fileImport" accept=".json,.txt,.chordpro,.cho,.pro,.xml" multiple class="hidden">
     <button id="btnImportFolder" title="Import every chart file in a folder">Import Folder</button>
     <input type="file" id="folderImport" webkitdirectory directory multiple class="hidden">
+  </div>
+  <div class="spacer"></div>
+  <div class="tb-group" style="border-right:none;">
+    <button id="btnSupport" title="ChartBench is free — this is how to help keep the site online">♥ Support ChartBench</button>
   </div>
   <div class="spacer"></div>
   <div class="tb-group" id="downloadAppGroup" style="border-left:1px solid var(--border-soft); padding-left:10px;">
@@ -1154,11 +1164,15 @@ const ChordSpacingStore = (() => {
 // clickable for now, kept functional for testing.
 const WEB_HOSTED_COPY = true;
 
+// Where the Support ChartBench popup's Go button points. Placeholder until
+// the real Patreon page exists — this is the one line to update.
+const PATREON_URL = 'https://www.patreon.com/';
+
 // Build stamp — shown in Settings > Data and in the feedback email so it's
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-23 16:20';
+const APP_BUILD = '2026-08-23 21:27';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1167,6 +1181,7 @@ const VERSION_NOTES = [
   { version: '1.1.0', date: 'August 23, 2026', sections: [
     ['New', [
       'Version number and this Version Notes popup in Settings.',
+      'Support ChartBench button in the top bar — how to help with the costs of keeping the site up, via Patreon.',
     ]],
     ['Changed', [
       'Song map circles on the chart are 20% smaller to save header space; the letter codes inside stay full size.',
@@ -6545,6 +6560,30 @@ ${versesXml}
     backdrop.querySelector('#vnClose').onclick = close;
   }
 
+  // Support ChartBench: the rose topbar button. A plain ask, not a
+  // paywall — the app is free either way; this is where someone who wants
+  // to help with the costs gets pointed at the Patreon page (PATREON_URL).
+  function openSupportPopup(){
+    const backdrop = document.createElement('div');
+    backdrop.className = 'lxp-backdrop';
+    backdrop.innerHTML = `
+      <div class="lxp-modal">
+        <div class="lxp-head"><h3>♥ Support ChartBench</h3><button type="button" class="icon" id="supClose">✕</button></div>
+        <p>ChartBench is free, and it's staying that way. A lot of time and resources went into building it, and keeping thechartbench.com online carries real ongoing costs — hosting, the domain, and continued development.</p>
+        <p>If ChartBench has earned a place in your song prep and you'd like to help keep it running and growing, the Patreon page is the way to donate or support the project.</p>
+        <div class="lxp-actions">
+          <button type="button" class="ghost" id="supCancel">Cancel</button>
+          <button type="button" class="primary" id="supGo">Go to Patreon</button>
+        </div>
+      </div>`;
+    document.body.appendChild(backdrop);
+    const close = () => backdrop.remove();
+    backdrop.addEventListener('click', e => { if(e.target === backdrop) close(); });
+    backdrop.querySelector('#supClose').onclick = close;
+    backdrop.querySelector('#supCancel').onclick = close;
+    backdrop.querySelector('#supGo').onclick = () => { window.open(PATREON_URL, '_blank', 'noopener'); close(); };
+  }
+
   function openDownloadAppPopup(){
     const backdrop = document.createElement('div');
     backdrop.className = 'lxp-backdrop';
@@ -7879,6 +7918,7 @@ ${versesXml}
     el('btnPDF').onclick = doPDF;
     el('btnSetList').onclick = openSetListBuilder;
     el('btnDownloadApp').onclick = openDownloadAppPopup;
+    el('btnSupport').onclick = openSupportPopup;
     el('backupNudgeGo').onclick = openSettings;
     el('backupNudgeLater').onclick = () => { BackupStore.snooze(7); renderBackupNudge(); };
     el('mirrorNudgeGo').onclick = mirrorReconnect;
