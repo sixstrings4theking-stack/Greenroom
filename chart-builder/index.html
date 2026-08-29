@@ -1171,7 +1171,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 12:24';
+const APP_BUILD = '2026-08-29 12:25';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -3577,6 +3577,13 @@ const App = (() => {
     const top = ta.scrollTop, left = ta.scrollLeft;
     ta.value = newValue;
     ta.scrollTop = top; ta.scrollLeft = left;
+    // Not enough on its own: a toolbar click moved focus to the button, and
+    // the caller re-focuses the textarea AFTER this returns. Chrome scrolls
+    // a newly-focused textarea to its caret — which sits at the END of the
+    // text right after a value assignment — yanking the view to the bottom
+    // before setSelectionRange quietly moves the caret back. Re-assert the
+    // saved position after that whole sequence, before the next paint.
+    requestAnimationFrame(() => { ta.scrollTop = top; ta.scrollLeft = left; });
   }
   function applyEditorEdit(newValue){
     const ta = el('editor');
@@ -7788,7 +7795,7 @@ ${versesXml}
     const text = currentSong.lyricsContent || '';
     currentSong.lyricsContent = capitalizeLineStarts(text.slice(0, pos) + breakStr + text.slice(pos));
     dirty = true; updateSaveStatus();
-    el('editor').value = currentSong.lyricsContent;
+    setEditorValue(currentSong.lyricsContent);
     syncUndoBaseline();
     const newPos = pos + breakStr.length;
     el('editor').setSelectionRange(newPos, newPos);
