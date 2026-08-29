@@ -1171,7 +1171,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 12:03';
+const APP_BUILD = '2026-08-29 12:24';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1195,6 +1195,7 @@ const VERSION_NOTES = [
       'Text imports with no Key line now get their key predicted from the chords themselves (a minor-feel song lands on its relative major) instead of claiming C — which also fixes Key Change math on those songs. A stated minor key ("Em") now correctly charts as its relative major too.',
       'Text imports recognize section headers in any common form — "Verse 2", "CHORUS", "[Bridge]", with or without the colon — as long as the section name is the whole line, so lyrics that merely contain those words are never touched. A file whose content starts before "Chorus 2"-style numbering gets the missing first section labeled.',
       'A text import with no title line no longer swallows its first section header as the title/artist — the song is titled after the file name instead.',
+      'Inserting a section (or a chord from the picker, a key change, or using Undo/Redo) no longer scrolls the editor away from where you were working.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
@@ -3566,12 +3567,23 @@ const App = (() => {
     undoTimer = setTimeout(commitPendingUndo, 400);
   }
   // The one path for programmatic chart edits — see the note above.
+  // Assigning a textarea's .value resets its scroll to the top, and the
+  // setSelectionRange that usually follows doesn't scroll the caret back
+  // into view — so every programmatic rewrite of the editor goes through
+  // here, keeping the view exactly where the user was working (the edit
+  // happens at the caret they were just looking at).
+  function setEditorValue(newValue){
+    const ta = el('editor');
+    const top = ta.scrollTop, left = ta.scrollLeft;
+    ta.value = newValue;
+    ta.scrollTop = top; ta.scrollLeft = left;
+  }
   function applyEditorEdit(newValue){
     const ta = el('editor');
     commitPendingUndo();
     if(newValue !== ta.value){
       pushUndo(ta.value);
-      ta.value = newValue;
+      setEditorValue(newValue);
     }
     ta._lastValue = ta.value;
     onEditorInput();
@@ -8331,7 +8343,7 @@ ${versesXml}
         if(lyricsUndoStack.length===0) return;
         lyricsRedoStack.push(currentSong.lyricsContent);
         currentSong.lyricsContent = lyricsUndoStack.pop();
-        el('editor').value = currentSong.lyricsContent;
+        setEditorValue(currentSong.lyricsContent);
         syncUndoBaseline();
         dirty = true; updateSaveStatus();
         renderPreview(); renderParseStatus();
@@ -8339,7 +8351,7 @@ ${versesXml}
       }
       if(undoStack.length===0) return;
       redoStack.push(el('editor').value);
-      el('editor').value = undoStack.pop();
+      setEditorValue(undoStack.pop());
       syncUndoBaseline();
       onEditorInput();
     };
@@ -8349,7 +8361,7 @@ ${versesXml}
         if(lyricsRedoStack.length===0) return;
         lyricsUndoStack.push(currentSong.lyricsContent);
         currentSong.lyricsContent = lyricsRedoStack.pop();
-        el('editor').value = currentSong.lyricsContent;
+        setEditorValue(currentSong.lyricsContent);
         syncUndoBaseline();
         dirty = true; updateSaveStatus();
         renderPreview(); renderParseStatus();
@@ -8357,7 +8369,7 @@ ${versesXml}
       }
       if(redoStack.length===0) return;
       undoStack.push(el('editor').value);
-      el('editor').value = redoStack.pop();
+      setEditorValue(redoStack.pop());
       syncUndoBaseline();
       onEditorInput();
     };
