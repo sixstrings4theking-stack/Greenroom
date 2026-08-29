@@ -1184,7 +1184,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 16:04';
+const APP_BUILD = '2026-08-29 17:30';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1211,6 +1211,7 @@ const VERSION_NOTES = [
       'Inserting a section (or a chord from the picker, a key change, or using Undo/Redo) no longer scrolls the editor away from where you were working.',
       'An imported song now shows as the selected song in the library, and clicking any library song while you have unsaved edits asks before discarding them — edits can no longer be lost silently.',
       '2-Column mode rebuilt: the chart fills the LEFT column to the page bottom first (it used to balance-split content into the right column), the title block spans the full page width above the columns, and — new — Print and PDF now honor the toggle instead of quietly printing one column.',
+      'Chart-aware word wrap: a line too long for its space — a 2-Column column, or even a full-width page — now wraps at a word boundary with every chord staying above its syllable, instead of clipping off the edge. Applies identically to the live preview, Print, and PDF.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
@@ -1978,33 +1979,129 @@ const Renderer = (() => {
     return `<div class="cs-keychange-row">Key Change</div>`;
   }
 
-  function renderLine(parsedLine, displayKey, capo, keyChangeSemitones){
+  /* ---- Chart-aware word wrap ----
+     A chart line is two synchronized rows (chords positioned above
+     syllables by character column), so CSS wrapping would tear the chords
+     off their words. Instead, a line that exceeds the container's
+     character capacity is split at word boundaries into segments — each
+     chord travels with the syllable it sits above, continuation segments
+     indent WRAP_INDENT spaces — and each segment renders as its own
+     chord-row/lyric-row pair. Lines that fit render exactly as before. */
+  const WRAP_INDENT = 2;
+
+  // How many monospace characters fit one line of this container. Measured
+  // rather than assumed (font scale moves it; a fallback mono font can
+  // render its bold chord row a hair wider than the lyric row, so both are
+  // probed and the wider wins). Infinity = don't wrap (container not in
+  // the DOM, or too narrow to be meaningful).
+  function measureLineCapacity(container, twoCol){
+    if(!container || !container.isConnected) return Infinity;
+    let widest = 0;
+    ['chord-row', 'lyric-row'].forEach(cls => {
+      const p = document.createElement('div');
+      p.className = cls;
+      p.style.position = 'absolute'; p.style.visibility = 'hidden'; p.style.display = 'inline-block'; p.style.width = 'auto';
+      p.textContent = 'M'.repeat(40);
+      container.appendChild(p);
+      widest = Math.max(widest, p.getBoundingClientRect().width / 40);
+      p.remove();
+    });
+    if(!widest || !isFinite(widest)) return Infinity;
+    // Legacy CSS-multicol consumers (opts.twoCol) render half-width columns
+    // inside a full-width container — halve the capacity to match.
+    const lineW = twoCol ? (container.clientWidth - 32) / 2 : container.clientWidth;
+    const cap = Math.floor(lineW / widest);
+    return cap > 8 ? cap : Infinity;
+  }
+
+  // Splits one flattened line (lyric string + display-chord anchors) into
+  // segments of at most `cap` characters, chord row included — a chord
+  // symbol never pokes past the edge. Breaks at spaces (hard-breaks a
+  // single unbreakable run); chords anchored at or past a break go to the
+  // next segment with their word.
+  function wrapFlatLine(lyric, chords, cap){
+    const segs = [];
+    let pos = 0, first = true;
+    for(;;){
+      const indent = first ? 0 : WRAP_INDENT;
+      const avail = cap - indent;
+      const rest = lyric.length - pos;
+      const restChordNeed = Math.max(0, ...chords.filter(c => c.col >= pos).map(c => c.col - pos + c.len));
+      if(Math.max(rest, restChordNeed) <= avail || avail <= 8){
+        segs.push({pos, end: lyric.length, indent});
+        return segs;
+      }
+      let b = -1;
+      for(let i = pos + 1; i <= pos + avail && i < lyric.length; i++){
+        if(lyric[i] !== ' ') continue;
+        if(chords.every(c => c.col < pos || c.col >= i || (c.col - pos + c.len) <= avail)) b = i;
+      }
+      if(b === -1) b = pos + avail;
+      segs.push({pos, end: b, indent});
+      pos = b;
+      while(lyric[pos] === ' ') pos++;
+      first = false;
+      if(pos >= lyric.length && !chords.some(c => c.col >= pos)) return segs;
+    }
+  }
+
+  // Renders the flattened line as one .cs-line per segment. Chord DISPLAY
+  // text (post NNS-conversion) drives the column math, so alignment holds
+  // whichever notation is showing; chord `html` may carry markup
+  // (note-annotation <sup>s) while `len` is the plain display length.
+  function renderFlatSegments(lyric, chords, cap){
+    return wrapFlatLine(lyric, chords, cap).map((seg, si, all) => {
+      const isLast = si === all.length - 1;
+      const own = chords.filter(c => c.col >= seg.pos && (c.col < seg.end || isLast));
+      let chordRow = '', col = 0;
+      own.forEach(c => {
+        const target = Math.max(0, c.col - seg.pos) + seg.indent;
+        while(col < target){ chordRow += ' '; col++; }
+        chordRow += c.html;
+        col += c.len;
+      });
+      const lyricText = ' '.repeat(seg.indent) + lyric.slice(seg.pos, seg.end);
+      return `<div class="cs-line"><div class="chord-row">${chordRow}</div><div class="lyric-row">${escapeHtml(lyricText) || '&nbsp;'}</div></div>`;
+    }).join('');
+  }
+
+  function renderLine(parsedLine, displayKey, capo, keyChangeSemitones, maxChars = Infinity){
     if(parsedLine.type === 'blank') return `<div class="cs-line">&nbsp;</div>`;
     if(parsedLine.type === 'comment') return `<div class="comment-row">${escapeHtml(parsedLine.text)}</div>`;
-    if(parsedLine.type === 'lyric-only') return `<div class="lyric-row">${escapeHtml(parsedLine.text)}</div>`;
-    if(parsedLine.type === 'chords-only'){
-      const html = parsedLine.chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo, keyChangeSemitones))).join('   ');
-      return `<div class="chordonly-row">${html}</div>`;
+    if(parsedLine.type === 'lyric-only'){
+      return wrapFlatLine(parsedLine.text, [], maxChars).map(seg =>
+        `<div class="lyric-row">${escapeHtml(' '.repeat(seg.indent) + parsedLine.text.slice(seg.pos, seg.end)) || '&nbsp;'}</div>`).join('');
     }
-    // 'line': build a chord row aligned above a lyric row using padding.
-    // Chord DISPLAY text (post NNS-conversion) is used for alignment math so
-    // columns still line up even when numbers expand/shrink into letter chords.
-    // Note-annotations are rendered as HTML (bold/superscript) rather than
-    // plain spliced text — fine since they're inserted at line end, so there's
-    // nothing after them whose column alignment could be thrown off.
-    let offset = 0; let builtHtml = ''; let col = 0;
+    if(parsedLine.type === 'chords-only'){
+      // Greedy-pack the chord tokens into rows of at most maxChars,
+      // keeping the 3-space separator; a fitting line is one row,
+      // byte-identical to the old output.
+      const toks = parsedLine.chords.map(c => {
+        const d = formatChordForDisplay(c, displayKey, capo, keyChangeSemitones);
+        return {html: renderTokenHtml(d), len: d.length};
+      });
+      const rows = []; let rowHtml = null, col = 0;
+      toks.forEach(t => {
+        if(rowHtml === null){ rowHtml = ''; col = 0; }
+        else if(col + 3 + t.len > maxChars){ rows.push(rowHtml); rowHtml = ' '.repeat(WRAP_INDENT); col = WRAP_INDENT; }
+        else { rowHtml += '   '; col += 3; }
+        rowHtml += t.html; col += t.len;
+      });
+      if(rowHtml !== null) rows.push(rowHtml);
+      return rows.map(r => `<div class="chordonly-row">${r}</div>`).join('');
+    }
+    // 'line': flatten to a lyric string + chord anchors, then render as
+    // one or more aligned segments (one, when it fits maxChars).
+    let offset = 0; const flatChords = [];
     parsedLine.tokens.forEach(tok => {
-      const lyricText = tok.text || '';
       if(tok.chord){
         const displayChord = formatChordForDisplay(tok.chord, displayKey, capo, keyChangeSemitones);
-        while(col < offset){ builtHtml += ' '; col++; }
-        builtHtml += renderTokenHtml(displayChord);
-        col += displayChord.length;
+        flatChords.push({col: offset, html: renderTokenHtml(displayChord), len: displayChord.length});
       }
-      offset += lyricText.length;
+      offset += (tok.text || '').length;
     });
     const lyricRow = parsedLine.tokens.map(t => t.text || '').join('');
-    return `<div class="cs-line"><div class="chord-row">${builtHtml}</div><div class="lyric-row">${escapeHtml(lyricRow) || '&nbsp;'}</div></div>`;
+    return renderFlatSegments(lyricRow, flatChords, maxChars);
   }
 
   // A section with an empty body whose label exactly matches (case-
@@ -2040,7 +2137,7 @@ const Renderer = (() => {
     return out;
   }
 
-  function renderSections(sections, displayKey, capo, expandRepeats){
+  function renderSections(sections, displayKey, capo, expandRepeats, maxChars = Infinity){
     // Running total of every {Key Change: N} marker encountered so far —
     // persists across section boundaries (a key change isn't scoped to one
     // section) and keeps accumulating until a later marker changes it again.
@@ -2052,12 +2149,18 @@ const Renderer = (() => {
       // the same visual row instead of as a separate block below it — that's
       // what "same line" means in the rendered output, not just in the raw
       // editor text. Any lines after that still render normally underneath.
+      // UNLESS label + chords would blow past the line capacity (a narrow
+      // 2-col column) — then the chords stay a normal chords-only line
+      // below the label, where the wrap logic handles them.
       let inlineChordsHtml = '';
       let remainingLines = sec.lines;
       if(sec.lines.length && sec.lines[0].type === 'chords-only'){
-        const chordsHtml = sec.lines[0].chords.map(c => renderTokenHtml(formatChordForDisplay(c, displayKey, capo, keyChangeSemitones))).join('&nbsp;&nbsp;&nbsp;');
-        inlineChordsHtml = ` <span class="cs-inline-chords">${chordsHtml}</span>`;
-        remainingLines = sec.lines.slice(1);
+        const displays = sec.lines[0].chords.map(c => formatChordForDisplay(c, displayKey, capo, keyChangeSemitones));
+        const approxLen = (sec.label ? sec.label.length + 2 : 0) + displays.reduce((s, d) => s + d.length, 0) + 3 * Math.max(0, displays.length - 1);
+        if(approxLen <= maxChars){
+          inlineChordsHtml = ` <span class="cs-inline-chords">${displays.map(renderTokenHtml).join('&nbsp;&nbsp;&nbsp;')}</span>`;
+          remainingLines = sec.lines.slice(1);
+        }
       }
       const label = sec.label ? `<div class="cs-section-label">${escapeHtml(sec.label)}:${inlineChordsHtml}</div>` : '';
       const lines = remainingLines.map(l => {
@@ -2066,7 +2169,7 @@ const Renderer = (() => {
           keyChangeSemitones += l.semitones;
           return marker;
         }
-        return renderLine(l, displayKey, capo, keyChangeSemitones);
+        return renderLine(l, displayKey, capo, keyChangeSemitones, maxChars);
       }).join('');
       return `<div class="cs-section" data-section="${sec.label ? escapeHtml(sec.label) : ''}">${label}${lines}</div>`;
     }).join('');
@@ -2090,6 +2193,11 @@ const Renderer = (() => {
   }
 
   function renderChordSheet(container, song, opts={}){
+    // Word wrap capacity, measured against THIS container's real width —
+    // the app's pipeline renders into full-width or column-width measure
+    // hosts (see buildPrintPagesFor), so preview, print and PDF all wrap
+    // identically by construction.
+    const maxChars = measureLineCapacity(container, !!opts.twoCol);
     const sections = ChordParser.parse(song.content || '');
     const metaBits = [];
     if(song.key) metaBits.push(`Key: ${song.key}`);
@@ -2107,7 +2215,7 @@ const Renderer = (() => {
       ${song.churchCcli ? `<div class="cs-permission" style="text-align:${titleAlign};">Used by Permission CCLI #: ${escapeHtml(song.churchCcli)}</div>` : ''}
       ${roadmap ? `<div class="cs-roadmap" style="justify-content:${titleAlign==='center'?'center':(titleAlign==='right'?'flex-end':'flex-start')};">${roadmap}</div>` : ''}
       ${metaBits.length ? `<div class="cs-meta">${metaBits.map(escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
-      ${renderSections(sections, song.key, song.capo, !!song.expandRepeats)}
+      ${renderSections(sections, song.key, song.capo, !!song.expandRepeats, maxChars)}
     `;
     container.classList.toggle('cols-2', !!opts.twoCol);
     return sections;
