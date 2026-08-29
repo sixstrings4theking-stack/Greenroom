@@ -421,7 +421,20 @@ small{color:var(--text-faint);}
   background:#fff; color:#111; box-shadow:0 4px 24px rgba(0,0,0,.4); border-radius:2px;
   overflow:hidden; transform-origin:top left;
 }
-.a4-page.cols-2{column-count:2; column-gap:32px;}
+/* Legacy CSS-multicol 2-col (still applied by Renderer.renderChordSheet for
+   direct embedders); the app's own preview/print/PDF now use the explicit
+   .cs-cols flex columns below instead. column-fill:auto = left column fills
+   to the bottom first rather than 'balance' splitting content evenly. */
+.a4-page.cols-2{column-count:2; column-gap:32px; column-fill:auto;}
+/* 2-Column mode, the real pipeline: the Paginator packs each column
+   explicitly (left column fills to the page bottom FIRST, then the right —
+   see Paginator's columns option) and the page renders them as a plain
+   flex row, so the live preview, Print, and the html2canvas PDF capture
+   (which can't draw CSS multicol at all) all produce the same layout.
+   Header lines (title/roadmap/meta) sit above this wrapper and span the
+   full page width naturally. */
+.cs-cols{display:flex; gap:32px; align-items:flex-start;}
+.cs-cols .cs-col{flex:1 1 0; min-width:0; overflow:hidden;}
 /* Print/PDF output (.cs-page, built by renderPrintArea/doPDF) previously had
    no width of its own outside @media print. Since it's captured by
    html2canvas while sitting inside a position:fixed #printArea with no width,
@@ -1171,7 +1184,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 12:29';
+const APP_BUILD = '2026-08-29 16:04';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1197,6 +1210,7 @@ const VERSION_NOTES = [
       'A text import with no title line no longer swallows its first section header as the title/artist — the song is titled after the file name instead.',
       'Inserting a section (or a chord from the picker, a key change, or using Undo/Redo) no longer scrolls the editor away from where you were working.',
       'An imported song now shows as the selected song in the library, and clicking any library song while you have unsaved edits asks before discarding them — edits can no longer be lost silently.',
+      '2-Column mode rebuilt: the chart fills the LEFT column to the page bottom first (it used to balance-split content into the right column), the title block spans the full page width above the columns, and — new — Print and PDF now honor the toggle instead of quietly printing one column.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
@@ -2121,7 +2135,12 @@ const Paginator = (() => {
   // whole thing fits, or fewer than the label + 2 lines would land on the
   // current page (an orphaned header helps nobody — old move-it-all
   // behavior is better there).
-  function splitSection(el, firstCapacity, pageCapacity){
+  // capacityForChunk(k) returns the space available to continuation chunk k
+  // (k >= 1) — a function, not a constant, because in 2-column mode the
+  // columns a long section spills into can have different heights (a page-1
+  // column sits under the full title header; later columns under the slim
+  // "(cont'd)" line).
+  function splitSection(el, firstCapacity, capacityForChunk){
     const children = Array.from(el.children);
     if(children.length < 3) return null;
     const secTop = el.getBoundingClientRect().top;
@@ -2144,7 +2163,7 @@ const Paginator = (() => {
           carried.unshift(cur.pop());
         }
         chunks.push(cur);
-        cur = carried; capacity = pageCapacity;
+        cur = carried; capacity = capacityForChunk(chunks.length);
         capUsed = labelH + carried.reduce((s, jj) => s + spans[jj], 0);
       }
       cur.push(j); capUsed += spans[j];
@@ -2170,51 +2189,75 @@ const Paginator = (() => {
     }).filter(Boolean);
   }
 
+  // Header block height = through whichever header line ACTUALLY sits
+  // lowest on the page — order-agnostic, so future header reordering can't
+  // silently break this (title/artist/copyright/permission/roadmap/meta
+  // can appear in any order).
+  function measureHeaderHeight(container){
+    const headerCandidates = ['.cs-title', '.cs-artist', '.cs-copyright', '.cs-permission', '.cs-roadmap', '.cs-meta']
+      .map(sel => container.querySelector(sel))
+      .filter(Boolean);
+    return headerCandidates.length ?
+      Math.max(...headerCandidates.map(el => el.getBoundingClientRect().bottom)) - container.getBoundingClientRect().top : 0;
+  }
+
   // Measures rendered section elements and packs them into pages. A section
   // that fits in the space left stays whole; one that doesn't is split at
   // line boundaries (see splitSection) so pages fill top to bottom. When a
-  // split isn't sensible the section moves to a fresh page whole, exactly
-  // as before — and a section taller than an entire page splits against
-  // full pages rather than overflowing. maxHeightPx = usable page height.
-  // contHeaderPx budgets the slim "Title (cont'd) — page N" header every
-  // page after the first carries (see buildPageHeaderHtml) — without it,
-  // exactly-filled continuation pages overflow by that header's height.
-  function paginate(sourceContainer, maxHeightPx, contHeaderPx = 0){
+  // split isn't sensible the section moves to a fresh page whole — and a
+  // section taller than an entire page/column splits across as many as it
+  // needs rather than overflowing. maxHeightPx = usable page height.
+  // opts.contHeaderPx budgets the slim "Title (cont'd) — page N" header
+  // every page after the first carries (see buildPageHeaderHtml).
+  // opts.columns = 2 packs COLUMNS instead of pages — the unit loop below
+  // fills one column at a time (left fills completely before the right
+  // ever starts), then pairs them into pages as an explicit .cs-cols flex
+  // row; every column on page 1 sits under the full title header, later
+  // ones under the slim header. opts.headerHeightPx overrides the header
+  // measurement for multi-column runs, where sections are measured in a
+  // narrow column-width container but the header spans the full page.
+  function paginate(sourceContainer, maxHeightPx, opts = {}){
+    const contHeaderPx = opts.contHeaderPx || 0;
+    const columns = opts.columns || 1;
     const sectionEls = Array.from(sourceContainer.querySelectorAll('.cs-section'));
-    const pages = [[]];
+    const headerHeight = opts.headerHeightPx != null ? opts.headerHeightPx : measureHeaderHeight(sourceContainer);
+    // Capacity of packing unit u (a column; the whole page when columns=1).
+    const unitCap = u => maxHeightPx - (Math.floor(u / columns) === 0 ? headerHeight : contHeaderPx);
+    const units = [[]];
     let used = 0;
-    // Measure through whichever header line ACTUALLY sits lowest on the page —
-    // order-agnostic, so future header reordering can't silently break this
-    // (title/artist/copyright/permission/roadmap/meta can appear in any order).
-    const headerCandidates = ['.cs-title', '.cs-artist', '.cs-copyright', '.cs-permission', '.cs-roadmap', '.cs-meta']
-      .map(sel => sourceContainer.querySelector(sel))
-      .filter(Boolean);
-    const headerHeight = headerCandidates.length ?
-      Math.max(...headerCandidates.map(el => el.getBoundingClientRect().bottom)) - sourceContainer.getBoundingClientRect().top : 0;
-    used = headerHeight;
-    const cur = () => pages[pages.length - 1];
+    const cur = () => units[units.length - 1];
+    const uIdx = () => units.length - 1;
+    const newUnit = () => { units.push([]); used = 0; };
     sectionEls.forEach(el => {
       const h = el.getBoundingClientRect().height + SECTION_MARGIN;
-      if(used + h <= maxHeightPx){ cur().push(el.outerHTML); used += h; return; }
-      const pageCap = maxHeightPx - contHeaderPx - SECTION_MARGIN - 2; // -2: rounding slack
-      let parts = splitSection(el, maxHeightPx - used - SECTION_MARGIN - 2, pageCap);
+      if(used + h <= unitCap(uIdx())){ cur().push(el.outerHTML); used += h; return; }
+      const capFor = k => unitCap(uIdx() + k) - SECTION_MARGIN - 2; // -2: rounding slack
+      let parts = splitSection(el, unitCap(uIdx()) - used - SECTION_MARGIN - 2, capFor);
       if(!parts){
-        // Not enough room to split usefully — fresh page, whole section if
-        // it fits there, split against full pages if even that overflows.
-        if(cur().length){ pages.push([]); used = contHeaderPx; }
-        if(used + h <= maxHeightPx){ cur().push(el.outerHTML); used += h; return; }
-        parts = splitSection(el, maxHeightPx - used - SECTION_MARGIN - 2, pageCap);
+        // Not enough room to split usefully — fresh unit, whole section if
+        // it fits there, split against full units if even that overflows.
+        if(cur().length) newUnit();
+        if(used + h <= unitCap(uIdx())){ cur().push(el.outerHTML); used += h; return; }
+        const capFor2 = k => unitCap(uIdx() + k) - SECTION_MARGIN - 2;
+        parts = splitSection(el, unitCap(uIdx()) - used - SECTION_MARGIN - 2, capFor2);
         if(!parts){ cur().push(el.outerHTML); used += h; return; } // pathological: overflow as before
       }
       parts.forEach((p, k) => {
-        if(k > 0){ pages.push([]); used = contHeaderPx; }
+        if(k > 0) newUnit();
         cur().push(p.html);
         used += p.height + SECTION_MARGIN;
       });
     });
+    if(columns === 1) return units;
+    const pages = [];
+    for(let i = 0; i < units.length; i += columns){
+      const cols = [];
+      for(let c = 0; c < columns; c++) cols.push(`<div class="cs-col">${(units[i + c] || []).join('')}</div>`);
+      pages.push([`<div class="cs-cols">${cols.join('')}</div>`]);
+    }
     return pages;
   }
-  return { paginate };
+  return { paginate, measureHeaderHeight };
 })();
 
 /* ---------------------------------------------------------------------------
@@ -3457,12 +3500,13 @@ const App = (() => {
   function renderPreview(){
     if(!currentSong) return;
     if(el('btnLyricsOnly').classList.contains('active')){ renderLyricsSlides(); return; }
-    const twoCol = el('toggle2col').checked;
+    // 2-Column markup already lives inside the pages (see buildPrintPages /
+    // Paginator's columns option) — no multicol class on the page itself.
     const {song, pages} = buildPrintPages();
     const parts = buildPageMetaParts(song);
     const container = el('previewScroll');
     container.innerHTML = pages.map((sections, i) => `
-      <div class="a4-page-wrap"><div class="a4-page${twoCol ? ' cols-2' : ''}${bodyAlignClass(song)}">
+      <div class="a4-page-wrap"><div class="a4-page${bodyAlignClass(song)}">
         ${buildPageHeaderHtml(song, i, parts)}
         ${sections.join('')}
       </div></div>
@@ -6051,7 +6095,7 @@ ${versesXml}
   // printing), since the global var on <html> only reflects the open song's
   // zoom. Left unset, measurement inherits the global var, exactly as the
   // single-song Print/PDF path always has.
-  function buildPrintPagesFor(song, fontScalePct){
+  function buildPrintPagesFor(song, fontScalePct, twoCol){
     // Render into an offscreen full-width clone to measure section heights.
     const measureHost = document.createElement('div');
     measureHost.style.position='fixed'; measureHost.style.left='-9999px'; measureHost.style.top='0';
@@ -6073,14 +6117,36 @@ ${versesXml}
     sheet.appendChild(contProbe);
     const contHeaderPx = contProbe.getBoundingClientRect().height + 10;
     contProbe.remove();
-    const pages = Paginator.paginate(sheet, PAGE_HEIGHT_PX, contHeaderPx);
+    let pages;
+    if(twoCol){
+      // The header spans the full page width (measured from the full-width
+      // sheet above), but the sections live in half-width columns — so
+      // they're measured in a second host at the real column width:
+      // (content width − the 32px .cs-cols gap) / 2.
+      const headerHeightPx = Paginator.measureHeaderHeight(sheet);
+      const colHost = document.createElement('div');
+      colHost.style.position='fixed'; colHost.style.left='-9999px'; colHost.style.top='0';
+      colHost.style.width = ((pageSpec.contentW - 32/96) / 2).toFixed(3) + 'in';
+      if(fontScalePct) colHost.style.setProperty('--chart-font-scale', fontScalePct / 100);
+      document.body.appendChild(colHost);
+      const colSheet = document.createElement('div');
+      colHost.appendChild(colSheet);
+      Renderer.renderChordSheet(colSheet, song, {twoCol:false});
+      pages = Paginator.paginate(colSheet, PAGE_HEIGHT_PX, {contHeaderPx, columns: 2, headerHeightPx});
+      document.body.removeChild(colHost);
+    } else {
+      pages = Paginator.paginate(sheet, PAGE_HEIGHT_PX, {contHeaderPx});
+    }
     document.body.removeChild(measureHost);
     return pages;
   }
 
+  // The 2-Column toggle flows through here, so the live preview, Print,
+  // and PDF (all built from these pages) honor it identically — the pages
+  // themselves carry the .cs-cols column markup when it's on.
   function buildPrintPages(){
     const song = currentSongSnapshot();
-    return {song, pages: buildPrintPagesFor(song)};
+    return {song, pages: buildPrintPagesFor(song, undefined, el('toggle2col').checked)};
   }
 
   function renderPrintArea(){
