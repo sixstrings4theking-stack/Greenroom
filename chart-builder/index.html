@@ -432,6 +432,10 @@ small{color:var(--text-faint);}
 .title-arr-row{display:flex; gap:6px; align-items:center;}
 .title-arr-row input{flex:1; min-width:0;}
 .title-arr-row .arr-control-row{display:flex; gap:4px; align-items:center; flex-shrink:0;}
+/* Preferred-key chips ride the Title row too (same stay-visible-when-
+   collapsed convention as the arrangement control); the picker that ADDS
+   keys stays in the collapsible Preferred Key(s) field below. */
+.title-arr-row #preferredKeyChips{flex:0 1 auto; max-width:45%; justify-content:flex-end;}
 /* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
    stripe + tinted background make it visually obvious this isn't the normal
    editable chart, matching the Lyrics button's own color. Tint lives on
@@ -848,6 +852,7 @@ small{color:var(--text-faint);}
               <button type="button" id="arrAddBtn" class="icon arr-add" title="New arrangement — a copy of the one showing">+</button>
             </span>
             <input id="mTitle" placeholder="Song Title">
+            <div class="key-chips" id="preferredKeyChips"></div>
           </div>
           <div class="align-controls meta-collapsible" id="titleAlignControls">
             <button type="button" class="icon align-btn" data-align="left" title="Align left">⟸</button>
@@ -879,7 +884,6 @@ small{color:var(--text-faint);}
                 <button type="button" id="prefKeyAdd" class="key-mod-btn key-add-btn" title="Add this key to Preferred Key(s)">+ Add</button>
               </div>
             </div>
-            <div class="key-chips" id="preferredKeyChips"></div>
           </div>
           <label style="margin-top:6px;">Tags (Comma Separated)</label>
           <input id="mTags" placeholder="fast, christmas, communion, easter">
@@ -1218,7 +1222,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 18:03';
+const APP_BUILD = '2026-08-29 18:12';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1247,7 +1251,7 @@ const VERSION_NOTES = [
       '2-Column mode rebuilt: the chart fills the LEFT column to the page bottom first (it used to balance-split content into the right column), the title block spans the full page width above the columns, and — new — Print and PDF now honor the toggle instead of quietly printing one column.',
       'Chart-aware word wrap: a line too long for its space — a 2-Column column, or even a full-width page — now wraps at a word boundary with every chord staying above its syllable, instead of clipping off the edge. Applies identically to the live preview, Print, and PDF.',
       'The editor soft-wraps long lines too (Wrap button by the editor zoom controls turns it off) — viewing only, the text itself never changes. A ¶ mark shows at every real line break (its own toggle button) so a wrapped line and a typed Enter read differently at a glance.',
-      'The Arrangement control moved from the Editor heading to sit left of the Title box — and like the Title, it stays visible when the metadata bar is collapsed.',
+      'The Arrangement control moved from the Editor heading to sit left of the Title box, and the Preferred Key chips now ride the right end of the same row — both stay visible when the metadata bar is collapsed. The arrangement menu also keeps itself on screen instead of running off the page edge.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
@@ -4709,8 +4713,11 @@ const App = (() => {
          <div class="item" data-act="rename">Rename…</div>
          <div class="item${arrs.length > 1 ? '' : ' disabled'}" data-act="delete">Delete this arrangement</div>`;
     const r = el('arrMenuBtn').getBoundingClientRect();
-    menu.style.left = r.left + 'px'; menu.style.top = (r.bottom + 4) + 'px';
+    // Show first so the menu has a measurable width, then clamp inside the
+    // viewport — an unclamped left-aligned menu can run off the page edge.
     menu.classList.remove('hidden');
+    menu.style.left = Math.max(8, Math.min(r.left, window.innerWidth - menu.offsetWidth - 8)) + 'px';
+    menu.style.top = (r.bottom + 4) + 'px';
     menu.querySelectorAll('.item').forEach(it => {
       it.onclick = () => {
         closeArrangementMenu();
