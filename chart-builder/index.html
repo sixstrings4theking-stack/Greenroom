@@ -425,6 +425,14 @@ small{color:var(--text-faint);}
 #editorMirror.nowrap{white-space:pre; overflow-wrap:normal;}
 #editorMirror .pmark{color:#48525f;}
 #editorMarksToggle.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
+/* Preferred Key(s) field splits in two: keys + tags on the left, the song's
+   Versions control right-justified past a vertical rule (moved here from
+   Settings > Data, 2026-08-29). */
+.pk-split{display:flex; gap:12px; align-items:stretch;}
+.pk-split .pk-main{flex:1; min-width:0;}
+.pk-split .pk-divider{width:1px; background:var(--border-soft); flex-shrink:0; align-self:stretch;}
+.pk-split .pk-versions{flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+.pk-split .pk-versions button{white-space:nowrap; font-size:12px; padding:5px 10px;}
 /* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
    stripe + tinted background make it visually obvious this isn't the normal
    editable chart, matching the Lyrics button's own color. Tint lives on
@@ -847,6 +855,8 @@ small{color:var(--text-faint);}
           </div>
         </div>
         <div class="field meta-collapsible" style="flex:2 1 240px;">
+          <div class="pk-split">
+          <div class="pk-main">
           <label>Preferred Key(s)</label>
           <div class="key-picker-row">
             <div class="key-picker" id="preferredKeyPicker">
@@ -870,6 +880,13 @@ small{color:var(--text-faint);}
           </div>
           <label style="margin-top:6px;">Tags (Comma Separated)</label>
           <input id="mTags" placeholder="fast, christmas, communion, easter">
+          </div>
+          <div class="pk-divider"></div>
+          <div class="pk-versions">
+            <label>Versions</label>
+            <button type="button" id="btnVersionsMeta" title="Saved versions of this song's current arrangement — captured on every Save. Click to view or restore.">History</button>
+          </div>
+          </div>
         </div>
       </div>
       <div class="meta-row meta-collapsible">
@@ -1209,7 +1226,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 17:53';
+const APP_BUILD = '2026-08-29 17:57';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1238,6 +1255,7 @@ const VERSION_NOTES = [
       '2-Column mode rebuilt: the chart fills the LEFT column to the page bottom first (it used to balance-split content into the right column), the title block spans the full page width above the columns, and — new — Print and PDF now honor the toggle instead of quietly printing one column.',
       'Chart-aware word wrap: a line too long for its space — a 2-Column column, or even a full-width page — now wraps at a word boundary with every chord staying above its syllable, instead of clipping off the edge. Applies identically to the live preview, Print, and PDF.',
       'The editor soft-wraps long lines too (Wrap button by the editor zoom controls turns it off) — viewing only, the text itself never changes. A ¶ mark shows at every real line break (its own toggle button) so a wrapped line and a typed Enter read differently at a glance.',
+      'Version History moved out of Settings: a "History (N)" button now sits in the Preferred Key(s) section, right of a divider, showing the current arrangement’s saved-version count.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
@@ -3722,7 +3740,19 @@ const App = (() => {
   // status text is gone): green "Saved" when clean, red "Unsaved" when
   // there are changes to save. A brand-new untouched song reads as clean —
   // the moment anything is typed, dirty flips it to "Unsaved".
+  // Versions button in the Preferred Key(s) field: shows the saved-version
+  // count for the current arrangement (currentSong.versions mirrors the
+  // active arrangement's history). Kept fresh here since updateSaveStatus
+  // already runs on every load, save and edit.
+  function renderVersionsMetaButton(){
+    const vBtn = document.getElementById('btnVersionsMeta');
+    if(!vBtn) return;
+    const n = (currentSong && Array.isArray(currentSong.versions)) ? currentSong.versions.length : 0;
+    vBtn.textContent = n ? `History (${n})` : 'History';
+    vBtn.disabled = !currentSong;
+  }
   function updateSaveStatus(){
+    renderVersionsMetaButton();
     const btn = el('btnSave');
     if(!currentSong){
       btn.disabled = true;
@@ -7363,7 +7393,6 @@ ${versesXml}
       </div>
       <h4>Data</h4>
       <div class="form-row" id="storageStatus"><small>Checking storage…</small></div>
-      <div class="form-row"><button id="versionHistoryBtn" title="Saved versions of the current song — captured on every Save">Version history (current song)…</button></div>
       <div class="form-row"><button id="exportAllBtn">Export entire library (JSON)</button></div>
       <div class="form-row"><button id="restoreDemosBtn" title="Bring back any of the demo songs you've deleted — ones still in the library aren't duplicated">Restore demo songs</button></div>
       <div class="form-row"><button id="wipeBtn" style="border-color:var(--danger); color:var(--danger);">Clear local database</button></div>
@@ -7445,12 +7474,6 @@ ${versesXml}
         ChurchCcliStore.set(e.target.value);
       });
       renderStorageStatus();
-      // Close Settings before the Version History drawer opens, so the two
-      // drawers never stack on top of each other.
-      drawer.querySelector('#versionHistoryBtn').onclick = () => {
-        drawer.remove();
-        openVersions();
-      };
       drawer.querySelector('#exportAllBtn').onclick = async () => {
         const all = await DB.getAllSongs();
         downloadBlob('worship-chart-library.json', JSON.stringify(all, null, 2), 'application/json');
@@ -8449,6 +8472,7 @@ ${versesXml}
     el('mirrorNudgeGo').onclick = mirrorReconnect;
     el('btnCircle').onclick = openCircleOfFifths;
     el('btnGuide').onclick = openUserGuide;
+    el('btnVersionsMeta').onclick = openVersions;
     el('arrMenuBtn').onclick = openArrangementMenu;
     el('arrAddBtn').onclick = addArrangement;
     el('btnLyricsOnly').onclick = toggleLyricsOnlyView;
