@@ -1171,7 +1171,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 10:47';
+const APP_BUILD = '2026-08-29 11:37';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1191,7 +1191,9 @@ const VERSION_NOTES = [
       'User Guide updated for all of the above (edition August 23, 2026).',
     ]],
     ['Fixed', [
-      'Importing a file with no ChartBench identity now also updates an existing song when its title and artist match exactly (and only one song matches) — so re-importing generated or hand-made files no longer doubles the library.',
+      'Text imports with no Key line now get their key predicted from the chords themselves (a minor-feel song lands on its relative major) instead of claiming C — which also fixes Key Change math on those songs. A stated minor key ("Em") now correctly charts as its relative major too.',
+      'Text imports recognize section headers in any common form — "Verse 2", "CHORUS", "[Bridge]", with or without the colon — as long as the section name is the whole line, so lyrics that merely contain those words are never touched. A file whose content starts before "Chorus 2"-style numbering gets the missing first section labeled.',
+      'A text import with no title line no longer swallows its first section header as the title/artist — the song is titled after the file name instead.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
@@ -2647,37 +2649,159 @@ const IO = (() => {
     return song;
   }
 
+  // A line is a chord line when EVERY token is either a letter chord
+  // (G, F#m7, C/E) or a Nashville Number token (1, 6m7, b3, 4/5) — the
+  // NN alternative mirrors the letter one so .txt files this app exports
+  // while displaying NN merge back correctly on re-import, not just
+  // letter-notation ones.
+  function looksLikeChordLine(l){
+    if(l.trim()==='') return false;
+    const tokens = l.trim().split(/\s+/);
+    const LETTER = /^[A-G](#|b)?(m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/[A-G](#|b)?)?$/;
+    const NN = /^(b|#)?[1-7](m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/(b|#)?[1-7])?$/;
+    return tokens.length>0 && tokens.every(t => LETTER.test(t) || NN.test(t));
+  }
+
+  // Any whole line that reads as a section name counts as a header — with
+  // or without the trailing colon, numbered or not, in [brackets] or
+  // (parens), any case: "Verse 2", "CHORUS", "[Bridge]", "Pre Chorus 2:".
+  // Whole-line-only matching is what keeps lyrics safe: a lyric that merely
+  // CONTAINS one of these words ("sing the chorus again") never matches,
+  // because the entire line must be nothing but the section name. Returns
+  // the normalized "Family N:" editor form, or null when the line isn't a
+  // header. Lines with a trailing colon but an unknown name ("Turn 2:")
+  // still count as custom section headers, same as before.
+  const SECTION_FAMILY_RE = /^[\[\(]?\s*(intro|verse|pre[\s\-]?chorus|chorus|refrain|bridge|channel|vamp|tag|interlude|instrumental|turn\s?around|outro|ending)\s*[#.]?\s*(\d+)?\s*[\]\)]?\s*:?\s*$/i;
+  function normalizeSectionHeader(line){
+    const t = line.trim();
+    const m = t.match(SECTION_FAMILY_RE);
+    if(m){
+      let fam = m[1].toLowerCase().replace(/[\s\-]+/g, '');
+      fam = fam === 'prechorus' ? 'Pre-Chorus' : (fam === 'turnaround' ? 'Turnaround' : fam.charAt(0).toUpperCase() + fam.slice(1));
+      return { label: fam + (m[2] ? ' ' + m[2] : '') + ':', family: fam, num: m[2] ? parseInt(m[2], 10) : 0 };
+    }
+    if(/^[A-Za-z][A-Za-z0-9 \-]{0,30}:\s*$/.test(t)){
+      return { label: t.replace(/:\s*$/, ':'), family: null, num: 0 };
+    }
+    return null;
+  }
+
+  // A whole line that only names a key — "Key: G", "Key of E minor",
+  // "(Key G)", "KEY - Bb" — read as the stated key and stripped from the
+  // body. 'key' mid-sentence in a lyric never matches (whole line only).
+  function parseKeyDenoteLine(line){
+    const m = line.trim().match(/^\(?\s*key\s*(?:of\b|:|=|\-)?\s*([A-Ga-g][#b♯♭]?\s*(?:m\b|min(?:or)?|maj(?:or)?)?)\s*\)?\s*$/i);
+    return m ? m[1].replace(/\s+/g, ' ').trim() : null;
+  }
+
+  // Normalizes any stated-key string to the bare MAJOR key ChartBench
+  // charts against: "e minor" / "Em" -> "G" (a minor song is a 6m-centered
+  // chart in its relative major — the Display Key list is major-only),
+  // "bb" -> "Bb", "F# major" -> "F#". Returns null for strings that don't
+  // name a key at all (including 'NN').
+  function normalizeToMajorKey(k){
+    const m = String(k || '').trim().match(/^([A-Ga-g])([#b♯♭])?\s*(m\b|min(?:or)?)?\s*(?:maj(?:or)?)?$/i);
+    if(!m) return null;
+    const acc = m[2] === '♯' ? '#' : (m[2] === '♭' ? 'b' : (m[2] || ''));
+    const root = m[1].toUpperCase() + acc.toLowerCase().replace('B', 'b');
+    if(Transposer.noteIndex(root) === undefined) return null;
+    return m[3] ? Transposer.relativeMajor(root + 'm') : root;
+  }
+
+  // Every chord token in a chart's raw text, via the same parse the
+  // renderer uses (so bracketed inline chords, chords-only lines and
+  // note-annotations are all treated consistently).
+  function collectChordTokens(content){
+    const chords = [];
+    ChordParser.parse(content || '').forEach(sec => sec.lines.forEach(l => {
+      if(l.type === 'chords-only') chords.push(...l.chords);
+      else if(Array.isArray(l.tokens)) l.tokens.forEach(t => { if(t.chord) chords.push(t.chord); });
+    }));
+    return chords.filter(c => c && c.charAt(0) !== '*');
+  }
+
+  function contentHasNumberChords(content){
+    return collectChordTokens(content).some(c => NashvilleSystem.isNumberToken(c) || NashvilleSystem.isRomanToken(c));
+  }
+
+  // Predicts the major key of letter-chord content when the file states
+  // none: every one of the 12 major keys is scored on how well the chords
+  // fit its diatonic seven (right quality at a scale position scores high,
+  // right root alone scores low, out-of-key roots count against), with a
+  // cadence bonus when the song opens or closes on the tonic or its
+  // relative minor. A minor-centered song (Em G D C ...) scores highest in
+  // its RELATIVE MAJOR — same chord set — which is exactly where a
+  // Nashville chart wants it. Returns a key spelling ("G", "Bb") or null
+  // when there are no letter chords to read (lyrics-only or NN content).
+  function detectKeyFromChords(content){
+    const KEY_SPELLINGS = ['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+    const parsed = [];
+    collectChordTokens(content).forEach(c => {
+      if(NashvilleSystem.isNumberToken(c) || NashvilleSystem.isRomanToken(c)) return;
+      const m = c.match(/^([A-G](?:#|b)?)(.*)$/);
+      if(!m) return;
+      const idx = Transposer.noteIndex(m[1]);
+      if(idx === undefined) return;
+      const rest = m[2].split('/')[0];
+      parsed.push({ idx, quality: /^(dim|°)/.test(rest) ? 'dim' : (/^m(?!aj)/.test(rest) ? 'min' : 'maj') });
+    });
+    if(!parsed.length) return null;
+    const DIATONIC = { 0:'maj', 2:'min', 4:'min', 5:'maj', 7:'maj', 9:'min', 11:'dim' };
+    let bestKey = null, bestScore = -Infinity;
+    for(let k = 0; k < 12; k++){
+      let score = 0;
+      parsed.forEach(p => {
+        const want = DIATONIC[(p.idx - k + 12) % 12];
+        score += want === undefined ? -1 : (want === p.quality ? 3 : 1);
+      });
+      [parsed[0], parsed[parsed.length - 1]].forEach(p => {
+        const iv = (p.idx - k + 12) % 12;
+        if((iv === 0 && p.quality === 'maj') || (iv === 9 && p.quality === 'min')) score += 2;
+      });
+      if(score > bestScore){ bestScore = score; bestKey = KEY_SPELLINGS[k]; }
+    }
+    return bestKey;
+  }
+
   // Best-effort "chords over lyrics" plain text importer (OpenSong/OnSong .txt style):
   // pairs of lines where the first line is mostly chord tokens get merged into [C]word markup.
-  function parseChordsOverLyricsText(text){
+  // fallbackTitle (the file's own name) stands in when the file has no title line.
+  function parseChordsOverLyricsText(text, fallbackTitle){
     const lines = text.split(/\r?\n/);
     const song = {title:'', artist:'', key:'', ccli:'', copyright:''};
+    const isMetaLine = l => /^(Key|Capo|Order|Song Map):\s*/i.test(l.trim()) || parseKeyDenoteLine(l) !== null;
+    const isBodyLine = l => normalizeSectionHeader(l) !== null || looksLikeChordLine(l);
+    // Title/artist: the first one or two non-blank lines, but ONLY when
+    // they aren't already body or meta — a file that opens straight into
+    // "Verse 1:" (maybe after blank lines) has no title line to read, and
+    // grabbing that header as title/artist used to swallow the whole first
+    // section AND leave the title empty.
     let idx = 0;
-    if(lines[0]) { song.title = lines[0].trim(); idx = 1; }
-    if(lines[1] && !/^Key:/i.test(lines[1])) { song.artist = lines[1].trim(); idx = 2; }
-    const keyLine = lines.find(l => /^Key:\s*/i.test(l));
-    if(keyLine) song.key = keyLine.replace(/^Key:\s*/i,'').trim();
-    const capoLine = lines.find(l => /^Capo:\s*/i.test(l));
-    if(capoLine) song.capo = capoLine.replace(/^Capo:\s*/i,'').trim();
-
-    // A line is a chord line when EVERY token is either a letter chord
-    // (G, F#m7, C/E) or a Nashville Number token (1, 6m7, b3, 4/5) — the
-    // NN alternative mirrors the letter one so .txt files this app exports
-    // while displaying NN merge back correctly on re-import, not just
-    // letter-notation ones.
-    function looksLikeChordLine(l){
-      if(l.trim()==='') return false;
-      const tokens = l.trim().split(/\s+/);
-      const LETTER = /^[A-G](#|b)?(m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/[A-G](#|b)?)?$/;
-      const NN = /^(b|#)?[1-7](m|maj|min|sus|add|dim|aug|°|\+)?[0-9]*(\/(b|#)?[1-7])?$/;
-      return tokens.length>0 && tokens.every(t => LETTER.test(t) || NN.test(t));
+    while(idx < lines.length && lines[idx].trim() === '') idx++;
+    if(idx < lines.length && !isBodyLine(lines[idx]) && !isMetaLine(lines[idx])){
+      song.title = lines[idx].trim(); idx++;
+      if(idx < lines.length && lines[idx].trim() !== '' && !isBodyLine(lines[idx]) && !isMetaLine(lines[idx])){
+        song.artist = lines[idx].trim(); idx++;
+      }
     }
-    const rest = lines.slice(idx).filter(l => !/^Key:\s*/i.test(l) && !/^Capo:\s*/i.test(l) && !/^Order:\s*/i.test(l) && !/^Song Map:\s*/i.test(l));
+    if(!song.title && fallbackTitle) song.title = fallbackTitle;
+    const keyLine = lines.find(l => /^Key:\s*/i.test(l.trim()));
+    if(keyLine) song.key = keyLine.trim().replace(/^Key:\s*/i,'').trim();
+    if(!song.key){
+      for(const l of lines){ const k = parseKeyDenoteLine(l); if(k){ song.key = k; break; } }
+    }
+    const capoLine = lines.find(l => /^Capo:\s*/i.test(l.trim()));
+    if(capoLine) song.capo = capoLine.trim().replace(/^Capo:\s*/i,'').trim();
+
+    const rest = lines.slice(idx).filter(l => !isMetaLine(l));
     let out = [];
+    const headers = []; // {pos (index in out), family, num} for the parenting pass below
     for(let i=0;i<rest.length;i++){
       const line = rest[i];
-      if(/^[A-Za-z][A-Za-z0-9 \-]{0,30}:\s*$/.test(line.trim())){
-        out.push(line.trim()); continue;
+      const header = normalizeSectionHeader(line);
+      if(header){
+        headers.push({ pos: out.length, family: header.family, num: header.num });
+        out.push(header.label); continue;
       }
       if(looksLikeChordLine(line) && rest[i+1] !== undefined && rest[i+1].trim() !== '' && !looksLikeChordLine(rest[i+1])){
         const chordLine = line, lyricLine = rest[i+1];
@@ -2699,6 +2823,27 @@ const IO = (() => {
         out.push('[' + line.trim().split(/\s+/).join('] [') + ']');
       } else {
         out.push(line);
+      }
+    }
+    // Parent a missing "<Family> 1": when content starts BEFORE any header
+    // and some family shows up numbered 2+ without a 1 anywhere ("Chorus
+    // 2" but no "Chorus"/"Chorus 1"), that leading unlabeled block is that
+    // family's missing first section — label it, so the editor, song map
+    // and Insert Section buttons see the whole family. Leading content
+    // with no such orphaned numbering is left unlabeled, since there's no
+    // evidence of what it is.
+    if(headers.length && out.slice(0, headers[0].pos).some(l => l.trim() !== '')){
+      const fams = new Map();
+      headers.forEach(h => {
+        if(!h.family) return;
+        if(!fams.has(h.family)) fams.set(h.family, new Set());
+        fams.get(h.family).add(h.num);
+      });
+      for(const [fam, nums] of fams){
+        if(nums.has(2) && !nums.has(1) && !nums.has(0)){
+          out.splice(out.findIndex(l => l.trim() !== ''), 0, fam + ' 1:');
+          break;
+        }
       }
     }
     song.content = out.join('\n');
@@ -2750,14 +2895,21 @@ const IO = (() => {
 
   function detectAndParse(filename, text){
     if(/\.json$/i.test(filename)) return {type:'json', song: JSON.parse(text)};
-    if(/\.xml$/i.test(filename)) return {type:'opensong-xml', song: parseOpenSongXML(text)};
-    if(/\.(cho|chordpro|pro)$/i.test(filename)) return {type:'chordpro', song: parseChordProText(text)};
+    // The file's own name (minus extension, underscores as spaces) stands
+    // in as the title for any non-JSON file that doesn't state one.
+    const nameTitle = String(filename || '').split(/[\\\/]/).pop().replace(/\.[^.]*$/, '').replace(/_+/g, ' ').trim();
+    let res;
+    if(/\.xml$/i.test(filename)) res = {type:'opensong-xml', song: parseOpenSongXML(text)};
+    else if(/\.(cho|chordpro|pro)$/i.test(filename)) res = {type:'chordpro', song: parseChordProText(text)};
     // .txt: try chordpro-tag detection first, else chords-over-lyrics
-    if(/\{title:/i.test(text)) return {type:'chordpro', song: parseChordProText(text)};
-    return {type:'chords-over-lyrics', song: parseChordsOverLyricsText(text)};
+    else if(/\{title:/i.test(text)) res = {type:'chordpro', song: parseChordProText(text)};
+    else res = {type:'chords-over-lyrics', song: parseChordsOverLyricsText(text, nameTitle)};
+    if(res.song && !res.song.title && nameTitle) res.song.title = nameTitle;
+    return res;
   }
 
-  return { toChordProText, toChordsOverLyricsText, parseChordProText, parseChordsOverLyricsText, parseOpenSongXML, detectAndParse };
+  return { toChordProText, toChordsOverLyricsText, parseChordProText, parseChordsOverLyricsText, parseOpenSongXML, detectAndParse,
+           detectKeyFromChords, normalizeToMajorKey, contentHasNumberChords };
 })();
 
 /* ---------------------------------------------------------------------------
@@ -5128,23 +5280,31 @@ const App = (() => {
   // exact same key-conversion and library-tagging behavior.
   async function importParsedSong(song, libraryName){
     // ChordPro/OpenSong/plain-text parsers leave key:'' when no key tag
-    // is present in the file — a real, explicit tonic we can safely
-    // convert against, vs. genuinely unstated. JSON re-imports carry
-    // whatever this app already saved (a real key, 'NN', or unset).
+    // is present in the file. The key content is converted against
+    // (effectiveKey) comes from, in order: a stated key, normalized (a
+    // minor key charts as its relative major — "Em" content is a
+    // 6m-centered G chart in Nashville terms, and converting it against E
+    // major was scrambling the numbers); or, with no key stated at all,
+    // what the chords themselves predict (IO.detectKeyFromChords), so a
+    // plain .txt with no Key: line lands canonical-NN in its real key
+    // instead of claiming C — which also made Key Change math and later
+    // transposition wrong for every such import. JSON re-imports carry
+    // 'NN' and skip all of this.
     const statedKey = song.key || null;
+    let effectiveKey = null;
+    if(statedKey && statedKey !== 'NN') effectiveKey = IO.normalizeToMajorKey(statedKey);
+    else if(!statedKey) effectiveKey = IO.detectKeyFromChords(song.content||'');
     let importedKey, importedContent, importedPreferredKeys;
-    if(statedKey && statedKey !== 'NN'){
-      // Known tonic — auto-convert to canonical Nashville Numbers, no
-      // guessing involved (a stated key is a fact, not a detection).
-      importedContent = NashvilleSystem.contentToNumbers(song.content||'', statedKey.replace(/m$/,''));
+    if(effectiveKey){
+      importedContent = NashvilleSystem.contentToNumbers(song.content||'', effectiveKey);
       importedKey = 'NN';
-      importedPreferredKeys = [statedKey];
+      importedPreferredKeys = [effectiveKey];
     } else {
-      // No stated key, or already NN (JSON round-trip) — leave as-is.
-      // An unstated key lands as a legacy letter-key song, same as any
-      // pre-Phase-2 library song, convertible later via "Convert to
-      // Nashville Numbers" rather than guessed at now.
-      importedKey = statedKey || 'C';
+      // Already NN (JSON round-trip, or a keyless file whose chords are
+      // written as numbers), a stated key that doesn't parse as one (kept
+      // as a legacy letter-key song), or a chord-less lyric sheet where a
+      // key is moot.
+      importedKey = statedKey || (IO.contentHasNumberChords(song.content||'') ? 'NN' : 'C');
       importedContent = song.content || '';
       if(Array.isArray(song.preferredKeys)) importedPreferredKeys = song.preferredKeys;
       else if(song.preferredKey != null) importedPreferredKeys = [song.preferredKey];
@@ -5180,19 +5340,18 @@ const App = (() => {
     if(Array.isArray(song.arrangements) && song.arrangements.length && song.arrangements.every(a => a && typeof a === 'object' && typeof a.id === 'string' && typeof a.name === 'string')){
       toSave.arrangements = song.arrangements.map(a => {
         const c = Object.assign({}, a);
-        if(statedKey && statedKey !== 'NN' && typeof c.content === 'string') c.content = NashvilleSystem.contentToNumbers(c.content, statedKey.replace(/m$/,''));
+        if(effectiveKey && typeof c.content === 'string') c.content = NashvilleSystem.contentToNumbers(c.content, effectiveKey);
         return c;
       });
       if(toSave.arrangements.some(a => a.id === song.activeArrangementId)) toSave.activeArrangementId = song.activeArrangementId;
     }
     if(SLB_KEY_OPTIONS.includes(song.lastDisplayedKey)){
       toSave.lastDisplayedKey = song.lastDisplayedKey;
-    } else if(statedKey && statedKey !== 'NN'){
-      // A file that states a letter key but no display key — an older
-      // ChartBench export, or ChordPro/OpenSong with a key tag — was being
-      // read in that key, so that's the key it opens in here too.
-      const shown = toDisplayableKey(statedKey);
-      if(SLB_KEY_OPTIONS.includes(shown)){ toSave.lastDisplayedKey = shown; toSave.lastDisplayedNN = false; }
+    } else if(effectiveKey && SLB_KEY_OPTIONS.includes(effectiveKey)){
+      // A file with a real key (stated, or detected from its chords) but
+      // no display key was being read in that key — so that's the key it
+      // opens showing here too, letters rather than raw numbers.
+      toSave.lastDisplayedKey = effectiveKey; toSave.lastDisplayedNN = false;
     }
     // A ChartBench JSON carries the song's uid — the same identity the
     // library folder files it under. Importing one of those again (an
