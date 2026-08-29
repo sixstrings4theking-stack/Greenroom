@@ -1171,7 +1171,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-23 21:29';
+const APP_BUILD = '2026-08-29 10:47';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1183,6 +1183,7 @@ const VERSION_NOTES = [
       'Support ChartBench button in the top bar — how to help with the costs of keeping the site up, via Patreon.',
     ]],
     ['Changed', [
+      'Repeated sections now always print their header line on the chart ("Chorus 1:"); the Write out repeats toggle only controls whether the contents print under it too.',
       'Song map circles on the chart are 20% smaller to save header space; the letter codes inside stay full size.',
       'Library folder files are now named after the song — "Hotel California.json" — instead of carrying a code suffix. Two different songs with one title are told apart by "(Artist)" or "(2)". Old suffixed files are renamed automatically on the next sync.',
       'In the song list\u2019s right-click library popup, Full Catalog is no longer offered as a library chip; a "Remove from all libraries" line does what it used to.',
@@ -1990,14 +1991,14 @@ const Renderer = (() => {
   // A section with an empty body whose label exactly matches (case-
   // insensitive) an earlier section that DID have content is a repeat
   // marker — e.g. a second bare "Chorus:" header reprising a chorus already
-  // printed earlier in the chart. By default repeats are dropped from the
-  // chart body entirely (no header line, no chords) since the song map
-  // badge already marks where they happen. With expandRepeats (the
-  // "Write out repeats" toggle, saved per song) the reprise instead prints
-  // in full, carrying the earlier section's lines — for musicians who want
-  // every section on the page in performance order. Either way, only a
-  // genuinely unique/edited section (a different label, like "Chorus 2")
-  // ever has content of its own.
+  // printed earlier in the chart. By default a repeat keeps its header line
+  // in the chart ("Chorus 1:") but not its contents — the header shows the
+  // reprise in performance order while the chords stay findable at their
+  // first appearance. With expandRepeats (the "Write out repeats" toggle,
+  // saved per song) the reprise instead prints in full, carrying the
+  // earlier section's lines — for musicians who want every section written
+  // out on the page. Either way, only a genuinely unique/edited section (a
+  // different label, like "Chorus 2") ever has content of its own.
   function resolveRepeats(sections, expandRepeats){
     // sec.lines here are already-parsed line objects (see ChordParser.parse),
     // not raw strings — only the 'blank' type carries no real content.
@@ -2010,8 +2011,9 @@ const Renderer = (() => {
         if(key) seen.set(key, sec.lines);
         out.push(sec);
       } else if(key && seen.has(key)){
-        if(expandRepeats) out.push(Object.assign({}, sec, { lines: seen.get(key) }));
-        // else: a collapsed repeat — the song map badge is its only trace
+        // Collapsed repeats still print their header line (lines: [] strips
+        // the marker's own blank lines so nothing renders under it).
+        out.push(Object.assign({}, sec, { lines: expandRepeats ? seen.get(key) : [] }));
       } else {
         out.push(sec); // header-only section with nothing earlier to repeat (e.g. an instrumental)
       }
