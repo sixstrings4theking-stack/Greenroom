@@ -1171,7 +1171,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 12:25';
+const APP_BUILD = '2026-08-29 12:29';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1196,6 +1196,7 @@ const VERSION_NOTES = [
       'Text imports recognize section headers in any common form — "Verse 2", "CHORUS", "[Bridge]", with or without the colon — as long as the section name is the whole line, so lyrics that merely contain those words are never touched. A file whose content starts before "Chorus 2"-style numbering gets the missing first section labeled.',
       'A text import with no title line no longer swallows its first section header as the title/artist — the song is titled after the file name instead.',
       'Inserting a section (or a chord from the picker, a key change, or using Undo/Redo) no longer scrolls the editor away from where you were working.',
+      'An imported song now shows as the selected song in the library, and clicking any library song while you have unsaved edits asks before discarding them — edits can no longer be lost silently.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
@@ -3850,6 +3851,7 @@ const App = (() => {
       if(currentSong && currentSong.uid){
         const fresh = songs.find(s => s.uid === currentSong.uid);
         if(!fresh && currentSong.id){
+          dirty = false; // its record is gone (deleted in the folder) — nothing to save edits to
           if(songs.length) selectSong(songs[0].id); else newSong();
         } else if(fresh && pulledUids.has(currentSong.uid)){
           if(!dirty) selectSong(fresh.id);
@@ -4282,6 +4284,9 @@ const App = (() => {
   function selectSong(id){
     const s = songs.find(s=>s.id===id);
     if(!s) return;
+    // Same guard the ＋New button has: never silently reload a saved copy
+    // over unsaved edits — this is the path every library-row click takes.
+    if(dirty && !confirm('Discard unsaved changes?')) return;
     currentSong = JSON.parse(JSON.stringify(s));
     undoStack = []; redoStack = [];
     lyricsUndoStack = []; lyricsRedoStack = [];
@@ -4307,6 +4312,7 @@ const App = (() => {
     const wasCurrent = currentSong && currentSong.id === id;
     await refreshLibrary();
     if(wasCurrent){
+      dirty = false; // any unsaved edits belonged to the song just deleted
       if(songs.length) selectSong(songs[0].id);
       else newSong();
     }
@@ -5520,7 +5526,13 @@ const App = (() => {
       }
     }
     await refreshLibrary();
-    if(lastSong){
+    // Open the (last) imported song in the editor AND highlight it in the
+    // library (refreshLibrary above rendered the list before currentSong
+    // changed, so re-render after). Unsaved edits already in the editor
+    // win — the import still lands in the library, it just doesn't
+    // replace what's being worked on.
+    const openImported = lastSong && !dirty;
+    if(openImported){
       currentSong = JSON.parse(JSON.stringify(lastSong));
       undoStack=[]; redoStack=[];
       lyricsUndoStack = []; lyricsRedoStack = [];
@@ -5528,7 +5540,8 @@ const App = (() => {
       dirty = false;
       updateSaveStatus();
     }
-    if(imported && !failures.length) toast(`Imported ${imported} song${imported===1?'':'s'}`);
+    renderSongList();
+    if(imported && !failures.length) toast(`Imported ${imported} song${imported===1?'':'s'}${lastSong && !openImported ? ' — your unsaved edits stay in the editor' : ''}`);
     else if(imported && failures.length) toast(`Imported ${imported}, failed: ${failures.join(', ')}`);
     else toast('Import failed: ' + failures.join(', '));
   }
