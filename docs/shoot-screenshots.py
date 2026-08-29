@@ -131,6 +131,12 @@ crop("cu-section-bar.png", "#structBarChart", pad=6)
 crop("cu-display-key.png", "#structBarChart .right-controls", pad=8)
 crop("cu-preview-head.png", "#previewPane .pane-head", pad=6)
 crop("cu-editor-head.png", "#editorPane .pane-head", pad=6)
+# paragraph marks: the top slice of the editor, showing a pilcrow at each
+# real line end (marks are on by default)
+_r = driver.execute_script(RECT_JS, ["#editorShell"])
+if _r:
+    _r['h'] = min(_r['h'], 240)
+    crop("cu-editor-marks.png", None, pad=4, rect=_r)
 crop("cu-song-map.png", "#previewScroll .cs-title, #previewScroll .cs-artist, #previewScroll .cs-copyright, #previewScroll .cs-roadmap", pad=14)
 crop("cu-preferred-key.png", ["#preferredKeyPicker", "#preferredKeyChips"], pad=8)
 crop("cu-song-list.png", "#songList", pad=8)
@@ -206,6 +212,17 @@ const capo = document.getElementById('mCapo'); capo.value=''; capo.dispatchEvent
 const sel = document.getElementById('mDisplayKey'); sel.value='NN'; sel.dispatchEvent(new Event('change', {bubbles:true}));
 """)
 time.sleep(0.5)
+
+# ---- 6b. 2-Column mode: first page, full-width title band + left-first fill ----
+js("const t = document.getElementById('toggle2col'); if(!t.checked){ t.checked = true; t.dispatchEvent(new Event('change', {bubbles:true})); }")
+time.sleep(1.0)
+_r = driver.execute_script("const e = document.querySelector('.a4-page-wrap'); if(!e) return null; const r = e.getBoundingClientRect(); return {x:r.x, y:r.y, w:r.width, h:r.height};")
+if _r:
+    crop("cu-two-col.png", None, pad=8, rect=_r)
+else:
+    print("WARN: no page for cu-two-col")
+js("const t = document.getElementById('toggle2col'); t.checked = false; t.dispatchEvent(new Event('change', {bubbles:true}))")
+time.sleep(0.6)
 
 # ---- 7. CC license picker — on "The Mighty, Righteous, Risen" (the
 # author's own song, already CC BY-SA), so the license examples show it ----
@@ -352,6 +369,14 @@ js("document.getElementById('btnDownloadApp').click()")
 wait_for("document.querySelector('.lxp-backdrop')")
 shot("15-download.png")
 js("document.querySelector('.lxp-backdrop #dlClose').click()")
+time.sleep(0.4)
+
+# ---- 15b. Support ChartBench popup ----
+js("document.getElementById('btnSupport').click()")
+wait_for("document.querySelector('.lxp-backdrop')")
+crop("cu-support.png", ".lxp-modal", pad=8)
+js("document.querySelector('.lxp-backdrop #supClose').click()")
+time.sleep(0.3)
 
 # ---- 17. Library folder reconnect strip (simulated) + backup nudge ----
 js("""
@@ -374,10 +399,11 @@ js("window.__promptAnswer = 'Acoustic'; document.getElementById('arrAddBtn').cli
 time.sleep(0.8)
 js("const c = document.getElementById('mCapo'); c.value = '2'; c.dispatchEvent(new Event('change', {bubbles:true}));")
 time.sleep(0.4)
-crop("cu-arr-control.png", ["#editorPane .pane-head .pane-head-left"], pad=8)
+# the Arrangement control now lives in the Preferred Key(s) section (.pk-arr)
+crop("cu-arr-control.png", [".pk-arr"], pad=8)
 js("document.getElementById('arrMenuBtn').click()")
 time.sleep(0.3)
-crop("cu-arr-menu.png", ["#editorPane .pane-head .arr-control", "#arrMenu"], pad=10)
+crop("cu-arr-menu.png", [".pk-arr", "#arrMenu"], pad=10)
 js("document.body.dispatchEvent(new MouseEvent('mousedown', {bubbles:true}))")
 time.sleep(0.2)
 crop_text("cu-arr-header.png", ["#previewScroll .cs-title", "#previewScroll .cs-roadmap", "#previewScroll .cs-meta"], pad=16)

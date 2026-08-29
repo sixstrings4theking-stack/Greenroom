@@ -87,7 +87,7 @@
     one file, no install, your songs stay on your device.<br><br>
     <b>thechartbench.com</b><br>
     Free &amp; open source · Creative Commons BY-NC-SA<br>
-    Guide edition: August 23, 2026<br>
+    Guide edition: August 29, 2026<br>
     <span class="screen-only"><a href="ChartBench-User-Guide.pdf">Download this guide as a PDF</a></span>
   </div>
 </div>
@@ -159,7 +159,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 <!-- ============================ 3 ============================ -->
 <h2 class="chapter" id="c3">3 &nbsp;The interface at a glance</h2>
 <div class="fig"><img src="guide-assets/03-chart-open.png" alt="Main interface"><div class="cap">Fig. 3 — The full workspace with a song open.</div></div>
-<div class="fig strip"><img src="guide-assets/cu-topbar.png" alt="Top bar"><div class="cap">Fig. 4 — The top bar, left to right: file actions, import, Download Software, Set List Builder, output, Lyrics, Circle of 5ths, Guide, Settings.</div></div>
+<div class="fig strip"><img src="guide-assets/cu-topbar.png" alt="Top bar"><div class="cap">Fig. 4 — The top bar, left to right: file actions, import, Support ChartBench, Download Software, Set List Builder, output, Lyrics, Circle of 5ths, Guide, Settings.</div></div>
 
 <div class="cu">
   <div class="cu-img"><img src="guide-assets/cu-topbar-left.png" alt="Left top-bar group"></div>
@@ -185,11 +185,11 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   </div>
 </div>
 <div class="fig strip"><img src="guide-assets/cu-meta-bar.png" alt="Meta bar"></div>
-<p><b>Meta bar</b> — everything <i>about</i> the current song: title (with alignment buttons), author, Preferred Key picker and chips, tags, copyright/licensing, and CCLI numbers. It collapses with the small ▲▲▲ handle to give the editor more room; the Title always stays visible.</p>
+<p><b>Meta bar</b> — everything <i>about</i> the current song: title (with alignment buttons), author, Preferred Key picker and chips, the <b>Arrangement</b> control (right of the Preferred Keys, past a thin divider — chapter 7), tags, copyright/licensing, and CCLI numbers. It collapses with the small ▲▲▲ handle to give the editor more room; the Title always stays visible, and when the bar is collapsed the Arrangement buttons and the preferred-key chips <b>dock beside the Title</b> (the Title box shortens to fit), so both stay one click away.</p>
 <div class="fig strip"><img src="guide-assets/cu-section-bar.png" alt="Structure bar"></div>
 <p><b>Structure bar</b> — one-click section insertion (Intro, Verse, Chorus…), the Key Change button, and the display controls: Display Key with transpose − / +, the RN (Roman numeral) toggle, and Capo.</p>
 <div class="fig strip"><img src="guide-assets/cu-editor-head.png" alt="Editor header"></div>
-<p><b>Editor (center)</b> — the plain-text chart source. Chords live inline in square brackets: <code>[1]Amazing grace</code>. Its header carries the hint line (what double-click and right-click do right now), the editor's own text-size stepper, and a line/section count.</p>
+<p><b>Editor (center)</b> — the plain-text chart source. Chords live inline in square brackets: <code>[1]Amazing grace</code>. Its header carries the hint line (what double-click and right-click do right now), the editor's own text-size stepper, and two viewing toggles: <b>Wrap</b> soft-wraps long lines so nothing scrolls sideways, and <b>¶</b> shows a small mark at every <i>real</i> line break — a soft-wrapped line has none, so a wrap and a typed Enter read differently at a glance. Both are viewing conveniences only: the text itself never changes.</p>
 <div class="fig strip"><img src="guide-assets/cu-preview-head.png" alt="Live Preview header"></div>
 <p><b>Live Preview (right)</b> — a true print preview: real page-sized sheets, paginated exactly the way Print and PDF will break them, with chart justification buttons, the chart text-size stepper, and the Repeated Sections and 2-Column toggles in its header. The page always scales to fit the pane whole, whatever the window size.</p>
 
@@ -266,8 +266,8 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   </div>
 </div>
 <h3>Repeats without clutter</h3>
-<p>To repeat a section exactly — a chorus sung again later — insert its bare header with nothing under it. ChartBench understands: by default the chart body <i>doesn't</i> reprint the lyrics (saving page space), but the song map shows the badge in position, and lyrics slides (chapter 14) reuse the original section's content. One written-out chorus, referenced as many times as the arrangement needs.</p>
-<p>Prefer every section on the page in performance order? Tick <b>Repeated Sections</b> in the Live Preview header and each reprise prints in full. It's saved with the song, so print, PDF, and set lists follow whichever way you set it.</p>
+<p>To repeat a section exactly — a chorus sung again later — insert its bare header with nothing under it. ChartBench understands: the chart prints the reprise's <b>header line</b> ("Chorus 1:") in performance order, but by default not its contents — the chords stay findable at their first appearance, the song map shows the badge in position, and lyrics slides (chapter 14) reuse the original section's content. One written-out chorus, referenced as many times as the arrangement needs.</p>
+<p>Prefer every section written out in full? Tick <b>Repeated Sections</b> in the Live Preview header and each reprise prints its contents under its header. It's saved with the song, so print, PDF, and set lists follow whichever way you set it.</p>
 <div class="cu flip">
   <div class="cu-img"><img src="guide-assets/cu-key-change.png" alt="Key change popup"></div>
   <div class="cu-text">
@@ -281,8 +281,8 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 <div class="cu wide">
   <div class="cu-img"><img src="guide-assets/cu-arr-menu.png" alt="Arrangement menu"></div>
   <div class="cu-text">
-    <h4>The control in the editor heading</h4>
-    <p><b>Main ▾</b> beside the word Editor names the arrangement in the editor. Click it for the menu: the song's arrangements (✓ on the one showing — pick another to switch), then <b>New arrangement</b>, <b>Rename…</b>, and <b>Delete this arrangement</b>. The <b>+</b> beside it is the shortcut for New: it asks for a name and starts the new arrangement as a <i>copy of what's showing</i>, which is nearly always what you want — "like this, but…".</p>
+    <h4>The control in the meta bar</h4>
+    <p><b>Main ▾</b> sits at the right end of the Preferred Key(s) section, past a thin divider, under its own <b>Arrangement</b> label — it names the arrangement currently in the editor. Click it for the menu: the song's arrangements (✓ on the one showing — pick another to switch), then <b>New arrangement</b>, <b>Rename…</b>, and <b>Delete this arrangement</b>. The <b>+</b> beside it is the shortcut for New: it asks for a name and starts the new arrangement as a <i>copy of what's showing</i>, which is nearly always what you want — "like this, but…". Collapse the metadata bar and the control docks beside the Title, so switching arrangements never needs the bar open.</p>
     <p>Unsaved edits travel with their arrangement when you switch, so you can flip between them mid-edit. Switching alone doesn't mark the song unsaved; the arrangement showing when you <b>Save</b> is the one the song reopens on. A song always keeps at least one.</p>
     <div class="cap">Fig. 11 — Two arrangements; "Acoustic" is in the editor.</div>
   </div>
@@ -367,7 +367,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-img"><img src="guide-assets/cu-song-list.png" alt="Song list"></div>
   <div class="cu-text">
     <h4>The song list</h4>
-    <p>Each row shows title, author, preferred keys and tags; the open song is highlighted. <b>Click</b> to open, <b>right-click</b> to assign or unassign libraries, <b>✕</b> to remove a song from the app (and, if a Library Folder is connected, its file).</p>
+    <p>Each row shows title, author, preferred keys and tags; the open song is highlighted. <b>Click</b> to open (with unsaved edits in the editor, ChartBench asks before discarding them), <b>right-click</b> to assign or unassign libraries, <b>✕</b> to remove a song from the app (and, if a Library Folder is connected, its file).</p>
     <p>The right-click popup lists every library as a chip — click to add the song, click again to take it out — with a box to create a new one. <i>Full Catalog</i> is never offered as a chip, because it isn't a library you add songs to: it's where every song lives by default. When a song is in at least one library the popup ends with <b>Remove from all libraries</b>, which clears them and leaves the song in Full Catalog only.</p>
     <p><b>Libraries</b> are the broad, parent grouping — whole repertoires, e.g. two different bands. Every song starts in <i>Full Catalog</i>, which always shows every song and is the only grouping the app makes on its own — in particular, a connected Library Folder (chapter 18) is <i>not</i> a library; it's where the files live. Create a library from the box at the top of the sidebar with a song open, from the right-click popup, or with Import Folder. The demo songs arrive in a "Demo Songs" library; delete them whenever you like — <b>Settings → Data → Restore demo songs</b> brings any of them back.</p>
     <div class="cap">Fig. 21 — Three songs, one open.</div>
@@ -376,16 +376,16 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 
 <!-- ============================ 11 ============================ -->
 <h2 class="chapter" id="c11">11 &nbsp;Importing songs</h2>
-<p><b>Import</b> accepts one or many files at once; <b>Import Folder</b> takes a whole directory and additionally creates a library named after the folder — one folder in, one repertoire out. Every imported song is saved to the library immediately. Four formats are understood:</p>
+<p><b>Import</b> accepts one or many files at once; <b>Import Folder</b> takes a whole directory and additionally creates a library named after the folder — one folder in, one repertoire out. Every imported song is saved to the library immediately, and the last one opens in the editor, highlighted in the song list — unless you had unsaved edits, which always win. Four formats are understood:</p>
 <div class="callout"><b>Import Folder and libraries:</b> the name of the folder you pick becomes the library name for <i>every</i> song in the import, subfolders included — it overrides any library a ChartBench file already names. So name the folder what you want the library called. It can't be run on your connected Library Folder (chapter 18): that folder already <i>is</i> the library — use <b>Sync now</b> in Settings to pick up files added there by hand.</div>
 <table>
   <tr><th>Format</th><th>Extensions</th><th>How ChartBench handles it</th></tr>
   <tr><td>ChartBench JSON</td><td>.json</td><td>The app's own export — full fidelity: chart, lyrics slide breaks, preferred keys, the key it was last shown in, its text-size zoom, and its version history all round-trip. A whole-library export (one file holding every song) imports every song in it. Each file carries the song's identity, so importing one that's already in the library <b>updates that song</b> rather than adding a second copy.</td></tr>
   <tr><td>ChordPro</td><td>.cho .chordpro .pro</td><td>Reads <code>{title}</code>, <code>{artist}</code>, <code>{key}</code>, <code>{capo}</code>, <code>{ccli}</code>, <code>{copyright}</code>; the <code>[C]word</code> body is native.</td></tr>
   <tr><td>OpenSong XML</td><td>.xml</td><td>Reads title/author/key/CCLI/copyright; converts OpenSong's dot-prefixed chord lines and [V1]-style markers.</td></tr>
-  <tr><td>Chords over lyrics</td><td>.txt</td><td>Plain text with chord lines above lyric lines (letters or Nashville numbers) — merged automatically onto the right syllables. Title/author from the first two lines; <code>Key:</code> and <code>Capo:</code> lines respected.</td></tr>
+  <tr><td>Chords over lyrics</td><td>.txt</td><td>Plain text with chord lines above lyric lines (letters or Nashville numbers) — merged automatically onto the right syllables. Title/author come from the first lines when present; a file with no title line is named after the file itself. <code>Key:</code> and <code>Capo:</code> lines are respected in any common form ("Key: G", "Key of E minor"), and section headers are recognized however they're written — <code>Verse 2</code>, <code>CHORUS</code>, <code>[Bridge]</code>, with or without the colon — as long as the name is the whole line, so lyrics that merely contain those words are never touched.</td></tr>
 </table>
-<div class="callout"><b>Keys at import:</b> a file that states its key (say, G) is converted to canonical Nashville Numbers automatically — a stated key is a fact, so no guessing is involved — G becomes the song's first Preferred Key, and the song opens showing G, just as the file was written. A file with no stated key is left as-is in letter form; convert it later with one click when you know its key.</div>
+<div class="callout"><b>Keys at import:</b> a file that states its key (say, G) is converted to canonical Nashville Numbers against it — a stated key is a fact. A file with <i>no</i> stated key gets its key <b>predicted from the chords themselves</b>: every major key is scored on how well the chords fit it, and a minor-feel song lands on its relative major — exactly where a Nashville chart wants it (a stated minor key like "Em" charts as its relative major too). Either way the detected or stated key becomes the song's first Preferred Key and the key it opens showing. Only a file with no chords at all skips conversion.</div>
 
 <!-- ============================ 12 ============================ -->
 <h2 class="chapter" id="c12">12 &nbsp;Exporting charts</h2>
@@ -403,19 +403,22 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 
 <!-- ============================ 13 ============================ -->
 <h2 class="chapter" id="c13">13 &nbsp;Print, PDF &amp; text size</h2>
-<p><b>Print</b> (<kbd>Ctrl</kbd>+<kbd>P</kbd>) and <b>PDF</b> produce the chart exactly as the Live Preview shows it — same pages, same breaks, because the preview <i>is</i> the print layout. Pages are <b>US Letter</b> by default; switch to <b>A4</b> in Settings and the preview, print, PDF and set-list output all change together. Pagination is phrase-aware: sections and their lines are kept together sensibly rather than sliced mid-phrase. PDF downloads the pages as a single file named after the song (this feature needs an internet connection, for its converter library).</p>
+<p><b>Print</b> (<kbd>Ctrl</kbd>+<kbd>P</kbd>) and <b>PDF</b> produce the chart exactly as the Live Preview shows it — same pages, same breaks, because the preview <i>is</i> the print layout. Pages are <b>US Letter</b> by default; switch to <b>A4</b> in Settings and the preview, print, PDF and set-list output all change together. Pages fill top to bottom: a section that fits in the space left stays whole, and one that doesn't <b>continues on the next page under a "(cont.)" header</b> — so no page ends with a large blank gap. A section is only split when at least its header and two lines fit, a chords-only line is never separated from the lyric under it, and a section taller than a whole page simply spans as many as it needs. PDF downloads the pages as a single file named after the song (this feature needs an internet connection, for its converter library).</p>
 <div class="fig strip"><img src="guide-assets/cu-preview-head.png" alt="Live Preview header"><div class="cap">Fig. 23 — The Live Preview header: chart justification (⟸ ≡ ⟹), chart text size (A− / 100% / A+ / Reset), Repeated Sections, 2-Column.</div></div>
 <ul>
   <li><b>Justification</b> — ⟸ ≡ ⟹ align the chart body (sections, chords and lyrics move together) left, center or right. Saved with the song; the header has its own alignment under the Title.</li>
   <li><b>Chart text size</b> — the A− / A+ stepper scales the whole chart in 5% steps. The zoom is remembered <i>per song</i> and travels in its JSON export, so the big-print chart for the pianist stays big wherever it goes.</li>
-  <li><b>2-Column</b> flows the chart in two columns, handy for compact one-pagers. <b>Repeated Sections</b> is explained in chapter 7.</li>
+  <li><b>2-Column</b> flows the chart in two columns for compact one-pagers: the title block spans the full page width, the <b>left column fills to the page bottom first</b>, then the right, and Print and PDF produce the same two-column layout as the preview. <b>Repeated Sections</b> is explained in chapter 7.</li>
 </ul>
-<div class="fig strip"><img src="guide-assets/cu-editor-head.png" alt="Editor header"><div class="cap">Fig. 24 — The editor header has its own A− / A+ stepper. This one sizes the <i>editor</i> text only — a workspace preference that's remembered on this device, never saved into a song, and never affects what prints.</div></div>
+<div class="fig narrow"><img src="guide-assets/cu-two-col.png" alt="Two-column chart"><div class="cap">Fig. 24 — 2-Column mode: full-width title block, then the chart flowing left column first.</div></div>
+<div class="callout"><b>Long lines wrap, chords stay put.</b> A line too long for its space — a 2-Column column, or even a full-width page — wraps at a word boundary with <b>every chord staying above its syllable</b>, instead of clipping off the page edge. The wrap adapts to the chart text size and applies identically to the live preview, Print, and PDF.</div>
+<div class="fig strip"><img src="guide-assets/cu-editor-head.png" alt="Editor header"><div class="cap">Fig. 25 — The editor header: the A− / A+ stepper sizes the <i>editor</i> text only (a workspace preference, never saved into a song, never affects what prints), Wrap soft-wraps long lines, and ¶ marks every real line break.</div></div>
+<div class="fig"><img src="guide-assets/cu-editor-marks.png" alt="Paragraph marks in the editor"><div class="cap">Fig. 26 — ¶ marks: one at each typed line break; a soft-wrapped line shows none, and a blank line (a slide break in Lyrics mode) shows as a lone ¶.</div></div>
 
 <!-- ============================ 14 ============================ -->
 <h2 class="chapter" id="c14">14 &nbsp;Lyrics mode &amp; presentation slides</h2>
 <p>The mint-green <b>Lyrics</b> button flips ChartBench into a different job: turning the song you already wrote into projection-ready slides. The editor pares down to lyrics only — chords, section markup, comments and notes stripped — and the preview becomes a slide deck.</p>
-<div class="fig"><img src="guide-assets/09-lyrics-collective.png" alt="Lyrics collective view"><div class="cap">Fig. 25 — Lyrics mode, Collective view: every slide at once. One section per slide; every paragraph break starts a new slide.</div></div>
+<div class="fig"><img src="guide-assets/09-lyrics-collective.png" alt="Lyrics collective view"><div class="cap">Fig. 27 — Lyrics mode, Collective view: every slide at once. One section per slide; every paragraph break starts a new slide.</div></div>
 <h3>Shaping the slides</h3>
 <p>The lyrics view is its <b>own copy</b> of the words, kept in sync with the chart one way: edit lyrics in the chart and the lyrics view refreshes; edit the lyrics view and the chart is untouched. That makes it the place for screen-specific polish — a comma or an "oh," that reads fine on a chart but looks wrong projected can simply be fixed here, and the musicians' chart stays exactly as they read it. In this mode:</p>
 <ul>
@@ -426,13 +429,13 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 </ul>
 <p>Undo/Redo work here on a separate history from the chart's; Left/Right arrows move the caret while you're typing and flip slides when you're not. Repeated bare sections (chapter 7) reuse their original lyrics — a repeated chorus gets its slides without retyping.</p>
 <div class="callout"><b>One trade-off to know:</b> if you later change the chart's <i>lyrics</i>, the lyrics view is rebuilt from the chart and screen-side edits and breaks made here are lost. Chord edits don't trigger this — only changes to the words themselves. Finish the chart's words first, then polish the slides.</div>
-<div class="fig strip"><img src="guide-assets/cu-lyrics-ribbon.png" alt="Lyrics ribbon"><div class="cap">Fig. 26 — In Lyrics mode the structure bar becomes slide controls: Slide View (Individual / Collective), Aspect Ratio (16:9 / 4:3), Theme (Dark / Light), and ‹ › navigation with a slide counter.</div></div>
+<div class="fig strip"><img src="guide-assets/cu-lyrics-ribbon.png" alt="Lyrics ribbon"><div class="cap">Fig. 28 — In Lyrics mode the structure bar becomes slide controls: Slide View (Individual / Collective), Aspect Ratio (16:9 / 4:3), Theme (Dark / Light), and ‹ › navigation with a slide counter.</div></div>
 <div class="cu">
   <div class="cu-img"><img src="guide-assets/cu-slide-footnote.png" alt="Last slide with footnote"></div>
   <div class="cu-text">
     <h4>Individual view &amp; the compliance footnote</h4>
     <p>Individual view shows one slide at a time with ‹ › navigation (or the arrow keys). The <b>last slide</b> carries a small footnote — title, author, license line, church CCLI number — like the compliance block churches show at the end of a song. Dark (white on black) and Light themes, and 16:9 or 4:3, shape every slide and every export the same way.</p>
-    <div class="cap">Fig. 27 — The final slide, dark theme.</div>
+    <div class="cap">Fig. 29 — The final slide, dark theme.</div>
   </div>
 </div>
 
@@ -444,7 +447,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
     <p>In Lyrics mode the <b>Export</b> button flips green — its job has changed. All three formats are built from this parsed Lyrics view, never the raw chart, so the song leader's slide-break work arrives done for whoever runs the presentation.</p>
     <p><b>OpenLyrics XML</b> — the open worship-song standard that OpenLP and others import directly. Sections become verses, paragraph breaks become grouped line blocks, the song's structure becomes the verse order, and the performance key rides along.</p>
     <p><b>ProPresenter .txt</b> and <b>PowerPoint .pptx</b> are described below.</p>
-    <div class="cap">Fig. 28 — The three lyrics formats.</div>
+    <div class="cap">Fig. 30 — The three lyrics formats.</div>
   </div>
 </div>
 <h3>ProPresenter</h3>
@@ -459,7 +462,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
 
 <!-- ============================ 15 ============================ -->
 <h2 class="chapter" id="c15">15 &nbsp;The Set List Builder</h2>
-<div class="fig"><img src="guide-assets/12-setlist.png" alt="Set List Builder"><div class="cap">Fig. 29 — A set in progress, named "Sunday, Aug 24": three entries, one song twice, each with its own key and capo.</div></div>
+<div class="fig"><img src="guide-assets/12-setlist.png" alt="Set List Builder"><div class="cap">Fig. 31 — A set in progress, named "Sunday, Aug 24": three entries, one song twice, each with its own key and capo.</div></div>
 <p>The sky-blue <b>Set List Builder</b> assembles a whole set. The library pane on the left has the sidebar's search, Recent / A–Z sort, and Library / Key / Tags filters; the set builds on the right.</p>
 <div class="cu wide">
   <div class="cu-img"><img src="guide-assets/cu-slb-entry.png" alt="Set entries"></div>
@@ -467,10 +470,10 @@ Without a Library Folder, move songs between copies with Export and Import (chap
     <h4>Building the set</h4>
     <p>Drag songs from the library pane into the set, or click a song's <b>＋</b>. Every entry defaults to Nashville Numbers and carries its own <b>Key</b> and <b>Capo</b> — what's selected is what gets generated. A song with more than one arrangement (chapter 7) also gets an <b>arrangement picker</b> on its entry. The same song can appear twice (an opener reprised in a new key at the close); each copy is independent. Drag the <b>⠿</b> handle to reorder, <b>✕</b> to remove.</p>
     <p><b>Not in the library?</b> <i>Attach a PDF…</i> (or drop a PDF from the desktop onto the set) inserts an existing PDF chart as an entry; its pages print and export in sequence with the rest.</p>
-    <div class="cap">Fig. 30 — Three entries: The Mighty, Righteous, Risen in A, Amazing Grace in NN with capo 3, and the opener again in NN.</div>
+    <div class="cap">Fig. 32 — Three entries: The Mighty, Righteous, Risen in A, Amazing Grace in NN with capo 3, and the opener again in NN.</div>
   </div>
 </div>
-<div class="fig strip"><img src="guide-assets/cu-arr-setlist.png" alt="Set entry with an arrangement picker"><div class="cap">Fig. 31 — An entry for a song with two arrangements: the picker sits left of Key and Capo.</div></div>
+<div class="fig strip"><img src="guide-assets/cu-arr-setlist.png" alt="Set entry with an arrangement picker"><div class="cap">Fig. 33 — An entry for a song with two arrangements: the picker sits left of Key and Capo.</div></div>
 <div class="cu wide flip">
   <div class="cu-img"><img src="guide-assets/cu-slb-saved-panel.png" alt="Set name bar and saved sets"></div>
   <div class="cu-text">
@@ -478,7 +481,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
     <p>Type a name in the bar above the set and click <b>Save set</b> (or press <kbd>Enter</kbd>) — order, keys, capos and attachments are kept. Leave the name blank and it's named with today's date. Saving under an existing name <b>updates</b> that set, so "Sunday, Aug 24" evolves as you tweak it instead of piling up copies.</p>
     <p><b>Saved sets (N)</b> opens the panel: every saved set, newest first, with item count and date. <b>Load</b> brings one back into the builder (asking first if it would replace a non-empty set); <b>✕</b> deletes it after a confirm — the songs themselves are untouched. <b>Clear</b> empties the working set and never touches saved ones.</p>
     <p>The working set — and its name — survive closing the popup and reloading the app. Saved sets are mirrored to the Library Folder (chapter 18) too, so they follow the library.</p>
-    <div class="cap">Fig. 32 — The set-name bar with the saved-sets panel open.</div>
+    <div class="cap">Fig. 34 — The set-name bar with the saved-sets panel open.</div>
   </div>
 </div>
 <div class="cu">
@@ -486,13 +489,13 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>Output</h4>
     <p><b>Print</b> and <b>PDF</b> produce every chart in set order, each song on a fresh page in its chosen key/capo at its own saved text size; attached PDFs drop in as-is. <b>Export Lyrics</b> offers the same three formats as the Lyrics view: OpenLyrics writes one file per entry numbered in set order (<code>01_…</code>, <code>02_…</code>); ProPresenter writes one <code>.txt</code> per song, named by title (a song appearing twice exports once — its lyrics are the same in any key); PowerPoint builds <b>one deck for the whole service</b>, in set order, with a PowerPoint section per entry. Files are named after the set.</p>
-    <div class="cap">Fig. 33 — Clear, Export Lyrics, Print, PDF.</div>
+    <div class="cap">Fig. 35 — Clear, Export Lyrics, Print, PDF.</div>
   </div>
 </div>
 
 <!-- ============================ 16 ============================ -->
 <h2 class="chapter" id="c16">16 &nbsp;The Circle of Fifths</h2>
-<div class="fig narrow"><img src="guide-assets/13-circle.png" alt="Circle of Fifths"><div class="cap">Fig. 34 — The Circle of Fifths window: green tonic at the top, blue subdominant (IV) and gold dominant (V) beside it, and beneath the wheel the key panel — every diatonic chord of the current key with its Roman numeral and the extensions that suit it.</div></div>
+<div class="fig narrow"><img src="guide-assets/13-circle.png" alt="Circle of Fifths"><div class="cap">Fig. 36 — The Circle of Fifths window: green tonic at the top, blue subdominant (IV) and gold dominant (V) beside it, and beneath the wheel the key panel — every diatonic chord of the current key with its Roman numeral and the extensions that suit it.</div></div>
 <p>The purple <b>⭘ Circle of 5ths</b> button opens the wheel in its own window (with a <i>Pin on Top</i> option so it floats over your work). It opens set to the song's current Display Key — or C for a Nashville view. Click any chord to re-center on that key, or drag left/right to spin. The highlighted trio is always the working heart of the key: <b>I</b> (green, center-top), <b>IV</b> (blue), and <b>V</b> (gold), with each ring showing the majors, relative minors, and diminished chords that belong to the key.</p>
 
 <!-- ============================ 17 ============================ -->
@@ -502,7 +505,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>Display preferences</h4>
     <p><b>Editor text size</b> — the same control as the A−/A+ over the editor; a workspace setting, never saved with songs. <b>Chord-to-lyric spacing</b> — how far chords sit above their words. <b>Chart text size</b> — the same control as the preview's A−/A+; per song. <b>Page size</b> — US Letter or A4 for preview, print, PDF and set lists. <b>Default header justification</b> and <b>default chart justification</b> for new songs. And a button to replay the welcome explanation.</p>
-    <div class="cap">Fig. 35 — Display Preferences.</div>
+    <div class="cap">Fig. 37 — Display Preferences.</div>
   </div>
 </div>
 <div class="cu tall flip">
@@ -510,7 +513,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>Church CCLI &amp; Data</h4>
     <p><b>Church CCLI License Number</b> — set once; every new song pre-fills its Church CCLI # field. <b>Data</b> shows a storage status line (whether the browser granted persistent storage, your last full backup, and whether a Library Folder is mirroring), then <b>Version history</b> for the current song (a snapshot on every Save; restore any of the last 25), <b>Export entire library</b> as one JSON file, <b>Restore demo songs</b> (brings back any demo you deleted, without duplicating ones still there), and <b>Clear local database</b> — the nuclear option; with a Library Folder connected, the next sync simply brings everything back from the folder. Version history is per arrangement (chapter 7).</p>
-    <div class="cap">Fig. 36 — The Data section.</div>
+    <div class="cap">Fig. 38 — The Data section.</div>
   </div>
 </div>
 <p>The <b>Library Folder</b> and <b>Feedback</b> sections are covered in chapters 18 and 20. At the bottom, <b>About ChartBench</b> names the author, the build you're running, the license, and links to this guide.</p>
@@ -530,7 +533,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
       <li>Every <b>launch</b> reconciles both ways: a newer file wins over the browser copy, a newer browser copy is written out, new files appear in the sidebar. If files were deleted on another machine, ChartBench <b>asks</b> before removing them here — so a cloud folder that hasn't finished downloading can never silently empty your library.</li>
     </ul>
     <p><b>Sync now</b> runs the reconcile on demand; <b>Forget</b> stops mirroring (the files stay where they are).</p>
-    <div class="cap">Fig. 37 — The Library Folder section before a folder is chosen.</div>
+    <div class="cap">Fig. 39 — The Library Folder section before a folder is chosen.</div>
   </div>
 </div>
 <div class="cu flip">
@@ -538,7 +541,7 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>Reconnecting</h4>
     <p>Browsers won't let a page hold a folder open forever: Chrome may ask to re-confirm access when the app opens. When it does, this strip appears at the top of the sidebar — click <b>Reconnect folder</b> and it syncs. Tick <b>"Allow on every visit"</b> in Chrome's prompt and it stops asking.</p>
-    <div class="cap">Fig. 38 — The reconnect strip.</div>
+    <div class="cap">Fig. 40 — The reconnect strip.</div>
   </div>
 </div>
 <div class="callout"><b>Same library on two computers:</b> choose a folder inside OneDrive, Dropbox, Google Drive or iCloud Drive on the desktop, then point the other computer's ChartBench at the same folder. Both pull in everything and stay in step — the later edit wins if the same song is changed in two places before they sync. Set lists follow too. Attached PDFs in a set list stay with the browser they were attached in.</div>
@@ -567,10 +570,19 @@ Without a Library Folder, move songs between copies with Export and Import (chap
   <div class="cu-text">
     <h4>Debug &amp; Feature Request</h4>
     <p>Found a bug, or want something added? <b>Settings → Feedback → Debug &amp; Feature Request…</b> opens your device's email app with a message already started: a short template (bug or request, what happened, steps to reproduce) and a few facts that make a report traceable — which copy of ChartBench you're on, your browser, page size, library size. Everything else is yours to write; nothing is sent until you press Send. If something ever goes wrong inside the app, a small "Something went wrong" message appears, and the details of that error are attached to the next feedback email automatically — you don't have to describe it.</p>
-    <div class="cap">Fig. 39 — The Feedback section.</div>
+    <div class="cap">Fig. 41 — The Feedback section.</div>
   </div>
 </div>
 <p>The <b>Guide</b> button in the top bar opens the latest edition of this guide. A <a href="ChartBench-User-Guide.pdf">PDF edition</a> is available for printing or reading offline.</p>
+<h3>Supporting ChartBench</h3>
+<div class="cu flip">
+  <div class="cu-img"><img src="guide-assets/cu-support.png" alt="Support ChartBench popup"></div>
+  <div class="cu-text">
+    <h4>♥ Support ChartBench</h4>
+    <p>ChartBench is free, and staying that way — but keeping thechartbench.com online carries real costs. The rose <b>♥ Support ChartBench</b> button in the middle of the top bar opens this popup; <b>Go to Patreon</b> is where anyone who wants to help keep the project running can do exactly that. No pressure, no paywall — Cancel closes it and everything works the same.</p>
+    <div class="cap">Fig. 42 — The Support popup.</div>
+  </div>
+</div>
 <h3>License</h3>
 <p>ChartBench was designed and built by <b>Matthew L. Lee</b>, 2026. It is free and open source, released under <b>Creative Commons BY-NC-SA</b>: use it, share it, and build on it for non-commercial purposes, with attribution, keeping the same license. The songs you write in it are, of course, entirely yours.</p>
 <p>Get the latest version — or your own offline copy — at <b>thechartbench.com</b>.</p>
