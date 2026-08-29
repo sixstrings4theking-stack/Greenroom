@@ -1171,7 +1171,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 11:37';
+const APP_BUILD = '2026-08-29 12:03';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1184,6 +1184,7 @@ const VERSION_NOTES = [
     ]],
     ['Changed', [
       'Repeated sections now always print their header line on the chart ("Chorus 1:"); the Write out repeats toggle only controls whether the contents print under it too.',
+      'A section that doesn’t fit in the space left on a page now fills that page and continues on the next under a "(cont.)" header, instead of dragging the whole section (and a blank gap) onto a new page. A section is only split when at least its header and two lines fit.',
       'Song map circles on the chart are 20% smaller to save header space; the letter codes inside stay full size.',
       'Library folder files are now named after the song — "Hotel California.json" — instead of carrying a code suffix. Two different songs with one title are told apart by "(Artist)" or "(2)". Old suffixed files are renamed automatically on the next sync.',
       'In the song list\u2019s right-click library popup, Full Catalog is no longer offered as a library chip; a "Remove from all libraries" line does what it used to.',
@@ -2105,9 +2106,78 @@ const Renderer = (() => {
    split across a page. Used for PDF export and multi-page print preview.
 --------------------------------------------------------------------------- */
 const Paginator = (() => {
-  // Measures rendered section elements and greedily packs them into pages
-  // without breaking a section's internal lines. maxHeightPx = usable page height.
-  function paginate(sourceContainer, maxHeightPx){
+  const SECTION_MARGIN = 14; // .cs-section margin-bottom
+
+  // Splits one rendered section at its line boundaries so a section that
+  // doesn't fit FILLS the current page and continues on the next, instead
+  // of dragging the whole section (and a large blank gap) onto a new page.
+  // firstCapacity = space left on the current page, pageCapacity = a fresh
+  // page's space. Continuation chunks repeat the section label with a
+  // "(cont.)" suffix (inline lead-in chords stripped — they were already
+  // printed) so the musician knows what they're still in. Returns
+  // [{html, height}, ...] or null when splitting isn't worth it: the
+  // whole thing fits, or fewer than the label + 2 lines would land on the
+  // current page (an orphaned header helps nobody — old move-it-all
+  // behavior is better there).
+  function splitSection(el, firstCapacity, pageCapacity){
+    const children = Array.from(el.children);
+    if(children.length < 3) return null;
+    const secTop = el.getBoundingClientRect().top;
+    const tops = children.map(c => c.getBoundingClientRect().top - secTop);
+    // Per-child cost includes the gap to the next line (top-to-top), so
+    // chunk heights sum to what actually renders.
+    const spans = children.map((c, j) => j < children.length - 1
+      ? tops[j + 1] - tops[j]
+      : c.getBoundingClientRect().bottom - secTop - tops[j]);
+    const labelEl = children[0].classList && children[0].classList.contains('cs-section-label') ? children[0] : null;
+    const labelH = labelEl ? spans[0] : 0;
+    const chunks = [];
+    let cur = [], capUsed = 0, capacity = firstCapacity;
+    children.forEach((c, j) => {
+      if(cur.length && capUsed + spans[j] > capacity){
+        // Never strand a chords-only row at a page bottom away from the
+        // lyric line under it — carry it across the break with its lyric.
+        const carried = [];
+        while(cur.length > 1 && children[cur[cur.length - 1]].classList.contains('chordonly-row')){
+          carried.unshift(cur.pop());
+        }
+        chunks.push(cur);
+        cur = carried; capacity = pageCapacity;
+        capUsed = labelH + carried.reduce((s, jj) => s + spans[jj], 0);
+      }
+      cur.push(j); capUsed += spans[j];
+    });
+    if(cur.length) chunks.push(cur);
+    if(chunks.length < 2) return null; // fits after all (rounding) — nothing to split
+    const minFirst = labelEl ? 3 : 2; // label + 2 lines (or 2 lines) must make the cut
+    if(chunks[0].length < minFirst) return null;
+    let contLabelHtml = '';
+    if(labelEl){
+      const lab = labelEl.cloneNode(true);
+      lab.querySelectorAll('.cs-inline-chords').forEach(n => n.remove());
+      lab.insertAdjacentText('beforeend', ' (cont.)');
+      contLabelHtml = lab.outerHTML;
+    }
+    return chunks.map((idxs, k) => {
+      // A continuation page shouldn't open on a blank spacer line.
+      if(k > 0) while(idxs.length && children[idxs[0]].textContent.trim() === '') idxs.shift();
+      if(!idxs.length) return null;
+      const clone = el.cloneNode(false);
+      clone.innerHTML = (k > 0 ? contLabelHtml : '') + idxs.map(j => children[j].outerHTML).join('');
+      return { html: clone.outerHTML, height: idxs.reduce((s, j) => s + spans[j], 0) + (k > 0 ? labelH : 0) };
+    }).filter(Boolean);
+  }
+
+  // Measures rendered section elements and packs them into pages. A section
+  // that fits in the space left stays whole; one that doesn't is split at
+  // line boundaries (see splitSection) so pages fill top to bottom. When a
+  // split isn't sensible the section moves to a fresh page whole, exactly
+  // as before — and a section taller than an entire page splits against
+  // full pages rather than overflowing. maxHeightPx = usable page height.
+  // contHeaderPx budgets the slim "Title (cont'd) — page N" header every
+  // page after the first carries (see buildPageHeaderHtml) — without it,
+  // exactly-filled continuation pages overflow by that header's height.
+  function paginate(sourceContainer, maxHeightPx, contHeaderPx = 0){
     const sectionEls = Array.from(sourceContainer.querySelectorAll('.cs-section'));
     const pages = [[]];
     let used = 0;
@@ -2120,14 +2190,25 @@ const Paginator = (() => {
     const headerHeight = headerCandidates.length ?
       Math.max(...headerCandidates.map(el => el.getBoundingClientRect().bottom)) - sourceContainer.getBoundingClientRect().top : 0;
     used = headerHeight;
+    const cur = () => pages[pages.length - 1];
     sectionEls.forEach(el => {
-      const h = el.getBoundingClientRect().height + 14; // + margin-bottom
-      if(used + h > maxHeightPx && pages[pages.length-1].length > 0){
-        pages.push([]);
-        used = 0;
+      const h = el.getBoundingClientRect().height + SECTION_MARGIN;
+      if(used + h <= maxHeightPx){ cur().push(el.outerHTML); used += h; return; }
+      const pageCap = maxHeightPx - contHeaderPx - SECTION_MARGIN - 2; // -2: rounding slack
+      let parts = splitSection(el, maxHeightPx - used - SECTION_MARGIN - 2, pageCap);
+      if(!parts){
+        // Not enough room to split usefully — fresh page, whole section if
+        // it fits there, split against full pages if even that overflows.
+        if(cur().length){ pages.push([]); used = contHeaderPx; }
+        if(used + h <= maxHeightPx){ cur().push(el.outerHTML); used += h; return; }
+        parts = splitSection(el, maxHeightPx - used - SECTION_MARGIN - 2, pageCap);
+        if(!parts){ cur().push(el.outerHTML); used += h; return; } // pathological: overflow as before
       }
-      pages[pages.length-1].push(el.outerHTML);
-      used += h;
+      parts.forEach((p, k) => {
+        if(k > 0){ pages.push([]); used = contHeaderPx; }
+        cur().push(p.html);
+        used += p.height + SECTION_MARGIN;
+      });
     });
     return pages;
   }
@@ -5951,7 +6032,16 @@ ${versesXml}
     measureHost.appendChild(sheet);
     Renderer.renderChordSheet(sheet, song, {twoCol:false});
     const PAGE_HEIGHT_PX = pageSpec.contentH * 96; // page height minus 0.25in top+bottom margins, at 96dpi
-    const pages = Paginator.paginate(sheet, PAGE_HEIGHT_PX);
+    // Budget for the slim per-page header pages 2+ carry (see
+    // buildPageHeaderHtml) by measuring a lookalike in this same styled
+    // context. +10 = .cs-meta margin-bottom, outside its border box.
+    const contProbe = document.createElement('div');
+    contProbe.className = 'cs-meta';
+    contProbe.textContent = "X (cont'd) — page 2";
+    sheet.appendChild(contProbe);
+    const contHeaderPx = contProbe.getBoundingClientRect().height + 10;
+    contProbe.remove();
+    const pages = Paginator.paginate(sheet, PAGE_HEIGHT_PX, contHeaderPx);
     document.body.removeChild(measureHost);
     return pages;
   }
