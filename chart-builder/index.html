@@ -974,7 +974,6 @@ small{color:var(--text-faint);}
               <button type="button" id="editorZoomReset" class="ghost" title="Reset editor text size to 100%" style="padding:2px 6px; font-size:10px;">Reset</button>
               <button type="button" id="editorWrapToggle" class="ghost" title="Wrap long lines in the editor — viewing only, never changes the text or the chart" style="padding:2px 6px; font-size:10px; margin-left:6px;">Wrap</button>
             </div>
-            <span class="hint" id="parseStatus">0 lines</span>
           </div>
         </div>
         <textarea id="editor" spellcheck="false" placeholder="# Welcome! Type here to build your chart — this is just an example.
@@ -1190,7 +1189,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 17:47';
+const APP_BUILD = '2026-08-29 17:49';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -3589,11 +3588,9 @@ const App = (() => {
     return raw;
   }
 
-  function renderParseStatus(){
-    const lines = el('editor').value.split('\n').length;
-    const sections = ChordParser.parseSections(el('editor').value).length;
-    el('parseStatus').textContent = `${lines} lines · ${sections} sections`;
-  }
+  // The "N lines · M sections" readout is gone from the editor bar (killed
+  // 2026-08-29) — kept as a no-op so its many call sites stay valid.
+  function renderParseStatus(){}
 
   // Shared between the live preview and the print/PDF pipeline so they can
   // never drift out of sync — both build their per-page header HTML from
