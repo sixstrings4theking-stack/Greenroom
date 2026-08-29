@@ -425,6 +425,16 @@ small{color:var(--text-faint);}
 #editorMirror.nowrap{white-space:pre; overflow-wrap:normal;}
 #editorMirror .pmark{color:#48525f;}
 #editorMarksToggle.active{background:var(--accent); color:var(--accent-text); border-color:var(--accent);}
+/* Preferred Key(s) field: the keys row splits in two — picker + chips on
+   the left, the Arrangement control right-justified past a vertical rule.
+   The split spans ONLY the keys row: the Tags bar below sits outside,
+   keeping its full width, and the rule stops short of it. The dropdown
+   itself clamps on-page (see openArrangementMenu). */
+.pk-split{display:flex; gap:12px; align-items:stretch;}
+.pk-split .pk-main{flex:1; min-width:0;}
+.pk-split .pk-divider{width:1px; background:var(--border-soft); flex-shrink:0; align-self:stretch;}
+.pk-split .pk-arr{flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
+.pk-split .pk-arr .arr-control-row{display:flex; gap:4px; align-items:center;}
 /* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
    stripe + tinted background make it visually obvious this isn't the normal
    editable chart, matching the Lyrics button's own color. Tint lives on
@@ -847,6 +857,8 @@ small{color:var(--text-faint);}
           </div>
         </div>
         <div class="field meta-collapsible" style="flex:2 1 240px;">
+          <div class="pk-split">
+          <div class="pk-main">
           <label>Preferred Key(s)</label>
           <div class="key-picker-row">
             <div class="key-picker" id="preferredKeyPicker">
@@ -867,6 +879,16 @@ small{color:var(--text-faint);}
               </div>
             </div>
             <div class="key-chips" id="preferredKeyChips"></div>
+          </div>
+          </div>
+          <div class="pk-divider"></div>
+          <div class="pk-arr" title="Arrangement — which playable form of this song is in the editor (Main, Acoustic, Short…). Switch, rename or delete from the menu; + adds one as a copy of what's showing. Title, author, licensing and tags are shared by all arrangements.">
+            <label>Arrangement</label>
+            <div class="arr-control-row">
+              <button type="button" id="arrMenuBtn" class="arr-btn">Main ▾</button>
+              <button type="button" id="arrAddBtn" class="icon arr-add" title="New arrangement — a copy of the one showing">+</button>
+            </div>
+          </div>
           </div>
           <label style="margin-top:6px;">Tags (Comma Separated)</label>
           <input id="mTags" placeholder="fast, christmas, communion, easter">
@@ -977,10 +999,6 @@ small{color:var(--text-faint);}
         <div class="pane-head">
           <span class="pane-head-left">
             <span>Editor</span>
-            <span class="arr-control" title="Arrangement — which playable form of this song is in the editor (Main, Acoustic, Short…). Switch, rename or delete from the menu; + adds one as a copy of what's showing. Title, author, licensing and tags are shared by all arrangements.">
-              <button type="button" id="arrMenuBtn" class="arr-btn">Main ▾</button>
-              <button type="button" id="arrAddBtn" class="icon arr-add" title="New arrangement — a copy of the one showing">+</button>
-            </span>
             <span class="hint" id="editorClickHint"></span>
           </span>
           <div style="display:flex; align-items:center; gap:14px;">
@@ -1209,7 +1227,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 18:19';
+const APP_BUILD = '2026-08-29 18:22';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1238,7 +1256,7 @@ const VERSION_NOTES = [
       '2-Column mode rebuilt: the chart fills the LEFT column to the page bottom first (it used to balance-split content into the right column), the title block spans the full page width above the columns, and — new — Print and PDF now honor the toggle instead of quietly printing one column.',
       'Chart-aware word wrap: a line too long for its space — a 2-Column column, or even a full-width page — now wraps at a word boundary with every chord staying above its syllable, instead of clipping off the edge. Applies identically to the live preview, Print, and PDF.',
       'The editor soft-wraps long lines too (Wrap button by the editor zoom controls turns it off) — viewing only, the text itself never changes. A ¶ mark shows at every real line break (its own toggle button) so a wrapped line and a typed Enter read differently at a glance.',
-      'The Arrangement dropdown menu keeps itself on screen instead of running off the page edge.',
+      'The Arrangement control moved from the Editor heading into the Preferred Key(s) section, right-justified past a divider that stops above the Tags bar; its dropdown menu keeps itself on screen.',
       'Re-importing a ChartBench file updates the existing song instead of creating a duplicate — an export round-trip or folder re-import no longer clones songs and files.',
       'Import Folder pointed at the connected library folder is refused (it doubled the folder each run: every file re-imported as a new song, then written back beside the original).',
     ]],
