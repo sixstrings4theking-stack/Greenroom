@@ -1184,7 +1184,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 17:30';
+const APP_BUILD = '2026-08-29 17:41';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1984,10 +1984,11 @@ const Renderer = (() => {
      syllables by character column), so CSS wrapping would tear the chords
      off their words. Instead, a line that exceeds the container's
      character capacity is split at word boundaries into segments — each
-     chord travels with the syllable it sits above, continuation segments
-     indent WRAP_INDENT spaces — and each segment renders as its own
-     chord-row/lyric-row pair. Lines that fit render exactly as before. */
-  const WRAP_INDENT = 2;
+     chord travels with the syllable it sits above — and each segment
+     renders as its own chord-row/lyric-row pair. Lines that fit render
+     exactly as before. WRAP_INDENT: how far continuation segments indent;
+     0 = flush left, per user preference. */
+  const WRAP_INDENT = 0;
 
   // How many monospace characters fit one line of this container. Measured
   // rather than assumed (font scale moves it; a fallback mono font can
