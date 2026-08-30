@@ -200,6 +200,30 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .card button.edit{background:transparent; border-color:var(--border); color:var(--text-dim); font-size:13px;}
 .card button.edit:hover{color:#79c2ff; border-color:#79c2ff;}
 
+/* ---------------- Tracks: transport + mixer drawer ---------------- */
+#transportGrp{flex-wrap:nowrap;}
+#playClock{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text-dim); white-space:nowrap;}
+#scrub{width:130px; accent-color:var(--accent);}
+#btnPlay:disabled{opacity:.35;}
+#mixDrawer{position:fixed; top:0; bottom:0; right:0; width:340px; max-width:92vw; z-index:26; background:var(--bg-panel); border-left:1px solid var(--border); box-shadow:-8px 0 30px rgba(0,0,0,.6); transform:translateX(105%); transition:transform .22s ease; display:flex; flex-direction:column;}
+#mixDrawer.open{transform:translateX(0);}
+#mixHead{padding:14px 14px 10px; border-bottom:1px solid var(--border-soft); font-weight:700; font-size:14px; display:flex; justify-content:space-between; align-items:center;}
+#mixBody{flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:10px;}
+.mix-track{background:var(--bg-panel-2); border:1px solid var(--border-soft); border-radius:8px; padding:8px 10px;}
+.mix-track .row1{display:flex; align-items:center; gap:8px;}
+.mix-track .tname{flex:1; min-width:0; font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.mix-track .row2{display:flex; align-items:center; gap:8px; margin-top:6px;}
+.mix-track input[type=range]{flex:1; accent-color:var(--accent); min-width:60px;}
+.mix-track .mute{width:30px; padding:3px 0; font-weight:700;}
+.mix-track .mute.on{background:var(--danger); color:#fff; border-color:var(--danger);}
+.mix-track .del{background:transparent; border:none; color:var(--text-faint); padding:2px 6px;}
+.mix-track label{font-size:10.5px; color:var(--text-dim); display:inline-flex; align-items:center; gap:3px; white-space:nowrap;}
+.mix-row{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); flex-wrap:wrap;}
+.mix-row input[type=range]{flex:1; accent-color:var(--accent);}
+.mix-row .mode-btn.on{background:rgba(232,161,63,.16); border-color:var(--accent); color:var(--accent); font-weight:600;}
+#mixBpm{width:60px;}
+.mix-note{font-size:11px; color:var(--text-faint); line-height:1.5;}
+
 /* Toast */
 #toast{position:fixed; bottom:70px; left:50%; transform:translateX(-50%); z-index:60; background:var(--bg-panel-2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:9px 16px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s ease; max-width:86vw; text-align:center;}
 #toast.show{opacity:1;}
@@ -289,12 +313,35 @@ input:focus,select:focus{outline:1px solid var(--accent);}
       <label>Capo</label>
       <select id="hudCapo"></select>
     </div>
+    <div class="grp" id="transportGrp">
+      <button id="btnPlay" title="Play/pause tracks (Enter)">⏵</button>
+      <span id="playClock" class="hidden">0:00 / 0:00</span>
+      <input type="range" id="scrub" class="hidden" min="0" max="100" value="0" step="0.1">
+      <button id="btnMixer" title="Tracks &amp; mixer">🎚</button>
+    </div>
     <div id="hudNext"></div>
   </div>
   <div id="flash"><div class="f-title"></div><div class="f-sub"></div></div>
   <div id="setDrawer">
     <div id="setDrawerHead"><span id="setDrawerName">Set</span><button class="ghost" id="setDrawerClose">✕</button></div>
     <div id="setDrawerList"></div>
+  </div>
+  <div id="mixDrawer">
+    <div id="mixHead"><span>Tracks</span><button class="ghost" id="mixClose">✕</button></div>
+    <div id="mixBody">
+      <div id="mixTracks"></div>
+      <button id="mixAdd">+ Add audio file…</button>
+      <input type="file" id="audioInput" class="hidden" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac" multiple>
+      <div class="mix-row">Output:
+        <button class="mode-btn" id="modeStereo" title="Everything as recorded, both ears">Stereo mix</button>
+        <button class="mode-btn" id="modeSplit" title="Click tracks hard right, band hard left — for a headphone splitter rig">Click → R</button>
+      </div>
+      <div class="mix-row">Master <input type="range" id="mixMaster" min="0" max="150" value="100"></div>
+      <div class="mix-row">BPM <input id="mixBpm" inputmode="numeric" placeholder="—">
+        <label><input type="checkbox" id="mixCountIn"> 1-bar count-in</label>
+      </div>
+      <div class="mix-note">Tracks belong to this song and play in every set. “Click” routes a track right in split mode. “L|R file” marks a single file recorded band-left/click-right: stereo mix plays the band in both ears (click dropped); split mode passes it straight through.</div>
+    </div>
   </div>
 </div>
 
@@ -304,7 +351,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-29 21:34';
+const APP_BUILD = '2026-08-29 21:41';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -1409,7 +1456,15 @@ const KV = (() => {
       tx.oncomplete = res; tx.onerror = () => rej(tx.error);
     });
   }
-  return { get, set };
+  async function del(key){
+    const db = await open();
+    return new Promise((res) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').delete(key);
+      tx.oncomplete = res; tx.onerror = res;
+    });
+  }
+  return { get, set, del };
 })();
 
 let songs = [];   // [{uid, id?, title, artist, key, capo, content, arrangements?, ...}]
@@ -1862,6 +1917,7 @@ function renderStage(){
   pageEl.style.setProperty('--chart-font-scale', built.scalePct / 100);
   pageEl.innerHTML = built.pages[perf.page];
   Ink.pageRendered(built);
+  Player.songChanged(perf.entries[perf.idx].uid);
   updateHud(built);
   savePosition();
 }
@@ -2106,7 +2162,7 @@ const Ink = (() => {
   const wantsDraw = ev => ev.isPrimary && (ev.pointerType === 'pen' || armed);
   function onDown(ev){
     if(!perf.active || !wantsDraw(ev)) return;
-    if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
+    if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools') || ev.target.closest('#mixDrawer')) return;
     if(!chunkEls.length) return;
     ev.preventDefault();
     try{ el('stage').setPointerCapture(ev.pointerId); }catch(e){}
@@ -2186,6 +2242,296 @@ const Ink = (() => {
            onDown, onMove, onUp, refresh: redraw, consumeSuppress };
 })();
 
+/* ---------------------------------------------------------------------------
+   TRACKS — the multitrack player.
+   Per-song stems saved like ink: audio blobs under audio_<id>, the
+   song's track list + mix under tracks_<uid> (separate from the song
+   record so library re-imports never wipe them). Web Audio gives
+   sample-accurate sync for free: every stem is an AudioBuffer started
+   at the same context time. Memory is the real constraint (decoded PCM
+   is ~85MB per stereo 4-min stem), so only the current and next songs'
+   stems stay decoded.
+   Output modes: 'stereo' (as recorded) or 'split' (click-flagged tracks
+   hard RIGHT, everything else hard LEFT — the headphone-splitter rig).
+   A track flagged lr is a single file recorded band-L/click-R: stereo
+   mode plays its left channel in both ears (click dropped, for
+   practice); split mode passes it through untouched.
+   The master bus is tapped by two analysers (one per channel) — level
+   meters someday, numeric verification in tests today.
+--------------------------------------------------------------------------- */
+const Player = (() => {
+  let ctx = null, master = null, anL = null, anR = null;
+  let uid = null, meta = null;
+  const metaCache = {};        // uid -> meta (tracks_/mix settings)
+  const bufCache = new Map();  // uid -> Map(audioId -> AudioBuffer)
+  let playing = false, offset = 0, startedAt = 0, duration = 0;
+  let sources = [], liveGains = new Map();
+  let uiTimer = null, saveTimer = null, scrubbing = false;
+
+  const DEF = () => ({ tracks: [], mode: 'stereo', master: 1, bpm: '', countIn: false });
+  const fmt = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
+
+  function ensureCtx(){
+    if(!ctx){
+      ctx = new (window.AudioContext || window.webkitAudioContext)();
+      master = ctx.createGain();
+      const split = ctx.createChannelSplitter(2);
+      anL = ctx.createAnalyser(); anR = ctx.createAnalyser();
+      anL.fftSize = anR.fftSize = 2048;
+      master.connect(ctx.destination);
+      master.connect(split);
+      split.connect(anL, 0); split.connect(anR, 1);
+    }
+    if(ctx.state === 'suspended') ctx.resume();
+    return ctx;
+  }
+  // RMS level of one output channel over the last analyser window (0..~1).
+  function channelLevel(which){
+    const an = which === 'R' ? anR : anL;
+    if(!an) return 0;
+    const buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    let sum = 0; for(let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    return Math.sqrt(sum / buf.length);
+  }
+
+  async function metaFor(u){
+    if(!metaCache[u]) metaCache[u] = Object.assign(DEF(), (await KV.get('tracks_' + u, null)) || {});
+    return metaCache[u];
+  }
+  function scheduleSave(){
+    const u = uid, m = meta;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => KV.set('tracks_' + u, m), 300);
+  }
+
+  async function buffersFor(u){
+    const m = await metaFor(u);
+    if(!bufCache.has(u)) bufCache.set(u, new Map());
+    const map = bufCache.get(u);
+    if(!m.tracks.length) return map;
+    ensureCtx();
+    for(const t of m.tracks){
+      if(map.has(t.audioId)) continue;
+      const blob = await KV.get('audio_' + t.audioId, null);
+      if(!blob) continue;
+      try{ map.set(t.audioId, await ctx.decodeAudioData(await blob.arrayBuffer())); }
+      catch(e){ console.warn('Track decode failed:', t.name, e); }
+    }
+    return map;
+  }
+  function preloadNext(){
+    const next = perf.entries[perf.idx + 1];
+    if(next) buffersFor(next.uid).catch(() => {});
+    const keep = [uid, next && next.uid].filter(Boolean);
+    [...bufCache.keys()].forEach(k => { if(!keep.includes(k)) bufCache.delete(k); });
+  }
+
+  function stopSources(){
+    sources.forEach(s => { try{ s.onended = null; s.stop(); }catch(e){} });
+    sources = []; liveGains.clear();
+  }
+  function position(){
+    if(!playing) return offset;
+    return Math.min(duration, Math.max(0, offset + ctx.currentTime - startedAt));
+  }
+  function pause(){
+    if(playing){ offset = position(); }
+    playing = false; stopSources();
+    clearInterval(uiTimer);
+    updateTransport();
+  }
+
+  async function play(){
+    if(!meta || !meta.tracks.length) return;
+    ensureCtx();
+    const bufs = await buffersFor(uid);
+    const durs = meta.tracks.map(t => (bufs.get(t.audioId) || { duration: 0 }).duration);
+    duration = Math.max(0, ...durs);
+    if(!duration){ toast('Tracks could not be loaded'); return; }
+    stopSources();
+    if(offset >= duration) offset = 0;
+    let t0 = ctx.currentTime + 0.08;
+    const bpm = parseFloat(meta.bpm);
+    if(meta.countIn && bpm > 0 && offset === 0){
+      const spb = 60 / bpm;
+      for(let i = 0; i < 4; i++){
+        const osc = ctx.createOscillator(), g = ctx.createGain();
+        osc.frequency.value = i === 0 ? 1568 : 1046;
+        g.gain.setValueAtTime(0.5, t0 + i * spb);
+        g.gain.exponentialRampToValueAtTime(0.001, t0 + i * spb + 0.09);
+        osc.connect(g); g.connect(master);
+        osc.start(t0 + i * spb); osc.stop(t0 + i * spb + 0.12);
+      }
+      t0 += 4 * spb;
+    }
+    master.gain.value = meta.master;
+    meta.tracks.forEach(t => {
+      const buf = bufs.get(t.audioId);
+      if(!buf) return;
+      const src = ctx.createBufferSource(); src.buffer = buf;
+      const g = ctx.createGain();
+      g.gain.value = t.mute ? 0 : t.gain;
+      liveGains.set(t.audioId, g);
+      if(t.lr){
+        const sp = ctx.createChannelSplitter(2);
+        const mg = ctx.createChannelMerger(2);
+        src.connect(sp);
+        if(meta.mode === 'split'){
+          sp.connect(mg, 0, 0);
+          sp.connect(mg, 1, 1);
+        } else {
+          sp.connect(mg, 0, 0);
+          sp.connect(mg, 0, 1);
+        }
+        mg.connect(g);
+      } else {
+        const pan = ctx.createStereoPanner();
+        pan.pan.value = meta.mode === 'split' ? (t.click ? 1 : -1) : 0;
+        src.connect(pan); pan.connect(g);
+      }
+      g.connect(master);
+      src.start(t0, offset);
+      sources.push(src);
+    });
+    playing = true; startedAt = t0;
+    clearInterval(uiTimer);
+    uiTimer = setInterval(() => {
+      if(position() >= duration){
+        playing = false; stopSources(); offset = 0;
+        clearInterval(uiTimer);
+      }
+      updateTransport();
+    }, 200);
+    updateTransport();
+    preloadNext();
+  }
+
+  function toggle(){ playing ? pause() : play(); }
+  function seek(v){
+    offset = Math.max(0, Math.min(duration || 0, v));
+    if(playing){ stopSources(); playing = false; play(); }
+    else updateTransport();
+  }
+  // Mode/flag changes mid-playback rebuild the graph at the same spot.
+  function reapplyIfPlaying(){ if(playing){ const p = position(); stopSources(); playing = false; offset = p; play(); } }
+
+  async function songChanged(newUid){
+    if(newUid === uid) return;
+    pause(); offset = 0; duration = 0;
+    uid = newUid;
+    meta = uid ? await metaFor(uid) : DEF();
+    updateTransport(); renderMixer();
+  }
+  function shutdown(){
+    pause(); offset = 0;
+    closeMixer();
+    if(ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
+  }
+
+  /* ---- attach / remove ---- */
+  async function addFiles(fileList){
+    let added = 0;
+    for(const f of Array.from(fileList)){
+      const id = genUid();
+      await KV.set('audio_' + id, f);
+      meta.tracks.push({ audioId: id, name: f.name.replace(/\.[^.]+$/, ''), gain: 1, mute: false,
+                         click: /click|cue|met/i.test(f.name), lr: false });
+      added++;
+    }
+    if(added){ scheduleSave(); renderMixer(); updateTransport(); toast(`Added ${added} track${added === 1 ? '' : 's'}`); }
+  }
+  async function removeTrack(i){
+    const t = meta.tracks[i];
+    if(!confirm(`Remove track "${t.name}" from this song?`)) return;
+    meta.tracks.splice(i, 1);
+    KV.del('audio_' + t.audioId); // blobs are single-referenced by design
+
+    if(bufCache.has(uid)) bufCache.get(uid).delete(t.audioId);
+    scheduleSave(); reapplyIfPlaying(); renderMixer(); updateTransport();
+  }
+
+  /* ---- UI ---- */
+  function updateTransport(){
+    const has = !!(meta && meta.tracks.length);
+    el('btnPlay').disabled = !has;
+    el('btnPlay').textContent = playing ? '⏸' : '⏵';
+    el('playClock').classList.toggle('hidden', !has);
+    el('scrub').classList.toggle('hidden', !has);
+    if(has){
+      const pos = position();
+      el('playClock').textContent = fmt(pos) + ' / ' + fmt(duration);
+      if(!scrubbing){
+        el('scrub').max = duration || 0;
+        el('scrub').value = pos;
+      }
+    }
+  }
+  function renderMixer(){
+    const host = el('mixTracks');
+    host.innerHTML = '';
+    (meta ? meta.tracks : []).forEach((t, i) => {
+      const row = document.createElement('div'); row.className = 'mix-track';
+      row.innerHTML = `
+        <div class="row1"><span class="tname"></span><button class="del" title="Remove track">✕</button></div>
+        <div class="row2">
+          <button class="mute${t.mute ? ' on' : ''}" title="Mute">M</button>
+          <input type="range" class="tgain" min="0" max="150" value="${Math.round(t.gain * 100)}">
+          <label><input type="checkbox" class="tclick"${t.click ? ' checked' : ''}> Click</label>
+          <label><input type="checkbox" class="tlr"${t.lr ? ' checked' : ''}> L|R file</label>
+        </div>`;
+      row.querySelector('.tname').textContent = t.name;
+      row.querySelector('.mute').onclick = ev => {
+        t.mute = !t.mute; ev.target.classList.toggle('on', t.mute);
+        const g = liveGains.get(t.audioId); if(g) g.gain.value = t.mute ? 0 : t.gain;
+        scheduleSave();
+      };
+      row.querySelector('.tgain').oninput = ev => {
+        t.gain = ev.target.value / 100;
+        const g = liveGains.get(t.audioId); if(g && !t.mute) g.gain.value = t.gain;
+        scheduleSave();
+      };
+      row.querySelector('.tclick').onchange = ev => { t.click = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
+      row.querySelector('.tlr').onchange = ev => { t.lr = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
+      row.querySelector('.del').onclick = () => removeTrack(i);
+      host.appendChild(row);
+    });
+    el('modeStereo').classList.toggle('on', !meta || meta.mode !== 'split');
+    el('modeSplit').classList.toggle('on', !!meta && meta.mode === 'split');
+    el('mixMaster').value = Math.round(((meta && meta.master) || 1) * 100);
+    el('mixBpm').value = meta ? meta.bpm : '';
+    el('mixCountIn').checked = !!(meta && meta.countIn);
+  }
+  function openMixer(){ renderMixer(); el('mixDrawer').classList.add('open'); showHud(0); }
+  function closeMixer(){ el('mixDrawer').classList.remove('open'); if(perf.active) showHud(); }
+  const mixerOpen = () => el('mixDrawer').classList.contains('open');
+
+  function setMode(m){ meta.mode = m; scheduleSave(); renderMixer(); reapplyIfPlaying(); }
+  function wire(){
+    el('btnPlay').onclick = toggle;
+    el('btnMixer').onclick = () => mixerOpen() ? closeMixer() : openMixer();
+    el('mixClose').onclick = closeMixer;
+    el('mixAdd').onclick = () => el('audioInput').click();
+    el('audioInput').onchange = ev => { if(ev.target.files.length) addFiles(ev.target.files); ev.target.value = ''; };
+    el('modeStereo').onclick = () => setMode('stereo');
+    el('modeSplit').onclick = () => setMode('split');
+    el('mixMaster').oninput = ev => {
+      meta.master = ev.target.value / 100;
+      if(master) master.gain.value = meta.master;
+      scheduleSave();
+    };
+    el('mixBpm').oninput = ev => { meta.bpm = ev.target.value.trim(); scheduleSave(); };
+    el('mixCountIn').onchange = ev => { meta.countIn = ev.target.checked; scheduleSave(); };
+    const scrub = el('scrub');
+    scrub.addEventListener('pointerdown', () => { scrubbing = true; });
+    scrub.addEventListener('change', ev => { scrubbing = false; seek(parseFloat(ev.target.value)); });
+    scrub.addEventListener('input', ev => { if(scrubbing) el('playClock').textContent = fmt(parseFloat(ev.target.value)) + ' / ' + fmt(duration); });
+  }
+
+  return { songChanged, toggle, shutdown, wire, mixerOpen, closeMixer,
+           isPlaying: () => playing, position, channelLevel };
+})();
+
 /* ---- wake lock ---- */
 async function acquireWakeLock(){
   try{
@@ -2253,6 +2599,7 @@ let stageReturn = 'home'; // where exiting the stage lands: 'home' or 'builder'
 function exitPerform(){
   perf.active = false;
   Ink.arm(false);
+  Player.shutdown();
   releaseWakeLock();
   clearInterval(clockTimer);
   closeDrawer();
@@ -2271,8 +2618,9 @@ el('stage').addEventListener('pointermove', Ink.onMove);
 el('stage').addEventListener('pointerup', Ink.onUp);
 el('stage').addEventListener('pointercancel', Ink.onUp);
 el('stage').addEventListener('click', (ev) => {
-  if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
+  if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools') || ev.target.closest('#mixDrawer')) return;
   if(Ink.consumeSuppress()) return;      // this tap drew ink — never turn the page
+  if(Player.mixerOpen()){ Player.closeMixer(); return; }
   if(drawerOpen()){ closeDrawer(); return; }
   if(Ink.isArmed()) return;              // armed = every stage touch is for drawing
   const x = ev.clientX / window.innerWidth;
@@ -2286,7 +2634,8 @@ document.addEventListener('keydown', (ev) => {
   switch(ev.key){
     case 'PageDown': case 'ArrowRight': case 'ArrowDown': case ' ': ev.preventDefault(); goNext(); break;
     case 'PageUp': case 'ArrowLeft': case 'ArrowUp': ev.preventDefault(); goPrev(); break;
-    case 'Escape': ev.preventDefault(); if(drawerOpen()) closeDrawer(); else exitPerform(); break;
+    case 'Enter': ev.preventDefault(); Player.toggle(); break;
+    case 'Escape': ev.preventDefault(); if(Player.mixerOpen()) Player.closeMixer(); else if(drawerOpen()) closeDrawer(); else exitPerform(); break;
     case 'Home': ev.preventDefault(); jumpTo(0); break;
   }
 });
@@ -2302,6 +2651,7 @@ el('toolEraser').onclick = () => Ink.setTool('eraser');
 el('toolUndo').onclick = () => Ink.undo();
 el('toolClear').onclick = () => Ink.clear();
 el('toolDone').onclick = () => Ink.arm(false);
+Player.wire();
 el('setDrawerClose').onclick = closeDrawer;
 async function nudgeScale(delta){
   const entry = perf.entries[perf.idx];
