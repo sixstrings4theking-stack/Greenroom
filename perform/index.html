@@ -63,6 +63,15 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .key-badge{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--chord); background:rgba(127,200,255,.1); border:1px solid rgba(127,200,255,.25); border-radius:6px; padding:1px 7px; flex-shrink:0;}
 .empty-note{font-size:12.5px; color:var(--text-dim); line-height:1.6; background:var(--bg-panel); border:1px dashed var(--border); border-radius:var(--radius); padding:12px 14px;}
 #songSearch{width:100%; margin-bottom:8px;}
+/* Library filters — chip toggles, ChartBench semantics: within a row it's
+   "match at least one selected", across rows they AND together. */
+#songFilters{display:flex; flex-direction:column; gap:6px; margin-bottom:10px;}
+.filt-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.filt-lab{font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); width:86px; flex-shrink:0;}
+.chip{font-size:11.5px; padding:3px 10px; border-radius:12px; background:var(--bg-panel); border:1px solid var(--border); color:var(--text-dim);}
+.chip.active{background:rgba(232,161,63,.16); border-color:var(--accent); color:var(--accent); font-weight:600;}
+.chip.clear{border-style:dashed; color:var(--text-faint);}
+.card select{padding:4px 4px; font-size:12px; flex-shrink:0;}
 #homeFoot{padding:8px 16px; border-top:1px solid var(--border-soft); font-size:10.5px; color:var(--text-faint); display:flex; gap:12px; flex-wrap:wrap;}
 
 /* ---------------- Chart styles (metrics identical to ChartBench, colors stage-dark) ---------------- */
@@ -209,6 +218,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
     <div id="setsList" class="card-list"></div>
     <h2>Songs</h2>
     <input type="search" id="songSearch" placeholder="Search songs…">
+    <div id="songFilters"></div>
     <div id="songsList" class="card-list"></div>
   </div>
   <div id="homeFoot">
@@ -287,7 +297,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-29 21:03';
+const APP_BUILD = '2026-08-29 21:06';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -1347,6 +1357,15 @@ function songWithArrangement(song, arrId){
   if(!applyArrangement(copy, arrId)) return song;
   return copy;
 }
+// Verbatim from ChartBench: preferredKeys is remembered metadata ("keys we
+// actually sing this in"), with read-time fallbacks for older saves — the
+// singular preferredKey field, else the song's own letter key.
+function withPreferredKeysFallback(song){
+  if(Array.isArray(song.preferredKeys)) return song;
+  if(song.preferredKey != null) return {...song, preferredKeys:[song.preferredKey]};
+  const legacy = (song.key && song.key !== 'NN') ? song.key : null;
+  return {...song, preferredKeys: legacy ? [legacy] : []};
+}
 
 /* ---------------------------------------------------------------------------
    Storage — one IndexedDB key/value store. The whole library is one value
@@ -1587,13 +1606,72 @@ function renderHome(){
       setsHost.appendChild(card);
     });
   }
+  renderFilters();
   renderSongList();
 }
+
+/* Library filters — tags / arrangements / preferred keys. ChartBench's
+   sidebar semantics: selecting several values in one row means "has at
+   least one of these"; rows combine with AND. Rows only render when the
+   library actually carries that kind of metadata. */
+const filt = { tags: new Set(), arrs: new Set(), keys: new Set() };
+function arrangementNamesOf(song){
+  // Only explicit arrangement arrays count — every song has an implicit
+  // lone "Main", which would make that filter value match everything.
+  return Array.isArray(song.arrangements) && song.arrangements.length
+    ? song.arrangements.map(a => a.name || 'Main') : [];
+}
+function renderFilters(){
+  const tagVals = [...new Set(songs.flatMap(s => s.tags || []))].sort((a, b) => a.localeCompare(b));
+  const arrVals = [...new Set(songs.flatMap(arrangementNamesOf))].sort((a, b) => a.localeCompare(b));
+  const keyVals = [...new Set(songs.flatMap(s => withPreferredKeysFallback(s).preferredKeys))]
+    .sort((a, b) => KEY_OPTIONS.indexOf(a) - KEY_OPTIONS.indexOf(b));
+  // Drop selections whose value left the library (re-import, deletion).
+  filt.tags.forEach(v => { if(!tagVals.includes(v)) filt.tags.delete(v); });
+  filt.arrs.forEach(v => { if(!arrVals.includes(v)) filt.arrs.delete(v); });
+  filt.keys.forEach(v => { if(!keyVals.includes(v)) filt.keys.delete(v); });
+  const host = el('songFilters');
+  host.innerHTML = '';
+  const anyActive = filt.tags.size || filt.arrs.size || filt.keys.size;
+  const rows = [
+    ['Tags', tagVals, filt.tags],
+    ['Arrangements', arrVals, filt.arrs],
+    ['Preferred key', keyVals, filt.keys],
+  ];
+  rows.forEach(([label, vals, set]) => {
+    if(!vals.length) return;
+    const row = document.createElement('div'); row.className = 'filt-row';
+    const lab = document.createElement('span'); lab.className = 'filt-lab'; lab.textContent = label;
+    row.appendChild(lab);
+    vals.forEach(v => {
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (set.has(v) ? ' active' : '');
+      chip.textContent = v;
+      chip.onclick = () => { set.has(v) ? set.delete(v) : set.add(v); renderFilters(); renderSongList(); };
+      row.appendChild(chip);
+    });
+    host.appendChild(row);
+  });
+  if(anyActive){
+    const clear = document.createElement('button');
+    clear.className = 'chip clear'; clear.textContent = '✕ Clear filters';
+    clear.onclick = () => { filt.tags.clear(); filt.arrs.clear(); filt.keys.clear(); renderFilters(); renderSongList(); };
+    host.appendChild(clear);
+  }
+}
+function songPassesFilters(s){
+  if(filt.tags.size && !(s.tags || []).some(t => filt.tags.has(t))) return false;
+  if(filt.arrs.size && !arrangementNamesOf(s).some(n => filt.arrs.has(n))) return false;
+  if(filt.keys.size && !withPreferredKeysFallback(s).preferredKeys.some(k => filt.keys.has(k))) return false;
+  return true;
+}
+
 function renderSongList(){
   const q = el('songSearch').value.trim().toLowerCase();
   const host = el('songsList');
   const shown = songs
     .filter(s => !q || (s.title || '').toLowerCase().includes(q) || (s.artist || '').toLowerCase().includes(q))
+    .filter(songPassesFilters)
     .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
   if(!songs.length){
     host.innerHTML = `<div class="empty-note">No songs yet. In ChartBench: Settings &gt; Data &gt; <b>Export entire library (JSON)</b>, then <b>Import…</b> that file here. In this same browser, <b>Pull from ChartBench</b> does it in one tap.</div>`;
@@ -1602,20 +1680,26 @@ function renderSongList(){
   host.innerHTML = '';
   shown.forEach(s => {
     const card = document.createElement('div'); card.className = 'card';
-    const sub = [s.artist, s.capo ? 'Capo ' + s.capo : ''].filter(Boolean).join(' · ');
+    const pk = withPreferredKeysFallback(s).preferredKeys;
+    const sub = [s.artist, pk.length ? 'Prefers ' + pk.join(', ') : ''].filter(Boolean).join(' · ');
+    // Quick-open controls: pick a key/capo right on the row, hit ▶ — a
+    // one-off display choice for this performance, never saved to the song.
+    const defKey = KEY_OPTIONS.includes(s.key) ? s.key : 'NN';
     card.innerHTML = `<div class="grow"><div class="title"></div><div class="sub"></div></div>
-      <span class="key-badge"></span><button class="play">▶</button><button class="del" title="Remove from Perform">✕</button>`;
+      <select class="q-key" title="Key to open in">${KEY_OPTIONS.map(k => `<option value="${k}"${k === defKey ? ' selected' : ''}>${k}</option>`).join('')}</select>
+      <select class="q-capo" title="Capo"><option value="">Capo —</option>${Array.from({length: 11}, (_, c) => `<option value="${c + 1}"${String(s.capo) === String(c + 1) ? ' selected' : ''}>Capo ${c + 1}</option>`).join('')}</select>
+      <button class="play">▶</button><button class="del" title="Remove from ChartBenchLive">✕</button>`;
     card.querySelector('.title').textContent = s.title || 'Untitled';
     card.querySelector('.sub').textContent = sub;
-    card.querySelector('.key-badge').textContent = s.key || 'NN';
-    card.querySelector('.play').onclick = () => performSingle(s);
+    card.querySelector('.play').onclick = () =>
+      performSingle(s, card.querySelector('.q-key').value, card.querySelector('.q-capo').value);
     card.querySelector('.del').onclick = async () => {
       if(!confirm(`Remove "${s.title || 'Untitled'}" from ChartBenchLive's library?`)) return;
       songs = songs.filter(x => x.uid !== s.uid); await saveSongs(); renderHome();
     };
     host.appendChild(card);
   });
-  if(!shown.length) host.innerHTML = `<div class="empty-note">No songs match "${Renderer.escapeHtml(q)}".</div>`;
+  if(!shown.length) host.innerHTML = `<div class="empty-note">No songs match the search/filters.</div>`;
 }
 
 /* ---------------------------------------------------------------------------
@@ -2127,9 +2211,12 @@ function performSet(set){
   if(notes.length) toast('Skipped: ' + notes.join(' · '));
   enterPerform(entries, set.name, 'set:' + set.id);
 }
-function performSingle(song){
+function performSingle(song, key, capo){
   enterPerform(
-    [{ uid: song.uid, key: song.key || 'NN', capo: song.capo || '', arrangementId: song.activeArrangementId }],
+    [{ uid: song.uid,
+       key: key !== undefined ? (key || 'NN') : (song.key || 'NN'),
+       capo: capo !== undefined ? capo : (song.capo || ''),
+       arrangementId: song.activeArrangementId }],
     song.title || 'Untitled', 'song:' + song.uid);
 }
 function enterPerform(entries, name, sid){
