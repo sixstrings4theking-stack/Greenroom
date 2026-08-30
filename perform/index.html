@@ -115,6 +115,19 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 #hudNext b{color:var(--text);}
 #hudExit{font-size:15px; padding:4px 10px; flex-shrink:0;}
 
+/* Ink layer — purely visual canvas (pointer events are captured on the
+   stage itself so a stylus can draw any time while finger taps keep
+   turning pages until ink mode is armed). */
+#inkCanvas{position:absolute; inset:0; z-index:21; pointer-events:none;}
+#inkTools{position:fixed; top:calc(52px + env(safe-area-inset-top)); right:10px; z-index:25; display:flex; flex-direction:column; gap:6px; background:rgba(16,18,23,.92); border:1px solid #262b36; border-radius:10px; padding:8px; backdrop-filter:blur(6px);}
+#inkTools button{width:42px; height:38px; font-size:15px; padding:0;}
+#inkTools button.active{outline:2px solid var(--accent); background:var(--bg-panel-2);}
+#inkTools .swatch-red{color:#ff5a5a; font-weight:800;}
+#inkTools .swatch-amber{color:#ffb84d; font-weight:800;}
+#inkTools .swatch-hl{color:#ffe066; font-weight:800;}
+#inkTools hr{border:none; border-top:1px solid var(--border-soft); margin:2px 0; width:100%;}
+#btnInk.armed{outline:2px solid var(--accent); background:var(--bg-panel-2);}
+
 /* Song-boundary flash */
 #flash{position:fixed; inset:0; z-index:23; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; background:rgba(0,0,0,.82); opacity:0; pointer-events:none; transition:opacity .25s ease; text-align:center; padding:20px;}
 #flash.show{opacity:1;}
@@ -224,6 +237,18 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 
 <div id="stage" class="hidden hud-hidden">
   <div id="stagePage"></div>
+  <canvas id="inkCanvas"></canvas>
+  <div id="inkTools" class="hidden">
+    <button id="toolPenRed" class="swatch-red" title="Pen — red">✏</button>
+    <button id="toolPenAmber" class="swatch-amber" title="Pen — amber">✏</button>
+    <button id="toolHl" class="swatch-hl" title="Highlighter">▆</button>
+    <button id="toolEraser" title="Eraser">⌫</button>
+    <hr>
+    <button id="toolUndo" title="Undo">↶</button>
+    <button id="toolClear" title="Clear this song’s ink">🗑</button>
+    <hr>
+    <button id="toolDone" title="Done drawing">✓</button>
+  </div>
   <div id="hudTop">
     <button id="hudExit" title="Exit performance">✕</button>
     <div id="hudTitle"></div>
@@ -235,6 +260,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
       <button id="fontMinus" title="Smaller chart text">A−</button>
       <button id="fontPlus" title="Bigger chart text">A+</button>
       <button id="fontFit" title="Shrink to fit this song on one screen">Fit</button>
+      <button id="btnInk" title="Draw on this chart with your finger (a stylus draws any time)">✏ Ink</button>
     </div>
     <div class="grp">
       <label>Key</label>
@@ -259,7 +285,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-29 19:42';
+const APP_BUILD = '2026-08-29 20:33';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -1647,6 +1673,14 @@ function stageContHeaderHtml(song){
 // One song -> screen-sized page HTML chunks, using the same offscreen
 // measure-then-paginate pattern as ChartBench's buildPrintPagesFor, with
 // the viewport standing in for the sheet of paper.
+//
+// Every .cs-section gets a data-ord ordinal BEFORE pagination. cloneNode
+// in the Paginator's splitSection preserves attributes, so every chunk of
+// a split section carries its canonical section's ordinal — that ordinal
+// (plus the chunk's index among its section's chunks) is what ink strokes
+// anchor to, so they survive re-pagination. chunkBases[p] maps ord -> how
+// many chunks of that section sit on pages BEFORE p, letting the display
+// side compute each on-screen chunk's global index.
 function buildStagePages(song, scalePct){
   const { contentW, pageH } = stageMetrics();
   const host = document.createElement('div');
@@ -1657,6 +1691,7 @@ function buildStagePages(song, scalePct){
   const sheet = document.createElement('div');
   host.appendChild(sheet);
   const sections = Renderer.renderChordSheet(sheet, song, {});
+  Array.from(sheet.querySelectorAll('.cs-section')).forEach((s, i) => { s.dataset.ord = i; });
   const roadmap = Renderer.buildRoadmap(sections);
   const headerHtml = stageHeaderHtml(song, roadmap);
   const probe = document.createElement('div');
@@ -1672,8 +1707,19 @@ function buildStagePages(song, scalePct){
   contProbe.remove();
   const units = Paginator.paginate(sheet, pageH, { contHeaderPx: contPx, headerHeightPx: headerPx });
   document.body.removeChild(host);
-  return units.map((sectionHtmls, i) =>
+  const pages = units.map((sectionHtmls, i) =>
     (i === 0 ? headerHtml : stageContHeaderHtml(song)) + sectionHtmls.join(''));
+  const chunkBases = []; const running = {};
+  const probe2 = document.createElement('div');
+  pages.forEach(html => {
+    chunkBases.push(Object.assign({}, running));
+    probe2.innerHTML = html;
+    probe2.querySelectorAll('.cs-section[data-ord]').forEach(s => {
+      const ord = s.dataset.ord;
+      running[ord] = (running[ord] || 0) + 1;
+    });
+  });
+  return { pages, chunkBases };
 }
 
 /* ---------------------------------------------------------------------------
@@ -1708,8 +1754,8 @@ function entryPages(i){
   if(!stored) return { pages: ['<div class="stage-cont-header">Missing song</div>'], scalePct: DEFAULT_SCALE, song: null };
   const scalePct = entryScale(entry);
   const song = performRenderSong(stored, entry.key, entry.capo);
-  const pages = buildStagePages(song, scalePct);
-  const built = { pages, scalePct, song };
+  const { pages, chunkBases } = buildStagePages(song, scalePct);
+  const built = { pages, chunkBases, scalePct, song };
   perf.cache[i] = built;
   return built;
 }
@@ -1721,6 +1767,7 @@ function renderStage(){
   pageEl.className = built.song ? bodyAlignClass(built.song).trim() : '';
   pageEl.style.setProperty('--chart-font-scale', built.scalePct / 100);
   pageEl.innerHTML = built.pages[perf.page];
+  Ink.pageRendered(built);
   updateHud(built);
   savePosition();
 }
@@ -1821,6 +1868,230 @@ function openDrawer(){
 function closeDrawer(){ el('setDrawer').classList.remove('open'); showHud(); }
 function drawerOpen(){ return el('setDrawer').classList.contains('open'); }
 
+/* ---------------------------------------------------------------------------
+   INK — finger/stylus markup on the chart.
+   Strokes are vectors saved PER SONG (uid), so a song's markings reappear
+   in every set it's performed in, like pencil on a paper chart. Each
+   stroke anchors to a section chunk — (ord, chunk index) from the
+   data-ord tagging in buildStagePages — with points stored relative to
+   that chunk's top-left in font-scale-normalized units. Re-pagination
+   moves sections between pages; the ink moves with them. (If a section's
+   SPLIT POINT itself moves — a different device or font size — strokes on
+   continuation chunks can be parked off-screen until the layout returns;
+   the data is never lost.)
+   Palm rejection rule: a stylus draws at any time; a finger draws only
+   while ink mode is armed (armed mode pins the HUD and suspends tap
+   page-turns — pedal/arrow keys still turn pages while you draw).
+--------------------------------------------------------------------------- */
+const Ink = (() => {
+  const PEN_W = 2.6, HL_W = 16, ERASE_R = 14, UNDO_MAX = 40;
+  const COLORS = { 'pen-red': '#ff5a5a', 'pen-amber': '#ffb84d', hl: 'rgba(255,224,102,.32)' };
+  let armed = false;
+  let tool = localStorage.getItem('cbp_ink_tool') || 'pen-red';
+  let lastScale = 100;
+  const data = {};        // uid -> {strokes:[...]}
+  const undoStacks = {};  // uid -> [json snapshots]
+  let chunkEls = [];      // current page: [{el, ord, chunk}]
+  let drawing = null;
+  let suppressClick = false;
+  let saveTimer = null;
+
+  const uidNow = () => { const e = perf.entries[perf.idx]; return e && e.uid; };
+  function strokesNow(){
+    const u = uidNow(); if(!u) return [];
+    if(!data[u]) data[u] = { strokes: [] };
+    return data[u].strokes;
+  }
+  // Tracks which uids came from storage — strokesNow() lazily seeds empty
+  // records (renderStage runs before this async load finishes), so `in
+  // data` alone can't tell "loaded" from "seeded"; strokes drawn during
+  // the load window are merged in rather than clobbered.
+  const loadedUids = new Set();
+  async function loadFor(uids){
+    for(const u of new Set(uids.filter(Boolean))){
+      if(loadedUids.has(u)) continue;
+      const v = (await KV.get('ink_' + u, null)) || { strokes: [] };
+      if(data[u] && data[u].strokes.length) v.strokes = v.strokes.concat(data[u].strokes);
+      data[u] = v;
+      loadedUids.add(u);
+    }
+  }
+  function scheduleSave(){
+    const u = uidNow(); if(!u) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => KV.set('ink_' + u, data[u]), 400);
+  }
+  function pushUndo(){
+    const u = uidNow(); if(!u) return;
+    const st = undoStacks[u] = undoStacks[u] || [];
+    st.push(JSON.stringify(data[u].strokes));
+    if(st.length > UNDO_MAX) st.shift();
+  }
+
+  function pageRendered(built){
+    lastScale = built.scalePct || lastScale;
+    const canvas = el('inkCanvas');
+    const w = el('stage').clientWidth, h = el('stage').clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    if(canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)){
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    const base = Object.assign({}, (built.chunkBases && built.chunkBases[perf.page]) || {});
+    chunkEls = Array.from(el('stagePage').querySelectorAll('.cs-section[data-ord]')).map(elm => {
+      const ord = elm.dataset.ord;
+      const chunk = base[ord] || 0; base[ord] = chunk + 1;
+      return { el: elm, ord: Number(ord), chunk };
+    });
+    redraw();
+  }
+
+  function drawStroke(ctx, s, ox, oy, k){
+    if(!s.pts.length) return;
+    ctx.beginPath();
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.w * k;
+    s.pts.forEach((p, i) => {
+      const x = ox + p[0] * k, y = oy + p[1] * k;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    if(s.pts.length === 1){ const p = s.pts[0]; ctx.lineTo(ox + p[0] * k + .1, oy + p[1] * k); }
+    ctx.stroke();
+  }
+  function redraw(){
+    const canvas = el('inkCanvas');
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const k = lastScale / 100;
+    const stageRect = el('stage').getBoundingClientRect();
+    for(const s of strokesNow()){
+      const target = chunkEls.find(c => c.ord === s.ord && c.chunk === s.chunk);
+      if(!target) continue;
+      const r = target.el.getBoundingClientRect();
+      drawStroke(ctx, s, r.left - stageRect.left, r.top - stageRect.top, k);
+    }
+    if(drawing && drawing.stroke) drawStroke(ctx, drawing.stroke, drawing.ox, drawing.oy, k);
+  }
+
+  // Anchor = the section chunk containing the start point, else nearest.
+  function pickAnchor(x, y){
+    let best = null, bestD = Infinity;
+    for(const c of chunkEls){
+      const r = c.el.getBoundingClientRect();
+      const d = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0);
+      if(d < bestD){ bestD = d; best = { c, r }; }
+      if(d === 0) break;
+    }
+    return best;
+  }
+
+  function eraseAt(x, y){
+    const k = lastScale / 100;
+    const strokes = strokesNow();
+    for(let i = strokes.length - 1; i >= 0; i--){
+      const s = strokes[i];
+      const target = chunkEls.find(c => c.ord === s.ord && c.chunk === s.chunk);
+      if(!target) continue;
+      const r = target.el.getBoundingClientRect();
+      const hit = s.pts.some(p => {
+        const dx = r.left + p[0] * k - x, dy = r.top + p[1] * k - y;
+        return dx * dx + dy * dy < ERASE_R * ERASE_R;
+      });
+      if(hit){
+        if(!drawing.undoPushed){ pushUndo(); drawing.undoPushed = true; }
+        strokes.splice(i, 1);
+        scheduleSave();
+      }
+    }
+    redraw();
+  }
+
+  const wantsDraw = ev => ev.isPrimary && (ev.pointerType === 'pen' || armed);
+  function onDown(ev){
+    if(!perf.active || !wantsDraw(ev)) return;
+    if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
+    if(!chunkEls.length) return;
+    ev.preventDefault();
+    try{ el('stage').setPointerCapture(ev.pointerId); }catch(e){}
+    if(tool === 'eraser'){
+      drawing = { erase: true, undoPushed: false };
+      eraseAt(ev.clientX, ev.clientY);
+      return;
+    }
+    const anchor = pickAnchor(ev.clientX, ev.clientY);
+    if(!anchor){ drawing = null; return; }
+    const k = lastScale / 100;
+    const stageRect = el('stage').getBoundingClientRect();
+    drawing = {
+      stroke: {
+        tool: tool === 'hl' ? 'hl' : 'pen',
+        color: COLORS[tool] || COLORS['pen-red'],
+        w: tool === 'hl' ? HL_W : PEN_W,
+        ord: anchor.c.ord, chunk: anchor.c.chunk,
+        pts: [[(ev.clientX - anchor.r.left) / k, (ev.clientY - anchor.r.top) / k]],
+      },
+      ox: anchor.r.left - stageRect.left,
+      oy: anchor.r.top - stageRect.top,
+      anchorRect: anchor.r,
+    };
+    redraw();
+  }
+  function onMove(ev){
+    if(!drawing) return;
+    ev.preventDefault();
+    if(drawing.erase){ eraseAt(ev.clientX, ev.clientY); return; }
+    const k = lastScale / 100;
+    drawing.stroke.pts.push([(ev.clientX - drawing.anchorRect.left) / k, (ev.clientY - drawing.anchorRect.top) / k]);
+    redraw();
+  }
+  function onUp(ev){
+    if(!drawing) return;
+    if(!drawing.erase && drawing.stroke.pts.length){
+      pushUndo();
+      strokesNow().push(drawing.stroke);
+      scheduleSave();
+    }
+    drawing = null;
+    suppressClick = true;
+    redraw();
+  }
+
+  function setTool(t){
+    tool = t;
+    try{ localStorage.setItem('cbp_ink_tool', t); }catch(e){}
+    const map = { 'pen-red': 'toolPenRed', 'pen-amber': 'toolPenAmber', hl: 'toolHl', eraser: 'toolEraser' };
+    Object.entries(map).forEach(([name, id]) => el(id).classList.toggle('active', name === t));
+  }
+  function arm(on){
+    armed = on;
+    el('inkTools').classList.toggle('hidden', !on);
+    el('btnInk').classList.toggle('armed', on);
+    el('stage').style.touchAction = on ? 'none' : 'manipulation';
+    if(on){ setTool(tool); showHud(0); } else showHud();
+  }
+  function undo(){
+    const u = uidNow(); const st = undoStacks[u];
+    if(!st || !st.length){ toast('Nothing to undo'); return; }
+    data[u].strokes = JSON.parse(st.pop());
+    scheduleSave(); redraw();
+  }
+  function clear(){
+    const strokes = strokesNow();
+    if(!strokes.length){ toast('No ink on this song'); return; }
+    if(!confirm('Clear all ink on this song? (It’s removed from every set it appears in.)')) return;
+    pushUndo();
+    strokes.length = 0;
+    scheduleSave(); redraw();
+  }
+  function consumeSuppress(){ const v = suppressClick; suppressClick = false; return v; }
+
+  return { pageRendered, loadFor, arm, isArmed: () => armed, setTool, undo, clear,
+           onDown, onMove, onUp, refresh: redraw, consumeSuppress };
+})();
+
 /* ---- wake lock ---- */
 async function acquireWakeLock(){
   try{
@@ -1878,11 +2149,13 @@ function enterPerform(entries, name, sid){
   clockTimer = setInterval(() => { if(hudVisible()) updateHud(); }, 15000);
   flashEntry(perf.idx);
   renderStage();
+  Ink.loadFor(perf.entries.map(e => e.uid)).then(() => Ink.refresh());
   showHud();
 }
 let stageReturn = 'home'; // where exiting the stage lands: 'home' or 'builder'
 function exitPerform(){
   perf.active = false;
+  Ink.arm(false);
   releaseWakeLock();
   clearInterval(clockTimer);
   closeDrawer();
@@ -1896,9 +2169,15 @@ function exitPerform(){
    Input: tap zones, keys (Bluetooth page-turn pedals present as keyboards
    sending PageDown/PageUp or arrows — handled here, no pairing UI needed).
 --------------------------------------------------------------------------- */
+el('stage').addEventListener('pointerdown', Ink.onDown);
+el('stage').addEventListener('pointermove', Ink.onMove);
+el('stage').addEventListener('pointerup', Ink.onUp);
+el('stage').addEventListener('pointercancel', Ink.onUp);
 el('stage').addEventListener('click', (ev) => {
-  if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer')) return;
+  if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
+  if(Ink.consumeSuppress()) return;      // this tap drew ink — never turn the page
   if(drawerOpen()){ closeDrawer(); return; }
+  if(Ink.isArmed()) return;              // armed = every stage touch is for drawing
   const x = ev.clientX / window.innerWidth;
   if(x >= 0.6) goNext();
   else if(x <= 0.22) goPrev();
@@ -1918,6 +2197,14 @@ document.addEventListener('keydown', (ev) => {
 /* ---- HUD wiring ---- */
 el('hudExit').onclick = exitPerform;
 el('hudPos').onclick = () => drawerOpen() ? closeDrawer() : openDrawer();
+el('btnInk').onclick = () => Ink.arm(!Ink.isArmed());
+el('toolPenRed').onclick = () => Ink.setTool('pen-red');
+el('toolPenAmber').onclick = () => Ink.setTool('pen-amber');
+el('toolHl').onclick = () => Ink.setTool('hl');
+el('toolEraser').onclick = () => Ink.setTool('eraser');
+el('toolUndo').onclick = () => Ink.undo();
+el('toolClear').onclick = () => Ink.clear();
+el('toolDone').onclick = () => Ink.arm(false);
 el('setDrawerClose').onclick = closeDrawer;
 async function nudgeScale(delta){
   const entry = perf.entries[perf.idx];
@@ -1935,7 +2222,7 @@ el('fontFit').onclick = async () => {
   while(pct > SCALE_MIN){
     pct -= SCALE_STEP;
     const song = performRenderSong(entryStoredSong(entry), entry.key, entry.capo);
-    if(buildStagePages(song, pct).length <= 1) break;
+    if(buildStagePages(song, pct).pages.length <= 1) break;
   }
   await setEntryScale(entry, pct);
   delete perf.cache[perf.idx];
