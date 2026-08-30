@@ -132,6 +132,46 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .sd-row .n{color:var(--text-faint); font-size:11px; width:18px; text-align:right; flex-shrink:0;}
 .sd-row .t{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 
+/* ---------------- Set List Builder — ChartBench's two-pane layout
+   (library left, set right) with its blue set-list identity hue; reorder
+   is touch-first (↑/↓ always work) with desktop drag as a bonus. ---------------- */
+#builder{position:fixed; inset:0; z-index:15; background:var(--bg); display:flex; flex-direction:column;}
+#bldHead{display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border-soft); flex-wrap:wrap;}
+#bldHead .ttl{font-size:15px; font-weight:700; color:#79c2ff; white-space:nowrap;}
+#bldName{flex:1; min-width:140px;}
+#bldPerform{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:700;}
+#bldSave{background:#79c2ff; color:#0c1826; border-color:#79c2ff; font-weight:700;}
+#bldBody{flex:1; display:flex; min-height:0;}
+.bld-pane{flex:1; min-width:0; display:flex; flex-direction:column; padding:10px 12px;}
+#bldLib{border-right:1px solid var(--border-soft); max-width:44%;}
+.pane-head{font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-faint); margin-bottom:8px;}
+.pane-head b{color:#79c2ff;}
+#bldSearch{width:100%; margin-bottom:8px;}
+#bldLibList,#bldSetList{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:6px; padding-bottom:30px;}
+.bld-lib-row{display:flex; align-items:center; gap:8px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:6px; padding:8px 10px; cursor:pointer;}
+.bld-lib-row:hover{border-color:#79c2ff;}
+.bld-lib-row .t{flex:1; min-width:0; font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-lib-row .sub{font-size:11px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-lib-row .add{color:#79c2ff; border-color:rgba(121,194,255,.4); font-weight:700; flex-shrink:0;}
+.bld-row{display:flex; align-items:center; gap:6px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:6px; padding:7px 8px; flex-wrap:wrap;}
+.bld-row.drag-over{box-shadow:inset 0 3px 0 0 #79c2ff;}
+.bld-row .n{color:var(--text-faint); font-size:11px; width:18px; text-align:right; flex-shrink:0;}
+.bld-row .grow{flex:1; min-width:90px;}
+.bld-row .t{font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-row .sub{font-size:10.5px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-row select{padding:4px 4px; font-size:12.5px;}
+.bld-row button{padding:4px 8px; font-size:13px;}
+.bld-row .del{background:transparent; border:none; color:var(--text-faint);}
+.bld-row .del:hover{color:var(--danger);}
+.bld-row.pdf-row{opacity:.75;}
+@media (max-width:640px){
+  #bldBody{flex-direction:column;}
+  #bldLib{max-width:none; border-right:none; border-bottom:1px solid var(--border-soft); max-height:38%;}
+}
+#btnNewSet{margin-bottom:8px; color:#79c2ff; border-color:rgba(121,194,255,.45); font-weight:600;}
+.card button.edit{background:transparent; border-color:var(--border); color:var(--text-dim); font-size:13px;}
+.card button.edit:hover{color:#79c2ff; border-color:#79c2ff;}
+
 /* Toast */
 #toast{position:fixed; bottom:70px; left:50%; transform:translateX(-50%); z-index:60; background:var(--bg-panel-2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:9px 16px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s ease; max-width:86vw; text-align:center;}
 #toast.show{opacity:1;}
@@ -150,6 +190,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
   </div>
   <div id="homeBody">
     <h2>Set lists</h2>
+    <button id="btnNewSet" title="Build a set list: add songs, pick a key and capo for each, save it under a name">+ New set list</button>
     <div id="setsList" class="card-list"></div>
     <h2>Songs</h2>
     <input type="search" id="songSearch" placeholder="Search songs…">
@@ -157,6 +198,27 @@ input:focus,select:focus{outline:1px solid var(--accent);}
   </div>
   <div id="homeFoot">
     <span>Companion to <a href="https://thechartbench.com" style="color:var(--text-dim);">ChartBench</a> — import your library backup or saved sets, then tap Perform.</span>
+  </div>
+</div>
+
+<div id="builder" class="hidden">
+  <div id="bldHead">
+    <button id="bldBack">← Back</button>
+    <span class="ttl">Set List Builder</span>
+    <input id="bldName" placeholder="Set name (defaults to today’s date)">
+    <button id="bldPerform" title="Perform this set now">▶ Perform</button>
+    <button id="bldSave" title="Save this set under its name">Save set</button>
+  </div>
+  <div id="bldBody">
+    <div class="bld-pane" id="bldLib">
+      <div class="pane-head">Song library — tap a song to add it</div>
+      <input type="search" id="bldSearch" placeholder="Search songs…">
+      <div id="bldLibList"></div>
+    </div>
+    <div class="bld-pane">
+      <div class="pane-head">This set · <b id="bldCount">0</b></div>
+      <div id="bldSetList"></div>
+    </div>
   </div>
 </div>
 
@@ -197,7 +259,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-29 19:18';
+const APP_BUILD = '2026-08-29 19:42';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -1486,9 +1548,10 @@ function renderHome(){
       const n = (set.entries || []).length;
       const card = document.createElement('div'); card.className = 'card';
       card.innerHTML = `<div class="grow"><div class="title"></div><div class="sub">${n} item${n === 1 ? '' : 's'}</div></div>
-        <button class="play">▶ Perform</button><button class="del" title="Remove this set">✕</button>`;
+        <button class="play">▶ Perform</button><button class="edit" title="Edit this set">✎ Edit</button><button class="del" title="Remove this set">✕</button>`;
       card.querySelector('.title').textContent = set.name;
       card.querySelector('.play').onclick = () => performSet(set);
+      card.querySelector('.edit').onclick = () => openBuilder(set);
       card.querySelector('.del').onclick = async () => {
         if(!confirm(`Remove the set "${set.name}" from ChartBenchLive? (ChartBench keeps its own copy.)`)) return;
         sets = sets.filter(s => s.id !== set.id); await saveSets(); renderHome();
@@ -1817,6 +1880,7 @@ function enterPerform(entries, name, sid){
   renderStage();
   showHud();
 }
+let stageReturn = 'home'; // where exiting the stage lands: 'home' or 'builder'
 function exitPerform(){
   perf.active = false;
   releaseWakeLock();
@@ -1824,7 +1888,8 @@ function exitPerform(){
   closeDrawer();
   if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
   el('stage').classList.add('hidden');
-  el('home').classList.remove('hidden');
+  el(stageReturn === 'builder' ? 'builder' : 'home').classList.remove('hidden');
+  stageReturn = 'home';
 }
 
 /* ---------------------------------------------------------------------------
@@ -1898,6 +1963,177 @@ window.addEventListener('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => { perf.cache = {}; renderStage(); }, 250);
 });
+
+/* ---------------------------------------------------------------------------
+   Set List Builder — ChartBench's builder semantics kept intact: entries
+   are {uid, key:'NN', capo:''} on add, duplicates deliberately legal (a
+   reprise, a later key), per-entry key/capo/arrangement, saving under an
+   existing name updates that set after a confirm, and the working draft
+   survives closing the builder (or the whole app) via localStorage —
+   the same scratch-space behavior as ChartBench's wcb_setlist_v1.
+   Attached-PDF entries from imported sets are preserved (reorder/remove
+   only) so editing here never silently destroys them.
+--------------------------------------------------------------------------- */
+const SLB_DRAFT_KEY = 'cbp_slb_draft_v1';
+const bld = { editingId: null, entries: [] };
+
+function defaultSetName(){
+  return new Date().toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+}
+function bldSaveDraft(){
+  try{ localStorage.setItem(SLB_DRAFT_KEY, JSON.stringify({editingId: bld.editingId, name: el('bldName').value, entries: bld.entries})); }catch(e){}
+}
+function bldClearDraft(){ try{ localStorage.removeItem(SLB_DRAFT_KEY); }catch(e){} }
+
+function openBuilder(set){
+  if(set){
+    bld.editingId = set.id;
+    bld.entries = (set.entries || []).map(e => Object.assign({}, e));
+    el('bldName').value = set.name || '';
+    bldSaveDraft();
+  } else {
+    let draft = null;
+    try{ draft = JSON.parse(localStorage.getItem(SLB_DRAFT_KEY)); }catch(e){}
+    if(draft && Array.isArray(draft.entries) && draft.entries.length){
+      bld.editingId = draft.editingId || null;
+      bld.entries = draft.entries;
+      el('bldName').value = draft.name || '';
+      toast('Restored your set in progress');
+    } else {
+      bld.editingId = null; bld.entries = [];
+      el('bldName').value = '';
+    }
+  }
+  el('bldSearch').value = '';
+  el('home').classList.add('hidden');
+  el('builder').classList.remove('hidden');
+  renderBuilderLib(); renderBuilderSet();
+}
+function closeBuilder(){
+  bldSaveDraft();
+  el('builder').classList.add('hidden');
+  el('home').classList.remove('hidden');
+  renderHome();
+}
+
+function renderBuilderLib(){
+  const q = el('bldSearch').value.trim().toLowerCase();
+  const host = el('bldLibList');
+  const shown = songs
+    .filter(s => !q || (s.title || '').toLowerCase().includes(q) || (s.artist || '').toLowerCase().includes(q))
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  host.innerHTML = '';
+  if(!songs.length){
+    host.innerHTML = '<div class="empty-note">No songs in the library yet — import your ChartBench library backup first.</div>';
+    return;
+  }
+  shown.forEach(s => {
+    const row = document.createElement('div'); row.className = 'bld-lib-row';
+    row.innerHTML = `<div class="grow" style="min-width:0;"><div class="t"></div><div class="sub"></div></div>
+      <span class="key-badge"></span><button class="add">+</button>`;
+    row.querySelector('.t').textContent = s.title || 'Untitled';
+    row.querySelector('.sub').textContent = s.artist || '';
+    row.querySelector('.key-badge').textContent = s.key || 'NN';
+    row.onclick = () => {
+      bld.entries.push({ uid: s.uid, key: 'NN', capo: '' });
+      bldSaveDraft(); renderBuilderSet();
+    };
+    host.appendChild(row);
+  });
+  if(!shown.length) host.innerHTML = '<div class="empty-note">No songs match.</div>';
+}
+
+let bldDragIndex = null;
+function bldMove(i, j){
+  if(j < 0 || j >= bld.entries.length) return;
+  const [e] = bld.entries.splice(i, 1);
+  bld.entries.splice(j, 0, e);
+  bldSaveDraft(); renderBuilderSet();
+}
+function renderBuilderSet(){
+  const host = el('bldSetList');
+  el('bldCount').textContent = bld.entries.length + (bld.entries.length === 1 ? ' song' : ' songs');
+  host.innerHTML = '';
+  if(!bld.entries.length){
+    host.innerHTML = '<div class="empty-note">Empty set — tap songs on the left to add them. The same song can appear twice (a reprise, a different key later on), each with its own key and capo.</div>';
+    return;
+  }
+  bld.entries.forEach((entry, i) => {
+    const row = document.createElement('div');
+    if(entry.type === 'pdf'){
+      row.className = 'bld-row pdf-row';
+      row.innerHTML = `<span class="n">${i + 1}</span>
+        <div class="grow"><div class="t"></div><div class="sub">PDF attachment · ${entry.pageCount || '?'} page${entry.pageCount === 1 ? '' : 's'} — performs in ChartBench only for now</div></div>
+        <button class="up" title="Move up">↑</button><button class="down" title="Move down">↓</button><button class="del" title="Remove">✕</button>`;
+      row.querySelector('.t').textContent = '📄 ' + (entry.name || 'PDF');
+    } else {
+      const s = songs.find(x => x.uid === entry.uid);
+      row.className = 'bld-row';
+      const arrs = s ? arrangementsOf(s) : [];
+      row.innerHTML = `<span class="n">${i + 1}</span>
+        <div class="grow"><div class="t"></div><div class="sub"></div></div>
+        <select class="e-key" title="Key this entry displays in">${KEY_OPTIONS.map(k => `<option value="${k}"${(entry.key || 'NN') === k ? ' selected' : ''}>${k}</option>`).join('')}</select>
+        <select class="e-capo" title="Capo for this entry"><option value="">Capo —</option>${Array.from({length: 11}, (_, c) => `<option value="${c + 1}"${String(entry.capo) === String(c + 1) ? ' selected' : ''}>Capo ${c + 1}</option>`).join('')}</select>
+        ${arrs.length > 1 ? `<select class="e-arr" title="Arrangement">${arrs.map(a => `<option value="${a.id}"${(entry.arrangementId || activeArrangementId(s)) === a.id ? ' selected' : ''}>${Renderer.escapeHtml(a.name || 'Main')}</option>`).join('')}</select>` : ''}
+        <button class="up" title="Move up">↑</button><button class="down" title="Move down">↓</button><button class="del" title="Remove">✕</button>`;
+      row.querySelector('.t').textContent = s ? (s.title || 'Untitled') : '(missing song)';
+      row.querySelector('.sub').textContent = s ? (s.artist || '') : 'Not in the library — import it, or remove this entry';
+      row.querySelector('.e-key').onchange = e => { entry.key = e.target.value; bldSaveDraft(); };
+      row.querySelector('.e-capo').onchange = e => { entry.capo = e.target.value; bldSaveDraft(); };
+      const arrSel = row.querySelector('.e-arr');
+      if(arrSel) arrSel.onchange = e => { entry.arrangementId = e.target.value; bldSaveDraft(); };
+    }
+    row.querySelector('.up').onclick = () => bldMove(i, i - 1);
+    row.querySelector('.down').onclick = () => bldMove(i, i + 1);
+    row.querySelector('.del').onclick = () => { bld.entries.splice(i, 1); bldSaveDraft(); renderBuilderSet(); };
+    // Desktop drag reorder (touch reorders with the ↑/↓ buttons).
+    row.draggable = true;
+    row.addEventListener('dragstart', () => { bldDragIndex = i; });
+    row.addEventListener('dragover', ev => { ev.preventDefault(); row.classList.add('drag-over'); });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', ev => {
+      ev.preventDefault(); row.classList.remove('drag-over');
+      if(bldDragIndex !== null && bldDragIndex !== i) bldMove(bldDragIndex, i);
+      bldDragIndex = null;
+    });
+    host.appendChild(row);
+  });
+}
+
+async function bldSaveSet(){
+  if(!bld.entries.length){ toast('The set is empty — add songs first'); return; }
+  let name = el('bldName').value.trim();
+  if(!name){ name = defaultSetName(); el('bldName').value = name; }
+  const entries = bld.entries.map(e => Object.assign({}, e));
+  let target = bld.editingId ? sets.find(s => s.id === bld.editingId) : null;
+  if(!target){
+    const clash = sets.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
+    if(clash){
+      if(!confirm(`A saved set named "${clash.name}" already exists. Update it with this set?`)) return;
+      target = clash;
+    }
+  }
+  if(target){ target.name = name; target.entries = entries; bld.editingId = target.id; }
+  else { const ns = { id: genUid(), name, entries }; sets.push(ns); bld.editingId = ns.id; }
+  await saveSets();
+  bldClearDraft(); bldSaveDraft(); // draft now mirrors the saved set (editingId set), so Back is safe
+  toast(`Saved "${name}"`);
+}
+
+el('btnNewSet').onclick = () => openBuilder(null);
+el('bldBack').onclick = closeBuilder;
+el('bldSearch').oninput = renderBuilderLib;
+el('bldName').oninput = bldSaveDraft;
+el('bldSave').onclick = bldSaveSet;
+el('bldPerform').onclick = () => {
+  bldSaveDraft();
+  const name = el('bldName').value.trim() || defaultSetName();
+  stageReturn = 'builder';
+  el('builder').classList.add('hidden');
+  performSet({ id: bld.editingId || 'builder-draft', name, entries: bld.entries });
+  // performSet may refuse (nothing performable) — put the builder back up.
+  if(!perf.active){ stageReturn = 'home'; el('builder').classList.remove('hidden'); }
+};
 
 /* ---------------- Home wiring + boot ---------------- */
 el('btnImport').onclick = () => el('fileInput').click();
