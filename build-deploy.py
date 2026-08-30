@@ -12,8 +12,6 @@ Layout (upload the CONTENTS of the folder into the web root, e.g. /public):
     docs/                   the User Guide the app's Guide button opens
         user-guide.html, ChartBench-User-Guide.pdf, guide-assets/
     og-image.png            link-preview image (Open Graph)
-    perform/                ChartBenchLive, the stage companion app (PWA)
-        index.html, manifest.json, sw.js, icon-*.png, apple-touch-icon.png
 
 Demo songs come from chart-builder/sample-data/ in the repo (the source of
 truth, so GitHub Pages and the website seed the same songs). Drop finished
@@ -63,20 +61,9 @@ copy(os.path.join(REPO, "docs", "brand", "og-image.png"), os.path.join(OUT, "og-
 # (The Greenroom prototype is deliberately NOT shipped — the public site is
 #  ChartBench only until Greenroom is ready for people to find.)
 
-# 5b. ChartBenchLive (perform/) — the stage companion PWA at /perform/
-perf_src = os.path.join(REPO, "perform")
-PERFORM_FILES = ["index.html", "manifest.json", "sw.js",
-                 "icon-192.png", "icon-512.png", "icon-maskable-512.png", "apple-touch-icon.png"]
-for f in PERFORM_FILES:
-    copy(os.path.join(perf_src, f), os.path.join(OUT, "perform", f))
-# The service worker's cache name comes from its build stamp; a deploy where
-# it lags the app's stamp would serve the new app under the old cache and
-# never show the update toast — catch that here instead of live.
-perf_app = open(os.path.join(perf_src, "index.html"), encoding="utf-8").read()
-perf_sw = open(os.path.join(perf_src, "sw.js"), encoding="utf-8").read()
-app_build = re.search(r"const APP_BUILD = '([^']+)'", perf_app).group(1)
-sw_build = re.search(r"const SW_BUILD = '([^']+)'", perf_sw).group(1)
-assert app_build == sw_build, f"perform build stamps differ: index.html {app_build!r} vs sw.js {sw_build!r}"
+# (ChartBenchLive - perform/ - is deliberately NOT shipped: Matt decided
+#  2026-08-29 it distributes as a native iOS/Android app via Capacitor,
+#  not a web launch. The web build stays local-dev only.)
 
 # 6. upload notes
 open(os.path.join(OUT, "UPLOAD-README.txt"), "w", encoding="utf-8").write(f"""ChartBench website bundle
@@ -93,8 +80,6 @@ index.html is at https://thechartbench.com/index.html.
     {chr(10).join('    ' + n + (' ' * max(1, 22 - len(n))) + 'demo song' for n in manifest)}
   docs/                    the User Guide (the app's Guide button opens docs/user-guide.html)
   og-image.png             link-preview image for shared links
-  perform/                 ChartBenchLive at https://thechartbench.com/perform/
-                           (installable PWA - musicians Add to Home Screen from there)
 
 To replace a demo song: drop the finished ChartBench JSON into sample-data/
 under the SAME filename listed in manifest.json (or add the file and the

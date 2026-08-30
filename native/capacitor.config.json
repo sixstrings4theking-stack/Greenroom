@@ -1,0 +1,12 @@
+{
+  "appId": "com.thechartbench.live",
+  "appName": "ChartBenchLive",
+  "webDir": "www",
+  "backgroundColor": "#000000",
+  "android": {
+    "allowMixedContent": false
+  },
+  "ios": {
+    "contentInset": "never"
+  }
+}

@@ -304,7 +304,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-29 21:09';
+const APP_BUILD = '2026-08-29 21:34';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -2569,6 +2569,9 @@ function showUpdateToast(worker){
   };
 }
 function registerServiceWorker(){
+  // Inside the Capacitor native app the bundle itself is the offline
+  // shell — a service worker would only get in the update path's way.
+  if(window.Capacitor) return;
   if(!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
   navigator.serviceWorker.register('sw.js').then(reg => {
     if(reg.waiting && navigator.serviceWorker.controller) showUpdateToast(reg.waiting);
