@@ -3,13 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
-<title>ChartBench Perform — set lists on stage</title>
-<meta name="description" content="ChartBench Perform: your Nashville Number set lists full-screen on a tablet — stage-dark charts, tap or Bluetooth-pedal page turns, one-tap key change. Companion app to ChartBench.">
+<title>ChartBenchLive — set lists on stage</title>
+<meta name="description" content="ChartBenchLive: your Nashville Number set lists full-screen on a tablet — stage-dark charts, tap or Bluetooth-pedal page turns, one-tap key change. Companion app to ChartBench.">
 <meta name="theme-color" content="#000000">
 <link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='12'%20fill='%23000'/%3E%3Cpath%20d='M24%2017L49%2032L24%2047Z'%20fill='%23e8a13f'/%3E%3C/svg%3E">
 <style>
 /* ==========================================================================
-   ChartBench Perform — the stage companion to ChartBench.
+   ChartBenchLive — the stage companion to ChartBench.
    Same design-token family as chart-builder/index.html, but the chart
    itself renders STAGE-DARK: this app never prints, so the .cs-* chart
    rules below carry dark-stage colors directly (metrics — font sizes,
@@ -141,7 +141,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 
 <div id="home">
   <div id="homeHead">
-    <h1>ChartBench <b>Perform</b></h1>
+    <h1>ChartBench<b>Live</b></h1>
     <span class="build" id="buildBadge"></span>
     <span class="spacer"></span>
     <button id="btnPull" class="hidden" title="Copy the song library and saved sets from ChartBench in this same browser">Pull from ChartBench</button>
@@ -195,9 +195,9 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 
 <script>
 'use strict';
-const APP_NAME = 'ChartBench Perform';
+const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-29 19:09';
+const APP_BUILD = '2026-08-29 19:18';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -1490,7 +1490,7 @@ function renderHome(){
       card.querySelector('.title').textContent = set.name;
       card.querySelector('.play').onclick = () => performSet(set);
       card.querySelector('.del').onclick = async () => {
-        if(!confirm(`Remove the set "${set.name}" from Perform? (ChartBench keeps its own copy.)`)) return;
+        if(!confirm(`Remove the set "${set.name}" from ChartBenchLive? (ChartBench keeps its own copy.)`)) return;
         sets = sets.filter(s => s.id !== set.id); await saveSets(); renderHome();
       };
       setsHost.appendChild(card);
@@ -1519,7 +1519,7 @@ function renderSongList(){
     card.querySelector('.key-badge').textContent = s.key || 'NN';
     card.querySelector('.play').onclick = () => performSingle(s);
     card.querySelector('.del').onclick = async () => {
-      if(!confirm(`Remove "${s.title || 'Untitled'}" from Perform's library?`)) return;
+      if(!confirm(`Remove "${s.title || 'Untitled'}" from ChartBenchLive's library?`)) return;
       songs = songs.filter(x => x.uid !== s.uid); await saveSongs(); renderHome();
     };
     host.appendChild(card);
@@ -1784,7 +1784,7 @@ function performSet(set){
     if(!s){ missing++; continue; }
     entries.push({ uid: s.uid, key: e.key || 'NN', capo: e.capo || '', arrangementId: e.arrangementId });
   }
-  if(!entries.length){ toast('None of this set’s songs are in Perform’s library — import your library backup first'); return; }
+  if(!entries.length){ toast('None of this set’s songs are in ChartBenchLive’s library — import your library backup first'); return; }
   const notes = [];
   if(missing) notes.push(`${missing} song${missing === 1 ? '' : 's'} not in the library`);
   if(pdfs) notes.push(`${pdfs} attached PDF${pdfs === 1 ? '' : 's'} (not supported yet)`);
