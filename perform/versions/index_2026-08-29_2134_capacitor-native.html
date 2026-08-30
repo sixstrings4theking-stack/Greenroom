@@ -1,0 +1,2602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<title>ChartBenchLive — set lists on stage</title>
+<meta name="description" content="ChartBenchLive: your Nashville Number set lists full-screen on a tablet — stage-dark charts, tap or Bluetooth-pedal page turns, one-tap key change. Companion app to ChartBench.">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CBLive">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2064%2064'%3E%3Crect%20width='64'%20height='64'%20rx='12'%20fill='%23000'/%3E%3Cpath%20d='M24%2017L49%2032L24%2047Z'%20fill='%23e8a13f'/%3E%3C/svg%3E">
+<style>
+/* ==========================================================================
+   ChartBenchLive — the stage companion to ChartBench.
+   Same design-token family as chart-builder/index.html, but the chart
+   itself renders STAGE-DARK: this app never prints, so the .cs-* chart
+   rules below carry dark-stage colors directly (metrics — font sizes,
+   line heights, margins — are kept IDENTICAL to ChartBench so the
+   engine's measurement/pagination math behaves the same way).
+   ========================================================================== */
+:root{
+  --bg:#14171c; --bg-panel:#1b1f27; --bg-panel-2:#20242e; --bg-input:#262b36;
+  --border:#2e3440; --border-soft:#242833;
+  --text:#e7e9ee; --text-dim:#9aa2b1; --text-faint:#5f6779;
+  --accent:#e8a13f; --accent-dim:#8a5f24; --accent-text:#1b1406;
+  --chord:#7fc8ff; --danger:#e2637a; --good:#68c98f;
+  --radius:8px; --mono:'SFMono-Regular',Consolas,'Liberation Mono',Menlo,monospace;
+  --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+  --chord-lyric-gap:2px;
+  --chart-font-scale:1;
+  --stage-bg:#000;
+}
+*{box-sizing:border-box;}
+html,body{height:100%;}
+body{
+  margin:0; background:var(--bg); color:var(--text); font-family:var(--sans);
+  font-size:14px; height:100vh; height:100dvh; overflow:hidden;
+}
+button{font-family:var(--sans); cursor:pointer; background:var(--bg-input); color:var(--text); border:1px solid var(--border); border-radius:6px; padding:6px 10px; font-size:13px;}
+button:hover{border-color:var(--accent-dim);}
+button.primary{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:600;}
+button.ghost{background:transparent;}
+input,select{font-family:var(--sans); color:var(--text); background:var(--bg-input); border:1px solid var(--border); border-radius:6px; padding:6px 8px;}
+input:focus,select:focus{outline:1px solid var(--accent);}
+.hidden{display:none !important;}
+
+/* ---------------- Home screen ---------------- */
+#home{height:100%; display:flex; flex-direction:column; overflow:hidden;}
+#homeHead{display:flex; align-items:center; gap:10px; padding:14px 16px 10px; border-bottom:1px solid var(--border-soft); flex-wrap:wrap;}
+#homeHead h1{font-size:17px; margin:0; font-weight:700;}
+#homeHead h1 b{color:var(--accent); font-weight:700;}
+#homeHead .build{font-size:10px; color:var(--text-faint);}
+#homeHead .spacer{flex:1;}
+#homeBody{flex:1; overflow-y:auto; padding:14px 16px 40px; -webkit-overflow-scrolling:touch;}
+#homeBody h2{font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-faint); margin:20px 0 8px;}
+#homeBody h2:first-child{margin-top:0;}
+.card-list{display:flex; flex-direction:column; gap:8px;}
+.card{display:flex; align-items:center; gap:10px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:var(--radius); padding:10px 12px;}
+.card .grow{flex:1; min-width:0;}
+.card .title{font-size:15px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.card .sub{font-size:11.5px; color:var(--text-dim); margin-top:2px;}
+.card button.play{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:700; font-size:14px; padding:8px 14px; border-radius:8px;}
+.card button.del{background:transparent; border:none; color:var(--text-faint); font-size:15px; padding:4px 6px;}
+.card button.del:hover{color:var(--danger);}
+.key-badge{font-family:var(--mono); font-size:11px; font-weight:700; color:var(--chord); background:rgba(127,200,255,.1); border:1px solid rgba(127,200,255,.25); border-radius:6px; padding:1px 7px; flex-shrink:0;}
+.empty-note{font-size:12.5px; color:var(--text-dim); line-height:1.6; background:var(--bg-panel); border:1px dashed var(--border); border-radius:var(--radius); padding:12px 14px;}
+#songSearch{width:100%; margin-bottom:8px;}
+/* Library filters — chip toggles, ChartBench semantics: within a row it's
+   "match at least one selected", across rows they AND together. */
+#songFilters{display:flex; flex-direction:column; gap:6px; margin-bottom:10px;}
+.filt-row{display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+.filt-lab{font-size:10.5px; text-transform:uppercase; letter-spacing:.5px; color:var(--text-faint); width:86px; flex-shrink:0;}
+.chip{font-size:11.5px; padding:3px 10px; border-radius:12px; background:var(--bg-panel); border:1px solid var(--border); color:var(--text-dim);}
+.chip.active{background:rgba(232,161,63,.16); border-color:var(--accent); color:var(--accent); font-weight:600;}
+.chip.clear{border-style:dashed; color:var(--text-faint);}
+.card select{padding:4px 4px; font-size:12px; flex-shrink:0;}
+#homeFoot{padding:8px 16px; border-top:1px solid var(--border-soft); font-size:10.5px; color:var(--text-faint); display:flex; gap:12px; flex-wrap:wrap;}
+
+/* ---------------- Chart styles (metrics identical to ChartBench, colors stage-dark) ---------------- */
+.cs-title{font-size:20px; font-weight:700; margin:0 0 2px; color:#f4f6f9;}
+.cs-artist{font-size:8pt; color:#8b93a3; margin:0 0 2px;}
+.cs-meta{font-size:10.5px; color:#8b93a3; display:flex; gap:14px; border-top:1px solid #2e3440; padding-top:4px; margin-bottom:10px; flex-wrap:wrap;}
+.cs-meta-arr{margin-left:auto; color:#8b93a3; font-weight:600;}
+.cs-copyright{font-size:8pt; color:#6b7383; margin:0 0 3px;}
+.cs-permission{font-size:8pt; color:#6b7383; margin:0 0 3px;}
+.cs-roadmap{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:10px;}
+.cs-roadmap-item{display:inline-flex; align-items:center; gap:3px;}
+.cs-section{margin-bottom:14px; break-inside:avoid; page-break-inside:avoid;}
+.cs-section-label{font-size:calc(11px * var(--chart-font-scale)); font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--accent); margin-bottom:3px;}
+.cs-inline-chords{font-family:var(--mono); font-weight:700; color:var(--chord); text-transform:none; letter-spacing:normal; font-size:calc(13.5px * var(--chart-font-scale)); vertical-align:baseline;}
+.cs-keychange-row{font-weight:700; letter-spacing:.3px; color:#b7a2ff; font-size:calc(12px * var(--chart-font-scale)); margin:4px 0;}
+.cs-line{display:flex; flex-direction:column; white-space:pre;}
+.chord-row{font-family:var(--mono); font-weight:700; color:var(--chord); font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.1; white-space:pre; margin-bottom:var(--chord-lyric-gap);}
+.lyric-row{font-family:var(--mono); font-size:calc(13.5px * var(--chart-font-scale)); line-height:1.5; white-space:pre; color:#eceff4;}
+.chordonly-row{font-family:var(--mono); font-weight:700; color:var(--chord); font-size:calc(13.5px * var(--chart-font-scale)); margin:2px 0;}
+.comment-row{font-family:var(--sans); font-style:italic; color:#9aa2b1; font-size:calc(12px * var(--chart-font-scale)); margin:2px 0;}
+.cs-body-center .cs-line{display:table; margin-left:auto; margin-right:auto;}
+.cs-body-center .cs-section-label, .cs-body-center .chordonly-row, .cs-body-center .comment-row, .cs-body-center .cs-keychange-row{text-align:center;}
+.cs-body-right .cs-line{display:table; margin-left:auto;}
+.cs-body-right .cs-section-label, .cs-body-right .chordonly-row, .cs-body-right .comment-row, .cs-body-right .cs-keychange-row{text-align:right;}
+.chord-note{font-family:var(--mono); font-weight:800; color:#ff8f7d; font-style:normal;}
+/* Song-map badges invert for the dark stage — CSS presentation properties
+   beat the SVG's inline white-fill/black-stroke attributes. */
+.section-badge circle{fill:transparent; stroke:#cfd4de;}
+.section-badge text{fill:#eceff4;}
+
+/* ---------------- Performance stage ---------------- */
+#stage{position:fixed; inset:0; background:var(--stage-bg); z-index:20; display:flex; flex-direction:column; touch-action:manipulation; -webkit-user-select:none; user-select:none;}
+#stagePage{flex:1; overflow:hidden; padding:14px 18px;}
+.stage-header{margin-bottom:6px;}
+.stage-cont-header{font-size:12px; font-weight:600; color:#8b93a3; border-bottom:1px solid #23272f; padding-bottom:3px; margin-bottom:10px;}
+
+/* HUD — floats over the chart, auto-hides. */
+#hudTop,#hudBottom{position:fixed; left:0; right:0; z-index:24; display:flex; align-items:center; gap:8px; padding:8px 12px; background:rgba(16,18,23,.92); backdrop-filter:blur(6px); transition:transform .22s ease, opacity .22s ease;}
+#hudTop{top:0; border-bottom:1px solid #262b36; padding-top:calc(8px + env(safe-area-inset-top));}
+#hudBottom{bottom:0; border-top:1px solid #262b36; flex-wrap:wrap; padding-bottom:calc(8px + env(safe-area-inset-bottom));}
+#stage.hud-hidden #hudTop{transform:translateY(-110%); opacity:0; pointer-events:none;}
+#stage.hud-hidden #hudBottom{transform:translateY(110%); opacity:0; pointer-events:none;}
+#hudTitle{flex:1; min-width:0; font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+#hudTitle small{color:var(--chord); font-family:var(--mono); font-weight:700; margin-left:8px;}
+#hudPos{font-size:12px; font-weight:600; color:var(--text-dim); background:var(--bg-input); border:1px solid var(--border); border-radius:14px; padding:4px 10px; cursor:pointer; flex-shrink:0;}
+#hudClock{font-family:var(--mono); font-size:13px; font-weight:700; color:var(--text-dim); flex-shrink:0;}
+#hudBottom .grp{display:flex; align-items:center; gap:6px;}
+#hudBottom label{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.4px;}
+#hudNext{margin-left:auto; font-size:12px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;}
+#hudNext b{color:var(--text);}
+#hudExit{font-size:15px; padding:4px 10px; flex-shrink:0;}
+
+/* Ink layer — purely visual canvas (pointer events are captured on the
+   stage itself so a stylus can draw any time while finger taps keep
+   turning pages until ink mode is armed). */
+#inkCanvas{position:absolute; inset:0; z-index:21; pointer-events:none;}
+#inkTools{position:fixed; top:calc(52px + env(safe-area-inset-top)); right:10px; z-index:25; display:flex; flex-direction:column; gap:6px; background:rgba(16,18,23,.92); border:1px solid #262b36; border-radius:10px; padding:8px; backdrop-filter:blur(6px);}
+#inkTools button{width:42px; height:38px; font-size:15px; padding:0;}
+#inkTools button.active{outline:2px solid var(--accent); background:var(--bg-panel-2);}
+#inkTools .swatch-red{color:#ff5a5a; font-weight:800;}
+#inkTools .swatch-amber{color:#ffb84d; font-weight:800;}
+#inkTools .swatch-hl{color:#ffe066; font-weight:800;}
+#inkTools hr{border:none; border-top:1px solid var(--border-soft); margin:2px 0; width:100%;}
+#btnInk.armed{outline:2px solid var(--accent); background:var(--bg-panel-2);}
+
+/* Song-boundary flash */
+#flash{position:fixed; inset:0; z-index:23; display:flex; align-items:center; justify-content:center; flex-direction:column; gap:8px; background:rgba(0,0,0,.82); opacity:0; pointer-events:none; transition:opacity .25s ease; text-align:center; padding:20px;}
+#flash.show{opacity:1;}
+#flash .f-title{font-size:30px; font-weight:800;}
+#flash .f-sub{font-size:17px; font-family:var(--mono); font-weight:700; color:var(--chord);}
+
+/* Set drawer */
+#setDrawer{position:fixed; top:0; bottom:0; left:0; width:320px; max-width:85vw; z-index:26; background:var(--bg-panel); border-right:1px solid var(--border); box-shadow:8px 0 30px rgba(0,0,0,.6); transform:translateX(-105%); transition:transform .22s ease; display:flex; flex-direction:column;}
+#setDrawer.open{transform:translateX(0);}
+#setDrawerHead{padding:14px 14px 10px; border-bottom:1px solid var(--border-soft); font-weight:700; font-size:14px; display:flex; justify-content:space-between; align-items:center;}
+#setDrawerList{flex:1; overflow-y:auto; padding:8px;}
+.sd-row{display:flex; align-items:center; gap:8px; padding:9px 10px; border-radius:6px; cursor:pointer; font-size:13.5px;}
+.sd-row:hover{background:var(--bg-input);}
+.sd-row.current{background:rgba(232,161,63,.14); outline:1px solid var(--accent-dim);}
+.sd-row .n{color:var(--text-faint); font-size:11px; width:18px; text-align:right; flex-shrink:0;}
+.sd-row .t{flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+
+/* ---------------- Set List Builder — ChartBench's two-pane layout
+   (library left, set right) with its blue set-list identity hue; reorder
+   is touch-first (↑/↓ always work) with desktop drag as a bonus. ---------------- */
+#builder{position:fixed; inset:0; z-index:15; background:var(--bg); display:flex; flex-direction:column;}
+#bldHead{display:flex; align-items:center; gap:8px; padding:10px 14px; border-bottom:1px solid var(--border-soft); flex-wrap:wrap;}
+#bldHead .ttl{font-size:15px; font-weight:700; color:#79c2ff; white-space:nowrap;}
+#bldName{flex:1; min-width:140px;}
+#bldPerform{background:var(--accent); color:var(--accent-text); border-color:var(--accent); font-weight:700;}
+#bldSave{background:#79c2ff; color:#0c1826; border-color:#79c2ff; font-weight:700;}
+#bldBody{flex:1; display:flex; min-height:0;}
+.bld-pane{flex:1; min-width:0; display:flex; flex-direction:column; padding:10px 12px;}
+#bldLib{border-right:1px solid var(--border-soft); max-width:44%;}
+.pane-head{font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-faint); margin-bottom:8px;}
+.pane-head b{color:#79c2ff;}
+#bldSearch{width:100%; margin-bottom:8px;}
+#bldLibList,#bldSetList{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; display:flex; flex-direction:column; gap:6px; padding-bottom:30px;}
+.bld-lib-row{display:flex; align-items:center; gap:8px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:6px; padding:8px 10px; cursor:pointer;}
+.bld-lib-row:hover{border-color:#79c2ff;}
+.bld-lib-row .t{flex:1; min-width:0; font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-lib-row .sub{font-size:11px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-lib-row .add{color:#79c2ff; border-color:rgba(121,194,255,.4); font-weight:700; flex-shrink:0;}
+.bld-row{display:flex; align-items:center; gap:6px; background:var(--bg-panel); border:1px solid var(--border-soft); border-radius:6px; padding:7px 8px; flex-wrap:wrap;}
+.bld-row.drag-over{box-shadow:inset 0 3px 0 0 #79c2ff;}
+.bld-row .n{color:var(--text-faint); font-size:11px; width:18px; text-align:right; flex-shrink:0;}
+.bld-row .grow{flex:1; min-width:90px;}
+.bld-row .t{font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-row .sub{font-size:10.5px; color:var(--text-dim); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.bld-row select{padding:4px 4px; font-size:12.5px;}
+.bld-row button{padding:4px 8px; font-size:13px;}
+.bld-row .del{background:transparent; border:none; color:var(--text-faint);}
+.bld-row .del:hover{color:var(--danger);}
+.bld-row.pdf-row{opacity:.75;}
+@media (max-width:640px){
+  #bldBody{flex-direction:column;}
+  #bldLib{max-width:none; border-right:none; border-bottom:1px solid var(--border-soft); max-height:38%;}
+}
+#btnNewSet{margin-bottom:8px; color:#79c2ff; border-color:rgba(121,194,255,.45); font-weight:600;}
+.card button.edit{background:transparent; border-color:var(--border); color:var(--text-dim); font-size:13px;}
+.card button.edit:hover{color:#79c2ff; border-color:#79c2ff;}
+
+/* Toast */
+#toast{position:fixed; bottom:70px; left:50%; transform:translateX(-50%); z-index:60; background:var(--bg-panel-2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:9px 16px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s ease; max-width:86vw; text-align:center;}
+#toast.show{opacity:1;}
+#toast.clickable{pointer-events:auto; cursor:pointer; border-color:var(--accent); color:var(--accent); font-weight:600;}
+</style>
+</head>
+<body>
+
+<div id="home">
+  <div id="homeHead">
+    <h1>ChartBench<b>Live</b></h1>
+    <span class="build" id="buildBadge"></span>
+    <span class="spacer"></span>
+    <button id="btnPull" class="hidden" title="Copy the song library and saved sets from ChartBench in this same browser">Pull from ChartBench</button>
+    <button id="btnImport" title="Import a ChartBench library backup (JSON), single-song files, or saved set lists (.setlist.json). On iPad: tap Select > Select All in the Files picker to grab a whole folder’s contents.">Import…</button>
+    <button id="btnImportFolder" class="hidden" title="Import every song and set list in a folder — point it at your ChartBench Library Folder mirror (its Set Lists subfolder comes along too)">Import folder…</button>
+    <input type="file" id="fileInput" class="hidden" accept=".json,application/json" multiple>
+    <input type="file" id="folderInput" class="hidden" webkitdirectory>
+  </div>
+  <div id="homeBody">
+    <h2>Set lists</h2>
+    <button id="btnNewSet" title="Build a set list: add songs, pick a key and capo for each, save it under a name">+ New set list</button>
+    <div id="setsList" class="card-list"></div>
+    <h2>Songs</h2>
+    <input type="search" id="songSearch" placeholder="Search songs…">
+    <div id="songFilters"></div>
+    <div id="songsList" class="card-list"></div>
+  </div>
+  <div id="homeFoot">
+    <span>Companion to <a href="https://thechartbench.com" style="color:var(--text-dim);">ChartBench</a> — import your library backup or saved sets, then tap Perform.</span>
+  </div>
+</div>
+
+<div id="builder" class="hidden">
+  <div id="bldHead">
+    <button id="bldBack">← Back</button>
+    <span class="ttl">Set List Builder</span>
+    <input id="bldName" placeholder="Set name (defaults to today’s date)">
+    <button id="bldPerform" title="Perform this set now">▶ Perform</button>
+    <button id="bldSave" title="Save this set under its name">Save set</button>
+  </div>
+  <div id="bldBody">
+    <div class="bld-pane" id="bldLib">
+      <div class="pane-head">Song library — tap a song to add it</div>
+      <input type="search" id="bldSearch" placeholder="Search songs…">
+      <div id="bldLibList"></div>
+    </div>
+    <div class="bld-pane">
+      <div class="pane-head">This set · <b id="bldCount">0</b></div>
+      <div id="bldSetList"></div>
+    </div>
+  </div>
+</div>
+
+<div id="stage" class="hidden hud-hidden">
+  <div id="stagePage"></div>
+  <canvas id="inkCanvas"></canvas>
+  <div id="inkTools" class="hidden">
+    <button id="toolPenRed" class="swatch-red" title="Pen — red">✏</button>
+    <button id="toolPenAmber" class="swatch-amber" title="Pen — amber">✏</button>
+    <button id="toolHl" class="swatch-hl" title="Highlighter">▆</button>
+    <button id="toolEraser" title="Eraser">⌫</button>
+    <hr>
+    <button id="toolUndo" title="Undo">↶</button>
+    <button id="toolClear" title="Clear this song’s ink">🗑</button>
+    <hr>
+    <button id="toolDone" title="Done drawing">✓</button>
+  </div>
+  <div id="hudTop">
+    <button id="hudExit" title="Exit performance">✕</button>
+    <div id="hudTitle"></div>
+    <div id="hudPos" title="Show the set list"></div>
+    <div id="hudClock"></div>
+  </div>
+  <div id="hudBottom">
+    <div class="grp">
+      <button id="fontMinus" title="Smaller chart text">A−</button>
+      <button id="fontPlus" title="Bigger chart text">A+</button>
+      <button id="fontFit" title="Shrink to fit this song on one screen">Fit</button>
+      <button id="btnInk" title="Draw on this chart with your finger (a stylus draws any time)">✏ Ink</button>
+    </div>
+    <div class="grp">
+      <label>Key</label>
+      <select id="hudKey"></select>
+    </div>
+    <div class="grp">
+      <label>Capo</label>
+      <select id="hudCapo"></select>
+    </div>
+    <div id="hudNext"></div>
+  </div>
+  <div id="flash"><div class="f-title"></div><div class="f-sub"></div></div>
+  <div id="setDrawer">
+    <div id="setDrawerHead"><span id="setDrawerName">Set</span><button class="ghost" id="setDrawerClose">✕</button></div>
+    <div id="setDrawerList"></div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+const APP_NAME = 'ChartBenchLive';
+const APP_VERSION = '0.1.0';
+const APP_BUILD = '2026-08-29 21:34';
+
+function el(id){ return document.getElementById(id); }
+let toastTimer = null;
+function toast(msg, ms = 2600){
+  const t = el('toast'); t.textContent = msg; t.classList.add('show');
+  t.classList.remove('clickable'); t.onclick = null;
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), ms);
+}
+function genUid(){ return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10); }
+
+// The engine below expects this store from ChartBench; Perform has no
+// per-user default-alignment setting, so left is the fixed default (a
+// song's own titleAlign/bodyAlign still win, exactly as in ChartBench).
+const DefaultAlignStore = { get: () => 'left' };
+
+/* ===== ENGINE — copied verbatim from chart-builder/index.html (keep in sync there) ===== */
+// Identifies which family (and instance number, where relevant) a raw
+// section-header label belongs to, e.g. "Pre-Chorus 2" -> {family:'Pre-Chorus',
+// num:2, code:'PC2'}. Returns null for a label that doesn't match any known
+// family (a custom user-typed section name) — callers fall back to a plain
+// first-letter badge in that case. No per-family color mapping — every
+// badge renders in the same plain black-on-white style (see sectionBadgeSvg)
+// regardless of family; only the code text differs.
+function matchSectionFamily(label){
+  if(!label) return null;
+  const trimmed = label.trim();
+  if(/^intro$/i.test(trimmed)) return {family:'Intro', num:null, code:'I'};
+  if(/^outro$/i.test(trimmed)) return {family:'Outro', num:null, code:'O'};
+  const families = [
+    {family:'Pre-Chorus', re:/^pre.?chorus\s*(\d+)?$/i, prefix:'PC'},
+    {family:'Verse',      re:/^verse\s*(\d+)?$/i,       prefix:'V'},
+    {family:'Chorus',     re:/^chorus\s*(\d+)?$/i,      prefix:'C'},
+    {family:'Bridge',     re:/^bridge\s*(\d+)?$/i,      prefix:'B'},
+    {family:'Tag',        re:/^tag\s*(\d+)?$/i,         prefix:'T'},
+    {family:'Interlude',  re:/^interlude\s*(\d+)?$/i,   prefix:'I'},
+  ];
+  for(const {family, re, prefix} of families){
+    const m = trimmed.match(re);
+    if(m){
+      const num = m[1] ? parseInt(m[1], 10) : null;
+      return {family, num, code: prefix + (num || '')};
+    }
+  }
+  return null;
+}
+
+// Resolves the "Musician's Creative Commons License Picker" answers (see
+// the meta bar's #ccInlineControls) into a concrete CC variant. Returns
+// null until BOTH questions are answered — a song sitting in CC mode with
+// nothing picked yet has no determined license, so callers fall back to
+// the generic "Licensed under Creative Commons" text rather than guessing.
+// tags are pushed NC, then SA-or-ND, which is also the fixed order they're
+// joined in ("CC BY-NC-SA", never "CC BY-SA-NC") — SA and ND can never
+// both appear since they're two answers to the same single question.
+const CC_LICENSE_SUMMARIES = {
+  '': 'Anyone can use, remix, and even sell covers/remixes — they just have to credit you.',
+  'SA': 'Anyone can use, remix, and sell covers/remixes, crediting you — but their version must be released under this same license.',
+  'ND': 'Others can perform, record, and even sell it exactly as written, crediting you — but they can’t change lyrics, arrangement, or remix it.',
+  'NC': 'Anyone can use and remix it non-commercially, crediting you. Selling a cover or remix requires your separate permission.',
+  'NC-SA': 'Anyone can remix it non-commercially, crediting you, if their version carries this same license. No commercial use without your permission.',
+  'NC-ND': 'The most restrictive CC option — others may perform/share it unmodified, non-commercially, with credit. No remixing, no selling.'
+};
+function computeCCLicense(ccLicense){
+  if(!ccLicense || !ccLicense.monetization || !ccLicense.modification) return null;
+  const tags = [];
+  if(ccLicense.monetization === 'no') tags.push('NC');
+  if(ccLicense.modification === 'yes_sa') tags.push('SA');
+  else if(ccLicense.modification === 'no') tags.push('ND');
+  const key = tags.join('-');
+  return { code: 'CC BY' + (tags.length ? '-' + key : ''), tags, summary: CC_LICENSE_SUMMARIES[key] };
+}
+
+// The song map as a flat code list (V1, C1, PC2, ... — see
+// matchSectionFamily; custom labels fall back to their first letter), one
+// entry per labeled section in the order it appears, repeats included.
+// Shared by the chart's rendered badge roadmap (Renderer.buildRoadmap) and
+// the chords-over-lyrics export's "Song Map:" header line.
+function roadmapCodes(sections){
+  const codes = [];
+  sections.forEach(sec => {
+    if(!sec.label) return;
+    const label = sec.label.trim();
+    const match = matchSectionFamily(label);
+    if(match){ codes.push(match.code); return; }
+    const firstLetterMatch = label.match(/[A-Za-z]/);
+    if(firstLetterMatch) codes.push(firstLetterMatch[0].toUpperCase());
+  });
+  return codes;
+}
+
+// Renders one round section-marker badge as inline SVG — plain black-on-
+// white, no per-family coloring: white-filled circle, black ring, bold
+// black letter code centered with the dy="0.35em" baseline trick
+// (dominant-baseline renders inconsistently across font weights in Chrome).
+// Print-friendly by design, since these render on the chart's white page.
+// sizePx controls the rendered footprint of the CIRCLE only — the letter
+// code renders at a fixed on-screen size (12 / 9.5 / 7.5 px, stepping down
+// as the code gets longer: I / V1 / PC2) regardless of circle size, so
+// shrinking the badges doesn't shrink their legibility. The viewBox is
+// 72 units across, so a letter's SVG font-size is px * 72 / sizePx.
+function sectionBadgeSvg(code, sizePx){
+  const len = code.length;
+  const letterPx = len <= 2 ? 12 : (len === 3 ? 9.5 : 7.5);
+  const fontSize = (letterPx * 72 / sizePx).toFixed(1);
+  return `<svg class="section-badge" viewBox="0 0 72 72" width="${sizePx}" height="${sizePx}" style="flex-shrink:0;"><circle cx="36" cy="36" r="33" fill="#fff" stroke="#000" stroke-width="3"/><text x="36" y="36" text-anchor="middle" dy="0.35em" font-family="-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif" font-size="${fontSize}" font-weight="700" fill="#000">${code}</text></svg>`;
+}
+
+/* ---------------------------------------------------------------------------
+   1. CHORD / LYRIC PARSER
+   Markup: [Chord]lyricSyllable  — ChordPro-style, OpenSong/OnSong compatible.
+   Section headers: a line ending in ":" (e.g. "Chorus:", "Verse 2:") starts
+   a new structure section. Blank lines separate phrase blocks.
+--------------------------------------------------------------------------- */
+const ChordParser = (() => {
+  const CHORD_TOKEN = /\[([^\]]+)\]/g;
+
+  // Split raw source into sections: {label, lines:[...]}
+  // A header line can optionally carry chord tokens after the colon —
+  // "Outro: [G] [C] [D] [G]" — for lead-in chords before the lyrics start,
+  // or a section that's pure instrumental progression with no lyrics at all
+  // (a whole Outro can be just the header line, nothing else needed below).
+  // The trailing part must be ONLY chord tokens/whitespace, never lyric
+  // text, so a real lyric line that happens to contain a colon can't be
+  // misread as a section header.
+  function parseSections(src){
+    const rawLines = src.replace(/\r\n/g,'\n').split('\n');
+    const sections = [];
+    let current = {label:null, lines:[]};
+    const sectionHeaderRe = /^\s*([A-Za-z][A-Za-z0-9 \-\/]{0,30}):\s*(.*)$/;
+    const chordsOnlyTrailingRe = /^(?:\s*\[[^\]]+\])*\s*$/;
+    rawLines.forEach(line => {
+      const m = line.match(sectionHeaderRe);
+      if(m && chordsOnlyTrailingRe.test(m[2])){
+        if(current.label !== null || current.lines.length){ sections.push(current); }
+        current = {label:m[1].trim(), lines:[]};
+        const trailing = m[2].trim();
+        if(trailing) current.lines.push(trailing);
+      } else {
+        current.lines.push(line);
+      }
+    });
+    sections.push(current);
+    return sections.filter(s => s.label !== null || s.lines.some(l=>l.trim()!==''));
+  }
+
+  // ChordPro-style directive, e.g. "{Key Change: +2}" — inserted via the
+  // struct bar's Key Change button (see App.openKeyChangePopup). Editor-only
+  // for now: recognized here so it doesn't get misread as a lyric line, but
+  // the renderer deliberately skips it rather than showing it in the chart.
+  const KEY_CHANGE_RE = /^\s*\{\s*key change\s*:\s*([+-]?\d+)\s*\}\s*$/i;
+
+  // Parse a single lyric+chord line into tokens: {chord, text}
+  // "text" is the lyric fragment that follows the chord up to the next chord.
+  function parseLine(line){
+    if(line.trim()==='') return {type:'blank'};
+    const kc = line.match(KEY_CHANGE_RE);
+    if(kc) return {type:'keychange', semitones: parseInt(kc[1], 10)};
+    // full-line comment: wrap in parentheses or start with '#'
+    if(/^\s*#/.test(line)) return {type:'comment', text: line.replace(/^\s*#\s?/,'')};
+    if(!line.includes('[')){
+      return {type:'lyric-only', text:line};
+    }
+    const tokens = [];
+    let lastIndex = 0; let m;
+    CHORD_TOKEN.lastIndex = 0;
+    let hadText = false;
+    while((m = CHORD_TOKEN.exec(line))){
+      const before = line.slice(lastIndex, m.index);
+      if(before) { tokens.push({chord:null, text:before}); hadText = true; }
+      // find lyric text up to next chord token
+      lastIndex = CHORD_TOKEN.lastIndex;
+      const nextMatch = line.slice(lastIndex).match(/^[^\[]*/);
+      const followingText = nextMatch ? nextMatch[0] : '';
+      tokens.push({chord:m[1], text:followingText});
+      lastIndex += followingText.length;
+      hadText = hadText || followingText.trim()!=='';
+      CHORD_TOKEN.lastIndex = lastIndex;
+    }
+    if(!hadText){
+      // chord-only line, e.g. instrumental: [G] [C] [D]
+      return {type:'chords-only', chords: tokens.map(t=>t.chord).filter(Boolean)};
+    }
+    return {type:'line', tokens};
+  }
+
+  function parse(src){
+    return parseSections(src).map(sec => ({
+      label: sec.label,
+      lines: sec.lines.map(parseLine)
+    }));
+  }
+
+  return { parse, parseSections, parseLine, CHORD_TOKEN };
+})();
+
+/* ---------------------------------------------------------------------------
+   2. TRANSPOSITION ENGINE
+   Semitone interval mapping. Handles naturals, sharps, flats, slash chords
+   (e.g. D/F#), and extended qualities/accidentals (maj7, m7b5, sus4, add9, °, +).
+--------------------------------------------------------------------------- */
+const Transposer = (() => {
+  const SHARP_SCALE = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+  const FLAT_SCALE  = ['C','Db','D','Eb','E','F','Gb','G','Ab','A','Bb','B'];
+  const NOTE_TO_INDEX = {};
+  SHARP_SCALE.forEach((n,i)=>NOTE_TO_INDEX[n]=i);
+  FLAT_SCALE.forEach((n,i)=>NOTE_TO_INDEX[n]=i);
+  // enharmonic aliases
+  Object.assign(NOTE_TO_INDEX, {'E#':5,'B#':0,'Fb':4,'Cb':11});
+
+  const FLAT_KEYS = new Set(['F','Bb','Eb','Ab','Db','Gb','Cb','Dm','Gm','Cm','Fm','Bbm','Ebm']);
+
+  const CHORD_RE = /^([A-G](?:#|b)?)(.*)$/;
+
+  function transposeRoot(root, semis, preferFlat){
+    const idx = NOTE_TO_INDEX[root];
+    if(idx === undefined) return root; // not a recognizable root, leave as-is
+    let newIdx = ((idx + semis) % 12 + 12) % 12;
+    return preferFlat ? FLAT_SCALE[newIdx] : SHARP_SCALE[newIdx];
+  }
+
+  // Transpose one chord symbol, preserving quality/extensions and slash bass.
+  function transposeChord(symbol, semis, preferFlat){
+    if(semis === 0) return symbol;
+    const parts = symbol.split('/');
+    const out = parts.map((part, i) => {
+      const m = part.match(CHORD_RE);
+      if(!m) return part; // e.g. annotations like "N.C." pass through untouched
+      const [, root, rest] = m;
+      return transposeRoot(root, semis, preferFlat) + rest;
+    });
+    return out.join('/');
+  }
+
+  function transposeText(src, semis, preferFlat){
+    if(semis === 0) return src;
+    return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${transposeChord(chord, semis, preferFlat)}]`);
+  }
+
+  function keyIndex(key){
+    const clean = key.replace(/m$/,'');
+    return NOTE_TO_INDEX[clean];
+  }
+
+  function semitoneDelta(fromKey, toKey){
+    const a = keyIndex(fromKey), b = keyIndex(toKey);
+    if(a===undefined || b===undefined) return 0;
+    let d = b - a;
+    if(d > 6) d -= 12;
+    if(d < -6) d += 12;
+    return d;
+  }
+
+  // The relative major of a minor key sits a minor third (3 semitones) above
+  // its tonic (Am -> C, Dm -> F, ...) — used to redirect a minor key into the
+  // Display Key dropdown's major-only key list (see App.toDisplayableKey).
+  function relativeMajor(minorKey){
+    const root = minorKey.replace(/m$/, '');
+    return transposeRoot(root, 3, FLAT_KEYS.has(minorKey));
+  }
+
+  return {
+    transposeChord, transposeText, semitoneDelta, relativeMajor, FLAT_KEYS, SHARP_SCALE, FLAT_SCALE,
+    noteIndex: (n) => NOTE_TO_INDEX[n],
+    noteAtIndex: (i, preferFlat) => (preferFlat ? FLAT_SCALE : SHARP_SCALE)[((i%12)+12)%12],
+  };
+})();
+
+/* ---------------------------------------------------------------------------
+   2b. NASHVILLE NUMBER SYSTEM (NNS)
+   Reference: en.wikipedia.org/wiki/Nashville_Number_System
+   Numbers denote SCALE DEGREES (1-7) of the major scale relative to a stated
+   key/tonic, NOT absolute pitches — that's the entire point of the system:
+   "the numbers do not change when transposing... they are relative to the
+   new Tonic." So a Nashville chart is written ONCE and is inherently
+   key-independent; picking a performance Key is a RENDERING choice (numbers
+   -> letters for that key), never a mutation of the underlying numbers.
+   Conventions per the wiki:
+     - Bare number = major triad (1, 4, 5...)
+     - Minor = trailing "-" or "m" (6-, 6m)
+     - Chromatic (non-scale) roots = leading accidental (b3, #4)
+     - Extensions pass through as familiar symbols (7, sus, add9, Δ/maj7, °, ø, +)
+     - Slash/inversions use scale-degree bass numbers relative to the TONIC's
+       scale, e.g. in C: 5/7 = G/B, 6m/5 = Am/G
+--------------------------------------------------------------------------- */
+const NashvilleSystem = (() => {
+  const MAJOR_SCALE_SEMITONES = [0, 2, 4, 5, 7, 9, 11]; // scale degrees 1-7
+  const TOKEN_RE = /^([#\u266f]|b|\u266d)?([1-7])(.*)$/; // [accidental][degree][quality]
+  // Roman numerals share the "longest match first" trick so "IV" isn't
+  // misread as "I" followed by leftover "V" — vii/vi/v/iv/iii/ii/i, in that
+  // order, is the only ordering where every numeral matches its full length.
+  const ROMAN_TOKEN_RE = /^([#\u266f]|b|\u266d)?(vii|vi|v|iv|iii|ii|i)(.*)$/i;
+  const ROMAN_UPPER = ['I','II','III','IV','V','VI','VII'];
+  const ROMAN_LOWER = ['i','ii','iii','iv','v','vi','vii'];
+  const ROMAN_TO_DEGREE = {I:1, II:2, III:3, IV:4, V:5, VI:6, VII:7};
+
+  function normalizeAccidental(a){
+    if(a === '#' || a === '\u266f') return '#';
+    if(a === 'b' || a === '\u266d') return 'b';
+    return '';
+  }
+
+  function isNumberToken(token){
+    if(!token) return false;
+    const first = token.split('/')[0];
+    return /^([#\u266f]|b|\u266d)?[1-7]/.test(first);
+  }
+
+  function isRomanToken(token){
+    if(!token) return false;
+    const first = token.split('/')[0];
+    return ROMAN_TOKEN_RE.test(first);
+  }
+
+  // Converts one NNS root+quality (no slash) into a letter chord for keyRoot.
+  function degreeToLetterRoot(accidental, degree, keyRoot, preferFlat){
+    const keyIdx = Transposer.noteIndex(keyRoot);
+    if(keyIdx === undefined) return null;
+    let semis = MAJOR_SCALE_SEMITONES[degree - 1];
+    // An explicit accidental on the token dictates its own spelling
+    // (the wiki's own example: in C major, a b3 triad reads as "Eb", not "D#").
+    let spelling = preferFlat;
+    if(accidental === '#'){ semis += 1; spelling = false; }
+    if(accidental === 'b'){ semis -= 1; spelling = true; }
+    return Transposer.noteAtIndex(keyIdx + semis, spelling);
+  }
+
+  function normalizeQuality(q){
+    if(!q) return '';
+    // NNS shorthand -> conventional letter-chord shorthand for readability
+    let out = q.replace(/^-/, 'm');        // 6-   -> 6m style minor
+    out = out.replace(/^\u03947?/, 'maj7'); // Δ or Δ7 -> maj7 (both mean the same symbol)
+    return out;
+  }
+
+  // Converts a full NNS token (e.g. "6m", "b7", "5/7", "2m7") into a letter chord.
+  function numberChordToLetter(token, keyRoot, preferFlat){
+    const parts = token.split('/');
+    const converted = parts.map((part, i) => {
+      const m = part.match(TOKEN_RE);
+      if(!m) return part; // not actually a number token (e.g. bass letter) — leave as-is
+      const accidental = normalizeAccidental(m[1]);
+      const degree = parseInt(m[2], 10);
+      const quality = i === 0 ? normalizeQuality(m[3]) : ''; // bass part: root only
+      const root = degreeToLetterRoot(accidental, degree, keyRoot, preferFlat);
+      if(root === null) return part;
+      return root + quality;
+    });
+    return converted.join('/');
+  }
+
+  // Roman numeral analysis convention: uppercase = major-family (I, IV, V,
+  // sus/add/maj7 chords included, since none of those imply a minor third),
+  // lowercase = minor-family, and diminished keeps the lowercase-plus-°
+  // combination the wiki-verified chip panel already uses elsewhere in this
+  // app (e.g. "vii°"). The case itself carries the quality information that
+  // NNS otherwise has to spell out with a trailing "m" — so converting FROM
+  // arabic strips that redundant "m" once the numeral's case already says it.
+  function arabicToRoman(token){
+    const parts = token.split('/');
+    const converted = parts.map((part, i) => {
+      const m = part.match(TOKEN_RE);
+      if(!m) return part;
+      const accidental = normalizeAccidental(m[1]);
+      const degree = parseInt(m[2], 10);
+      const quality = i === 0 ? normalizeQuality(m[3]) : '';
+      let numeral, suffix;
+      if(/^(dim|\u00b0)/.test(quality)){
+        numeral = ROMAN_LOWER[degree - 1];
+        suffix = quality.replace(/^dim/, '\u00b0');
+      } else if(/^m(?!aj)/.test(quality)){
+        numeral = ROMAN_LOWER[degree - 1];
+        suffix = quality.replace(/^m/, '');
+      } else {
+        numeral = ROMAN_UPPER[degree - 1];
+        suffix = quality;
+      }
+      return accidental + numeral + suffix;
+    });
+    return converted.join('/');
+  }
+
+  // The reverse conversion — used both when toggling notation style back to
+  // arabic, and internally so roman tokens can reuse the already-verified
+  // numberChordToLetter path rather than duplicating the letter-conversion
+  // math in a second place.
+  function romanToArabic(token){
+    const parts = token.split('/');
+    const converted = parts.map((part, i) => {
+      const m = part.match(ROMAN_TOKEN_RE);
+      if(!m) return part;
+      const accidental = normalizeAccidental(m[1]);
+      const degree = ROMAN_TO_DEGREE[m[2].toUpperCase()];
+      if(i > 0) return accidental + degree; // bass notes carry no quality, regardless of the case someone typed it in
+      const isLower = m[2] === m[2].toLowerCase();
+      const suffix = m[3] || '';
+      let quality;
+      if(suffix.charAt(0) === '\u00b0'){
+        quality = suffix; // diminished is already fully expressed by the symbol
+      } else if(isLower){
+        quality = 'm' + suffix;
+      } else {
+        quality = suffix;
+      }
+      return accidental + degree + quality;
+    });
+    return converted.join('/');
+  }
+
+  // Single entry point the renderer uses — dispatches to whichever notation
+  // the token is actually written in (arabic or roman), or passes through
+  // unchanged if it's neither (a literal letter chord).
+  function toLetterChord(token, keyRoot, preferFlat){
+    if(isRomanToken(token)) return numberChordToLetter(romanToArabic(token), keyRoot, preferFlat);
+    if(isNumberToken(token)) return numberChordToLetter(token, keyRoot, preferFlat);
+    return token;
+  }
+
+  /* -------------------------------------------------------------------------
+     REVERSE CONVERSION — letter chords back to Nashville Numbers, relative
+     to a stated tonic. Mirrors degreeToLetterRoot/numberChordToLetter in the
+     other direction, for migrating existing letter-key charts to canonical
+     NN storage (see "Convert to Nashville Numbers").
+  ------------------------------------------------------------------------- */
+  // Same root-vs-quality split Transposer's transposeChord uses internally
+  // (that regex isn't exported, so this mirrors it rather than importing it).
+  const CHORD_ROOT_RE = /^([A-G](?:#|b)?)(.*)$/;
+
+  // Maps a semitone distance from the tonic (0-11) to a scale degree +
+  // accidental. The 6 diatonic in-between semitones are spelled with
+  // whichever accidental is conventional for the borrowed/chromatic chords
+  // this style of chart actually uses — b3, b6, b7 (borrowed from the
+  // parallel minor) and #4 (the raised fourth) are the common ones; b2 covers
+  // the rarer Neapolitan-type case. This is the direct inverse of the
+  // (accidental, degree) -> semitone math in degreeToLetterRoot above.
+  const SEMITONE_TO_DEGREE = [
+    {accidental:'',  degree:1}, {accidental:'b', degree:2}, {accidental:'',  degree:2},
+    {accidental:'b', degree:3}, {accidental:'',  degree:3}, {accidental:'',  degree:4},
+    {accidental:'#', degree:4}, {accidental:'',  degree:5}, {accidental:'b', degree:6},
+    {accidental:'',  degree:6}, {accidental:'b', degree:7}, {accidental:'',  degree:7},
+  ];
+
+  function letterRootToDegree(root, keyRoot){
+    const keyIdx = Transposer.noteIndex(keyRoot);
+    const rootIdx = Transposer.noteIndex(root);
+    if(keyIdx === undefined || rootIdx === undefined) return null;
+    const semis = ((rootIdx - keyIdx) % 12 + 12) % 12;
+    return SEMITONE_TO_DEGREE[semis];
+  }
+
+  // Converts one full letter chord symbol (e.g. "Em7", "D/F#") into its NNS
+  // token relative to keyRoot. Roots that aren't a recognizable pitch (e.g.
+  // "N.C." annotations, or note-annotation tokens starting with "*") don't
+  // match CHORD_ROOT_RE and pass through unchanged — same graceful
+  // degradation the forward converter uses for tokens it doesn't recognize.
+  function letterChordToNumber(symbol, keyRoot){
+    const parts = symbol.split('/');
+    const converted = parts.map(part => {
+      const m = part.match(CHORD_ROOT_RE);
+      if(!m) return part;
+      const [, root, quality] = m;
+      const d = letterRootToDegree(root, keyRoot);
+      if(!d) return part;
+      return d.accidental + d.degree + quality;
+    });
+    return converted.join('/');
+  }
+
+  // Walks a whole chart's raw source text and rewrites every chord token
+  // from letters to Nashville Numbers relative to keyRoot — the
+  // reverse-direction counterpart to Transposer.transposeText, used by the
+  // "Convert to Nashville Numbers" action and, for files with a known key,
+  // at import time.
+  function contentToNumbers(src, keyRoot){
+    return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${letterChordToNumber(chord, keyRoot)}]`);
+  }
+
+  // Forward-direction, content-level counterpart to contentToNumbers: walks
+  // a whole chart's raw source text and rewrites every Nashville Number (or
+  // Roman numeral) token into letters relative to keyRoot, leaving any
+  // already-literal letter chords untouched (same as toLetterChord always
+  // has). Used to reflow the editor's displayed text when Key changes on a
+  // canonical-NN song — a display-only rewrite, never touches storage.
+  function contentToLetters(src, keyRoot, preferFlat){
+    return src.replace(ChordParser.CHORD_TOKEN, (full, chord) => `[${toLetterChord(chord, keyRoot, preferFlat)}]`);
+  }
+
+  // Reverse of cpBuildToken (the chord-picker's own token assembler) — breaks
+  // an existing token (arabic NN, Roman numeral, or letter chord — whichever
+  // it's actually written in) back into the picker's building blocks, so
+  // double-clicking an already-inserted chord can reopen the picker
+  // pre-loaded with that chord instead of starting from a blank slate. Mode
+  // is read from the token itself, not the editor's current display mode —
+  // a token keeps editing in whatever notation it's actually written in.
+  // Returns null when the token doesn't parse as a recognizable chord (a
+  // literal annotation like "N.C." or freeform text); the caller falls back
+  // to just letting the raw text be edited via the popup's custom field.
+  function parseChordToken(token){
+    if(!token) return null;
+    const mainRaw = token.split('/')[0];
+    let mode, arabicToken;
+    if(isRomanToken(mainRaw)){ mode = 'NN'; arabicToken = romanToArabic(token); }
+    else if(isNumberToken(mainRaw)){ mode = 'NN'; arabicToken = token; }
+    else { mode = 'letter'; arabicToken = token; }
+    const parts = arabicToken.split('/');
+    if(mode === 'NN'){
+      const m = parts[0].match(TOKEN_RE);
+      if(!m) return null;
+      const accidental = normalizeAccidental(m[1]);
+      const mainRoot = m[2];
+      const quality = normalizeQuality(m[3]);
+      let bassAccidental = '', bassRoot = null;
+      if(parts[1]){
+        const bm = parts[1].match(TOKEN_RE);
+        if(bm){ bassAccidental = normalizeAccidental(bm[1]); bassRoot = bm[2]; }
+      }
+      return { mode, accidental, mainRoot, quality, bassEnabled: !!bassRoot, bassAccidental, bassRoot };
+    }
+    const m = parts[0].match(CHORD_ROOT_RE);
+    if(!m) return null;
+    const rootMatch = m[1].match(/^([A-G])(#|b)?$/);
+    if(!rootMatch) return null;
+    const mainRoot = rootMatch[1];
+    const accidental = rootMatch[2] || '';
+    const quality = m[2];
+    let bassAccidental = '', bassRoot = null;
+    if(parts[1]){
+      const bm = parts[1].match(CHORD_ROOT_RE);
+      const bRootMatch = bm && bm[1].match(/^([A-G])(#|b)?$/);
+      if(bRootMatch){ bassRoot = bRootMatch[1]; bassAccidental = bRootMatch[2] || ''; }
+    }
+    return { mode, accidental, mainRoot, quality, bassEnabled: !!bassRoot, bassAccidental, bassRoot };
+  }
+
+  return {
+    isNumberToken, isRomanToken, numberChordToLetter, arabicToRoman, romanToArabic, toLetterChord,
+    letterChordToNumber, contentToNumbers, contentToLetters, parseChordToken,
+  };
+})();
+
+/* ---------------------------------------------------------------------------
+   3. RENDERER — builds the chord-sheet DOM from parsed sections
+--------------------------------------------------------------------------- */
+const Renderer = (() => {
+  function escapeHtml(s){
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Builds the copyright-line display text based on the selected mode.
+  // PD ignores the field entirely; CC uses Creative Commons' own recommended
+  // plain-language phrasing ("[Work] is licensed under [License]"), compacted
+  // for a small credit line; © prepends the symbol unless the field already
+  // has one (keeps older saved songs — which typed "©" into the field by
+  // hand before this mode system existed — from showing a doubled symbol).
+  function buildCopyrightText(song){
+    const mode = song.copyrightMode || '\u00a9';
+    const field = (song.copyright || '').trim();
+    if(mode === 'PD') return 'Public Domain';
+    if(mode === 'CC'){
+      // The chart prints the canonical license identifier exactly as
+      // Creative Commons writes it — "CC BY-NC-SA 4.0" — since that code
+      // is what anyone checking the terms will look up (4.0 is the current
+      // and only version a license chosen today can be). Until both picker
+      // questions are answered there is no determined variant, so the line
+      // stays generic rather than guessing.
+      const cc = computeCCLicense(song.ccLicense);
+      const base = cc ? `Licensed under ${cc.code} 4.0` : 'Licensed under Creative Commons';
+      return field ? (base + ': ' + field) : base;
+    }
+    if(!field) return '';
+    return field.charAt(0) === '\u00a9' ? field : ('\u00a9 ' + field);
+  }
+
+  // Converts a chord token for display purposes only: numeric NNS tokens render
+  // as letter chords when a real performance key is selected; when displayKey is
+  // 'NN' (or unset) the raw numbers are shown as typed. Letter chords pass through
+  // untouched either way — they're absolute, not key-relative. Note-annotations
+  // (tokens starting with '*', e.g. [*Repeat 2x]) are never chords — pass through.
+  //
+  // keyChangeSemitones is the running total from every {Key Change: N} marker
+  // (see ChordParser.KEY_CHANGE_RE) at or before this token, applied on top of
+  // the base display key — same rationale as capo below for why it's skipped
+  // in NN mode: a mid-song modulation shifts the SOUNDING pitch of a letter
+  // chart, but Nashville numbers are already key-relative, so there's nothing
+  // for a semitone shift to mean there.
+  //
+  // Capo handling: a capo raises every open-string pitch by however many frets
+  // it's on, so the SOUNDING chord equals (shape played) + (capo frets). To keep
+  // the sounding key constant once a capo is added, the SHAPE shown on the chart
+  // must be shifted DOWN by that many semitones — e.g. capo 3 in the key of G
+  // displays E-shapes (E + 3 semitones = G), which is the standard "capo 3, play
+  // in E to sound in G" convention guitarists already use. This applies whether
+  // the chord came from an NNS number or was typed as a literal letter chord —
+  // capo affects the physical shape either way. It intentionally does NOT apply
+  // when displayKey is 'NN' or unset, since raw scale-degree numbers are already
+  // key-independent and aren't a physical shape to shift.
+  function formatChordForDisplay(token, displayKey, capo, keyChangeSemitones){
+    if(token.charAt(0) === '*') return token;
+    if(!displayKey || displayKey === 'NN') return token;
+    let letterChord = token;
+    if(NashvilleSystem.isNumberToken(token) || NashvilleSystem.isRomanToken(token)){
+      const preferFlat = Transposer.FLAT_KEYS.has(displayKey);
+      const keyRoot = displayKey.replace(/m$/, '');
+      try{ letterChord = NashvilleSystem.toLetterChord(token, keyRoot, preferFlat); }
+      catch(e){ letterChord = token; }
+    }
+    if(keyChangeSemitones){
+      const preferFlat = Transposer.FLAT_KEYS.has(displayKey);
+      letterChord = Transposer.transposeChord(letterChord, keyChangeSemitones, preferFlat);
+    }
+    const capoNum = parseInt(capo, 10);
+    if(capoNum > 0){
+      const preferFlat = Transposer.FLAT_KEYS.has(displayKey);
+      letterChord = Transposer.transposeChord(letterChord, -capoNum, preferFlat);
+    }
+    return letterChord;
+  }
+
+  // Renders one chord/note token as HTML at a given monospace column offset.
+  // Note-annotations (leading '*') render as bold superscript instructions
+  // rather than plain monospace chord text — they're editorial marks, not chords.
+  function renderTokenHtml(displayChord){
+    if(displayChord.charAt(0) === '*'){
+      return `<sup class="chord-note">${escapeHtml(displayChord)}</sup>`;
+    }
+    return escapeHtml(displayChord);
+  }
+
+  // Key-change marker display text (see ChordParser.KEY_CHANGE_RE) — a
+  // letter-key chart shows a plain "Key Change" callout (the transposed
+  // chords after it already say the rest), but Nashville Numbers stay
+  // key-independent by design (see formatChordForDisplay), so there's no
+  // transposed chord to point at — it spells out the modulation directly.
+  function renderKeyChangeMarker(parsedLine, displayKey){
+    if(!displayKey || displayKey === 'NN'){
+      const n = Math.abs(parsedLine.semitones);
+      const dir = parsedLine.semitones > 0 ? 'Up' : (parsedLine.semitones < 0 ? 'Down' : null);
+      const text = dir ? `Modulate: ${dir} ${n} semitone${n === 1 ? '' : 's'}` : 'Modulate: No change';
+      return `<div class="cs-keychange-row">${escapeHtml(text)}</div>`;
+    }
+    return `<div class="cs-keychange-row">Key Change</div>`;
+  }
+
+  /* ---- Chart-aware word wrap ----
+     A chart line is two synchronized rows (chords positioned above
+     syllables by character column), so CSS wrapping would tear the chords
+     off their words. Instead, a line that exceeds the container's
+     character capacity is split at word boundaries into segments — each
+     chord travels with the syllable it sits above — and each segment
+     renders as its own chord-row/lyric-row pair. Lines that fit render
+     exactly as before. WRAP_INDENT: how far continuation segments indent;
+     0 = flush left, per user preference. */
+  const WRAP_INDENT = 0;
+
+  // How many monospace characters fit one line of this container. Measured
+  // rather than assumed (font scale moves it; a fallback mono font can
+  // render its bold chord row a hair wider than the lyric row, so both are
+  // probed and the wider wins). Infinity = don't wrap (container not in
+  // the DOM, or too narrow to be meaningful).
+  function measureLineCapacity(container, twoCol){
+    if(!container || !container.isConnected) return Infinity;
+    let widest = 0;
+    ['chord-row', 'lyric-row'].forEach(cls => {
+      const p = document.createElement('div');
+      p.className = cls;
+      p.style.position = 'absolute'; p.style.visibility = 'hidden'; p.style.display = 'inline-block'; p.style.width = 'auto';
+      p.textContent = 'M'.repeat(40);
+      container.appendChild(p);
+      widest = Math.max(widest, p.getBoundingClientRect().width / 40);
+      p.remove();
+    });
+    if(!widest || !isFinite(widest)) return Infinity;
+    // Legacy CSS-multicol consumers (opts.twoCol) render half-width columns
+    // inside a full-width container — halve the capacity to match.
+    const lineW = twoCol ? (container.clientWidth - 32) / 2 : container.clientWidth;
+    const cap = Math.floor(lineW / widest);
+    return cap > 8 ? cap : Infinity;
+  }
+
+  // Splits one flattened line (lyric string + display-chord anchors) into
+  // segments of at most `cap` characters, chord row included — a chord
+  // symbol never pokes past the edge. Breaks at spaces (hard-breaks a
+  // single unbreakable run); chords anchored at or past a break go to the
+  // next segment with their word.
+  function wrapFlatLine(lyric, chords, cap){
+    const segs = [];
+    let pos = 0, first = true;
+    for(;;){
+      const indent = first ? 0 : WRAP_INDENT;
+      const avail = cap - indent;
+      const rest = lyric.length - pos;
+      const restChordNeed = Math.max(0, ...chords.filter(c => c.col >= pos).map(c => c.col - pos + c.len));
+      if(Math.max(rest, restChordNeed) <= avail || avail <= 8){
+        segs.push({pos, end: lyric.length, indent});
+        return segs;
+      }
+      let b = -1;
+      for(let i = pos + 1; i <= pos + avail && i < lyric.length; i++){
+        if(lyric[i] !== ' ') continue;
+        if(chords.every(c => c.col < pos || c.col >= i || (c.col - pos + c.len) <= avail)) b = i;
+      }
+      if(b === -1) b = pos + avail;
+      segs.push({pos, end: b, indent});
+      pos = b;
+      while(lyric[pos] === ' ') pos++;
+      first = false;
+      if(pos >= lyric.length && !chords.some(c => c.col >= pos)) return segs;
+    }
+  }
+
+  // Renders the flattened line as one .cs-line per segment. Chord DISPLAY
+  // text (post NNS-conversion) drives the column math, so alignment holds
+  // whichever notation is showing; chord `html` may carry markup
+  // (note-annotation <sup>s) while `len` is the plain display length.
+  function renderFlatSegments(lyric, chords, cap){
+    return wrapFlatLine(lyric, chords, cap).map((seg, si, all) => {
+      const isLast = si === all.length - 1;
+      const own = chords.filter(c => c.col >= seg.pos && (c.col < seg.end || isLast));
+      let chordRow = '', col = 0;
+      own.forEach(c => {
+        const target = Math.max(0, c.col - seg.pos) + seg.indent;
+        while(col < target){ chordRow += ' '; col++; }
+        chordRow += c.html;
+        col += c.len;
+      });
+      const lyricText = ' '.repeat(seg.indent) + lyric.slice(seg.pos, seg.end);
+      return `<div class="cs-line"><div class="chord-row">${chordRow}</div><div class="lyric-row">${escapeHtml(lyricText) || '&nbsp;'}</div></div>`;
+    }).join('');
+  }
+
+  function renderLine(parsedLine, displayKey, capo, keyChangeSemitones, maxChars = Infinity){
+    if(parsedLine.type === 'blank') return `<div class="cs-line">&nbsp;</div>`;
+    if(parsedLine.type === 'comment') return `<div class="comment-row">${escapeHtml(parsedLine.text)}</div>`;
+    if(parsedLine.type === 'lyric-only'){
+      return wrapFlatLine(parsedLine.text, [], maxChars).map(seg =>
+        `<div class="lyric-row">${escapeHtml(' '.repeat(seg.indent) + parsedLine.text.slice(seg.pos, seg.end)) || '&nbsp;'}</div>`).join('');
+    }
+    if(parsedLine.type === 'chords-only'){
+      // Greedy-pack the chord tokens into rows of at most maxChars,
+      // keeping the 3-space separator; a fitting line is one row,
+      // byte-identical to the old output.
+      const toks = parsedLine.chords.map(c => {
+        const d = formatChordForDisplay(c, displayKey, capo, keyChangeSemitones);
+        return {html: renderTokenHtml(d), len: d.length};
+      });
+      const rows = []; let rowHtml = null, col = 0;
+      toks.forEach(t => {
+        if(rowHtml === null){ rowHtml = ''; col = 0; }
+        else if(col + 3 + t.len > maxChars){ rows.push(rowHtml); rowHtml = ' '.repeat(WRAP_INDENT); col = WRAP_INDENT; }
+        else { rowHtml += '   '; col += 3; }
+        rowHtml += t.html; col += t.len;
+      });
+      if(rowHtml !== null) rows.push(rowHtml);
+      return rows.map(r => `<div class="chordonly-row">${r}</div>`).join('');
+    }
+    // 'line': flatten to a lyric string + chord anchors, then render as
+    // one or more aligned segments (one, when it fits maxChars).
+    let offset = 0; const flatChords = [];
+    parsedLine.tokens.forEach(tok => {
+      if(tok.chord){
+        const displayChord = formatChordForDisplay(tok.chord, displayKey, capo, keyChangeSemitones);
+        flatChords.push({col: offset, html: renderTokenHtml(displayChord), len: displayChord.length});
+      }
+      offset += (tok.text || '').length;
+    });
+    const lyricRow = parsedLine.tokens.map(t => t.text || '').join('');
+    return renderFlatSegments(lyricRow, flatChords, maxChars);
+  }
+
+  // A section with an empty body whose label exactly matches (case-
+  // insensitive) an earlier section that DID have content is a repeat
+  // marker — e.g. a second bare "Chorus:" header reprising a chorus already
+  // printed earlier in the chart. By default a repeat keeps its header line
+  // in the chart ("Chorus 1:") but not its contents — the header shows the
+  // reprise in performance order while the chords stay findable at their
+  // first appearance. With expandRepeats (the "Write out repeats" toggle,
+  // saved per song) the reprise instead prints in full, carrying the
+  // earlier section's lines — for musicians who want every section written
+  // out on the page. Either way, only a genuinely unique/edited section (a
+  // different label, like "Chorus 2") ever has content of its own.
+  function resolveRepeats(sections, expandRepeats){
+    // sec.lines here are already-parsed line objects (see ChordParser.parse),
+    // not raw strings — only the 'blank' type carries no real content.
+    const seen = new Map();
+    const out = [];
+    sections.forEach(sec => {
+      const key = sec.label ? sec.label.trim().toLowerCase() : null;
+      const hasContent = sec.lines.some(l => l.type !== 'blank');
+      if(hasContent){
+        if(key) seen.set(key, sec.lines);
+        out.push(sec);
+      } else if(key && seen.has(key)){
+        // Collapsed repeats still print their header line (lines: [] strips
+        // the marker's own blank lines so nothing renders under it).
+        out.push(Object.assign({}, sec, { lines: expandRepeats ? seen.get(key) : [] }));
+      } else {
+        out.push(sec); // header-only section with nothing earlier to repeat (e.g. an instrumental)
+      }
+    });
+    return out;
+  }
+
+  function renderSections(sections, displayKey, capo, expandRepeats, maxChars = Infinity){
+    // Running total of every {Key Change: N} marker encountered so far —
+    // persists across section boundaries (a key change isn't scoped to one
+    // section) and keeps accumulating until a later marker changes it again.
+    let keyChangeSemitones = 0;
+    return resolveRepeats(sections, expandRepeats).map(sec => {
+      // If the section's FIRST content line is chords-only (a lead-in
+      // progression, or the entire content for something like a pure-
+      // instrumental Outro), render those chords INLINE with the label on
+      // the same visual row instead of as a separate block below it — that's
+      // what "same line" means in the rendered output, not just in the raw
+      // editor text. Any lines after that still render normally underneath.
+      // UNLESS label + chords would blow past the line capacity (a narrow
+      // 2-col column) — then the chords stay a normal chords-only line
+      // below the label, where the wrap logic handles them.
+      let inlineChordsHtml = '';
+      let remainingLines = sec.lines;
+      if(sec.lines.length && sec.lines[0].type === 'chords-only'){
+        const displays = sec.lines[0].chords.map(c => formatChordForDisplay(c, displayKey, capo, keyChangeSemitones));
+        const approxLen = (sec.label ? sec.label.length + 2 : 0) + displays.reduce((s, d) => s + d.length, 0) + 3 * Math.max(0, displays.length - 1);
+        if(approxLen <= maxChars){
+          inlineChordsHtml = ` <span class="cs-inline-chords">${displays.map(renderTokenHtml).join('&nbsp;&nbsp;&nbsp;')}</span>`;
+          remainingLines = sec.lines.slice(1);
+        }
+      }
+      const label = sec.label ? `<div class="cs-section-label">${escapeHtml(sec.label)}:${inlineChordsHtml}</div>` : '';
+      const lines = remainingLines.map(l => {
+        if(l.type === 'keychange'){
+          const marker = renderKeyChangeMarker(l, displayKey);
+          keyChangeSemitones += l.semitones;
+          return marker;
+        }
+        return renderLine(l, displayKey, capo, keyChangeSemitones, maxChars);
+      }).join('');
+      return `<div class="cs-section" data-section="${sec.label ? escapeHtml(sec.label) : ''}">${label}${lines}</div>`;
+    }).join('');
+  }
+
+  const ROADMAP_BADGE_SIZE = 29; // was 36; circles trimmed 20% to save header space — letter size inside is fixed (see sectionBadgeSvg)
+
+  // Builds the "song map": the row of round section-marker badges under the
+  // chart's title/meta block, one per labeled section in the order it
+  // appears (this IS the "song map" — not a separate widget). A section
+  // whose label matches a known family (Verse/Pre-Chorus/Chorus/Bridge/Tag/
+  // Interlude/Intro/Outro — see matchSectionFamily) renders as that family's
+  // code (V1, PC2, ...); anything else (a custom user-typed section name)
+  // falls back to a plain first-letter code. Every badge renders in the same
+  // plain black-on-white style — no per-family color mapping. Every section
+  // gets its own badge, including back-to-back repeats of the same one
+  // (e.g. two V2's in a row) — the map should read as literally what was
+  // entered, not a collapsed summary of it.
+  function buildRoadmap(sections){
+    return roadmapCodes(sections).map(code => `<span class="cs-roadmap-item">${sectionBadgeSvg(code, ROADMAP_BADGE_SIZE)}</span>`).join('');
+  }
+
+  function renderChordSheet(container, song, opts={}){
+    // Word wrap capacity, measured against THIS container's real width —
+    // the app's pipeline renders into full-width or column-width measure
+    // hosts (see buildPrintPagesFor), so preview, print and PDF all wrap
+    // identically by construction.
+    const maxChars = measureLineCapacity(container, !!opts.twoCol);
+    const sections = ChordParser.parse(song.content || '');
+    const metaBits = [];
+    if(song.key) metaBits.push(`Key: ${song.key}`);
+    if(song.capo) metaBits.push(`Capo: ${song.capo} (chords shown as played)`);
+    const titleAlign = song.titleAlign || DefaultAlignStore.get();
+    const artistLineParts = [];
+    if(song.artist) artistLineParts.push('Authored By: ' + escapeHtml(song.artist));
+    if(song.ccli) artistLineParts.push('CCLI Song #' + escapeHtml(song.ccli));
+    const copyrightText = buildCopyrightText(song);
+    const roadmap = buildRoadmap(sections);
+    container.innerHTML = `
+      <div class="cs-title" style="text-align:${titleAlign};">${escapeHtml(song.title || 'Untitled')}</div>
+      <div class="cs-artist" style="text-align:${titleAlign};">${artistLineParts.join(' | ')}</div>
+      ${copyrightText ? `<div class="cs-copyright" style="text-align:${titleAlign};">${escapeHtml(copyrightText)}</div>` : ''}
+      ${song.churchCcli ? `<div class="cs-permission" style="text-align:${titleAlign};">Used by Permission CCLI #: ${escapeHtml(song.churchCcli)}</div>` : ''}
+      ${roadmap ? `<div class="cs-roadmap" style="justify-content:${titleAlign==='center'?'center':(titleAlign==='right'?'flex-end':'flex-start')};">${roadmap}</div>` : ''}
+      ${metaBits.length ? `<div class="cs-meta">${metaBits.map(escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
+      ${renderSections(sections, song.key, song.capo, !!song.expandRepeats, maxChars)}
+    `;
+    container.classList.toggle('cols-2', !!opts.twoCol);
+    return sections;
+  }
+
+  return { renderChordSheet, renderSections, escapeHtml, buildCopyrightText, buildRoadmap };
+})();
+
+/* ---------------------------------------------------------------------------
+   4. PAGINATION ENGINE — phrase-aware.
+   Sections (verse/chorus/etc.) are treated as atomic blocks that must not
+   split across a page. Used for PDF export and multi-page print preview.
+--------------------------------------------------------------------------- */
+const Paginator = (() => {
+  const SECTION_MARGIN = 14; // .cs-section margin-bottom
+
+  // Splits one rendered section at its line boundaries so a section that
+  // doesn't fit FILLS the current page and continues on the next, instead
+  // of dragging the whole section (and a large blank gap) onto a new page.
+  // firstCapacity = space left on the current page, pageCapacity = a fresh
+  // page's space. Continuation chunks repeat the section label with a
+  // "(cont.)" suffix (inline lead-in chords stripped — they were already
+  // printed) so the musician knows what they're still in. Returns
+  // [{html, height}, ...] or null when splitting isn't worth it: the
+  // whole thing fits, or fewer than the label + 2 lines would land on the
+  // current page (an orphaned header helps nobody — old move-it-all
+  // behavior is better there).
+  // capacityForChunk(k) returns the space available to continuation chunk k
+  // (k >= 1) — a function, not a constant, because in 2-column mode the
+  // columns a long section spills into can have different heights (a page-1
+  // column sits under the full title header; later columns under the slim
+  // "(cont'd)" line).
+  function splitSection(el, firstCapacity, capacityForChunk){
+    const children = Array.from(el.children);
+    if(children.length < 3) return null;
+    const secTop = el.getBoundingClientRect().top;
+    const tops = children.map(c => c.getBoundingClientRect().top - secTop);
+    // Per-child cost includes the gap to the next line (top-to-top), so
+    // chunk heights sum to what actually renders.
+    const spans = children.map((c, j) => j < children.length - 1
+      ? tops[j + 1] - tops[j]
+      : c.getBoundingClientRect().bottom - secTop - tops[j]);
+    const labelEl = children[0].classList && children[0].classList.contains('cs-section-label') ? children[0] : null;
+    const labelH = labelEl ? spans[0] : 0;
+    const chunks = [];
+    let cur = [], capUsed = 0, capacity = firstCapacity;
+    children.forEach((c, j) => {
+      if(cur.length && capUsed + spans[j] > capacity){
+        // Never strand a chords-only row at a page bottom away from the
+        // lyric line under it — carry it across the break with its lyric.
+        const carried = [];
+        while(cur.length > 1 && children[cur[cur.length - 1]].classList.contains('chordonly-row')){
+          carried.unshift(cur.pop());
+        }
+        chunks.push(cur);
+        cur = carried; capacity = capacityForChunk(chunks.length);
+        capUsed = labelH + carried.reduce((s, jj) => s + spans[jj], 0);
+      }
+      cur.push(j); capUsed += spans[j];
+    });
+    if(cur.length) chunks.push(cur);
+    if(chunks.length < 2) return null; // fits after all (rounding) — nothing to split
+    const minFirst = labelEl ? 3 : 2; // label + 2 lines (or 2 lines) must make the cut
+    if(chunks[0].length < minFirst) return null;
+    let contLabelHtml = '';
+    if(labelEl){
+      const lab = labelEl.cloneNode(true);
+      lab.querySelectorAll('.cs-inline-chords').forEach(n => n.remove());
+      lab.insertAdjacentText('beforeend', ' (cont.)');
+      contLabelHtml = lab.outerHTML;
+    }
+    return chunks.map((idxs, k) => {
+      // A continuation page shouldn't open on a blank spacer line.
+      if(k > 0) while(idxs.length && children[idxs[0]].textContent.trim() === '') idxs.shift();
+      if(!idxs.length) return null;
+      const clone = el.cloneNode(false);
+      clone.innerHTML = (k > 0 ? contLabelHtml : '') + idxs.map(j => children[j].outerHTML).join('');
+      return { html: clone.outerHTML, height: idxs.reduce((s, j) => s + spans[j], 0) + (k > 0 ? labelH : 0) };
+    }).filter(Boolean);
+  }
+
+  // Header block height = through whichever header line ACTUALLY sits
+  // lowest on the page — order-agnostic, so future header reordering can't
+  // silently break this (title/artist/copyright/permission/roadmap/meta
+  // can appear in any order).
+  function measureHeaderHeight(container){
+    const headerCandidates = ['.cs-title', '.cs-artist', '.cs-copyright', '.cs-permission', '.cs-roadmap', '.cs-meta']
+      .map(sel => container.querySelector(sel))
+      .filter(Boolean);
+    return headerCandidates.length ?
+      Math.max(...headerCandidates.map(el => el.getBoundingClientRect().bottom)) - container.getBoundingClientRect().top : 0;
+  }
+
+  // Measures rendered section elements and packs them into pages. A section
+  // that fits in the space left stays whole; one that doesn't is split at
+  // line boundaries (see splitSection) so pages fill top to bottom. When a
+  // split isn't sensible the section moves to a fresh page whole — and a
+  // section taller than an entire page/column splits across as many as it
+  // needs rather than overflowing. maxHeightPx = usable page height.
+  // opts.contHeaderPx budgets the slim "Title (cont'd) — page N" header
+  // every page after the first carries (see buildPageHeaderHtml).
+  // opts.columns = 2 packs COLUMNS instead of pages — the unit loop below
+  // fills one column at a time (left fills completely before the right
+  // ever starts), then pairs them into pages as an explicit .cs-cols flex
+  // row; every column on page 1 sits under the full title header, later
+  // ones under the slim header. opts.headerHeightPx overrides the header
+  // measurement for multi-column runs, where sections are measured in a
+  // narrow column-width container but the header spans the full page.
+  function paginate(sourceContainer, maxHeightPx, opts = {}){
+    const contHeaderPx = opts.contHeaderPx || 0;
+    const columns = opts.columns || 1;
+    const sectionEls = Array.from(sourceContainer.querySelectorAll('.cs-section'));
+    const headerHeight = opts.headerHeightPx != null ? opts.headerHeightPx : measureHeaderHeight(sourceContainer);
+    // Capacity of packing unit u (a column; the whole page when columns=1).
+    const unitCap = u => maxHeightPx - (Math.floor(u / columns) === 0 ? headerHeight : contHeaderPx);
+    const units = [[]];
+    let used = 0;
+    const cur = () => units[units.length - 1];
+    const uIdx = () => units.length - 1;
+    const newUnit = () => { units.push([]); used = 0; };
+    sectionEls.forEach(el => {
+      const h = el.getBoundingClientRect().height + SECTION_MARGIN;
+      if(used + h <= unitCap(uIdx())){ cur().push(el.outerHTML); used += h; return; }
+      const capFor = k => unitCap(uIdx() + k) - SECTION_MARGIN - 2; // -2: rounding slack
+      let parts = splitSection(el, unitCap(uIdx()) - used - SECTION_MARGIN - 2, capFor);
+      if(!parts){
+        // Not enough room to split usefully — fresh unit, whole section if
+        // it fits there, split against full units if even that overflows.
+        if(cur().length) newUnit();
+        if(used + h <= unitCap(uIdx())){ cur().push(el.outerHTML); used += h; return; }
+        const capFor2 = k => unitCap(uIdx() + k) - SECTION_MARGIN - 2;
+        parts = splitSection(el, unitCap(uIdx()) - used - SECTION_MARGIN - 2, capFor2);
+        if(!parts){ cur().push(el.outerHTML); used += h; return; } // pathological: overflow as before
+      }
+      parts.forEach((p, k) => {
+        if(k > 0) newUnit();
+        cur().push(p.html);
+        used += p.height + SECTION_MARGIN;
+      });
+    });
+    if(columns === 1) return units;
+    const pages = [];
+    for(let i = 0; i < units.length; i += columns){
+      const cols = [];
+      for(let c = 0; c < columns; c++) cols.push(`<div class="cs-col">${(units[i + c] || []).join('')}</div>`);
+      pages.push([`<div class="cs-cols">${cols.join('')}</div>`]);
+    }
+    return pages;
+  }
+  return { paginate, measureHeaderHeight };
+})();
+
+
+/* ---------------------------------------------------------------------------
+   Arrangements — verbatim helpers from ChartBench (chart-builder/index.html)
+   so set entries that name an arrangement resolve identically here.
+--------------------------------------------------------------------------- */
+const ARR_FIELDS = ['content', 'lyricsContent', 'lyricsSourceSnapshot', 'previewZoom', 'bodyAlign', 'expandRepeats', 'lastDisplayedKey', 'lastDisplayedNN', 'capo', 'versions'];
+const MAIN_ARR_ID = 'main';
+function arrangementsOf(song){
+  if(song && Array.isArray(song.arrangements) && song.arrangements.length) return song.arrangements;
+  return [{ id: MAIN_ARR_ID, name: 'Main' }];
+}
+function activeArrangementId(song){
+  const arrs = arrangementsOf(song);
+  return arrs.some(a => a.id === song.activeArrangementId) ? song.activeArrangementId : arrs[0].id;
+}
+function applyArrangement(song, id){
+  const a = arrangementsOf(song).find(x => x.id === id);
+  if(!a) return false;
+  ARR_FIELDS.forEach(f => { if(f in a) song[f] = a[f]; else delete song[f]; });
+  song.activeArrangementId = id;
+  return true;
+}
+function songWithArrangement(song, arrId){
+  if(!song || !arrId || arrId === activeArrangementId(song)) return song;
+  const copy = Object.assign({}, song);
+  if(!applyArrangement(copy, arrId)) return song;
+  return copy;
+}
+// Verbatim from ChartBench: preferredKeys is remembered metadata ("keys we
+// actually sing this in"), with read-time fallbacks for older saves — the
+// singular preferredKey field, else the song's own letter key.
+function withPreferredKeysFallback(song){
+  if(Array.isArray(song.preferredKeys)) return song;
+  if(song.preferredKey != null) return {...song, preferredKeys:[song.preferredKey]};
+  const legacy = (song.key && song.key !== 'NN') ? song.key : null;
+  return {...song, preferredKeys: legacy ? [legacy] : []};
+}
+
+/* ---------------------------------------------------------------------------
+   Storage — one IndexedDB key/value store. The whole library is one value
+   under 'songs_v1' (a few hundred text charts is well under a megabyte);
+   sets under 'sets_v1'; per-song stage font scales under 'scales_v1'.
+--------------------------------------------------------------------------- */
+const KV = (() => {
+  const DB_NAME = 'ChartBenchPerformDB';
+  let dbPromise = null;
+  function open(){
+    if(dbPromise) return dbPromise;
+    dbPromise = new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore('kv', {keyPath:'key'}); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+    return dbPromise;
+  }
+  async function get(key, fallback = null){
+    const db = await open();
+    return new Promise(res => {
+      const r = db.transaction('kv').objectStore('kv').get(key);
+      r.onsuccess = () => res(r.result ? r.result.value : fallback);
+      r.onerror = () => res(fallback);
+    });
+  }
+  async function set(key, value){
+    const db = await open();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put({key, value});
+      tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+    });
+  }
+  return { get, set };
+})();
+
+let songs = [];   // [{uid, id?, title, artist, key, capo, content, arrangements?, ...}]
+let sets = [];    // [{id, name, entries:[{uid, songId?, key, capo, arrangementId?} | {type:'pdf',...}]}]
+let scales = {};  // uid -> stage font scale pct
+
+async function loadData(){
+  songs = await KV.get('songs_v1', []);
+  sets = await KV.get('sets_v1', []);
+  scales = await KV.get('scales_v1', {});
+}
+const saveSongs = () => KV.set('songs_v1', songs);
+const saveSets = () => KV.set('sets_v1', sets);
+const saveScales = () => KV.set('scales_v1', scales);
+
+/* ---------------------------------------------------------------------------
+   Import — accepts, per file:
+     * a ChartBench library backup (JSON ARRAY of songs — Settings > Data >
+       "Export entire library"),
+     * a single ChartBench song JSON (object with a content field),
+     * a saved set list (.setlist.json — object with chartbench:'setlist').
+   Songs merge by uid (then by exact title+artist) so re-imports update
+   instead of duplicating — same spirit as ChartBench's own importer.
+--------------------------------------------------------------------------- */
+function upsertSong(raw){
+  if(!raw || typeof raw !== 'object' || typeof raw.content !== 'string') return false;
+  const song = Object.assign({}, raw);
+  if(!song.uid) song.uid = genUid();
+  let i = songs.findIndex(s => s.uid === song.uid);
+  if(i === -1) i = songs.findIndex(s =>
+    (s.title || '').trim().toLowerCase() === (song.title || '').trim().toLowerCase() &&
+    (s.artist || '').trim().toLowerCase() === (song.artist || '').trim().toLowerCase());
+  if(i === -1) songs.push(song); else songs[i] = song;
+  return true;
+}
+function upsertSet(raw){
+  if(!raw || !Array.isArray(raw.entries)) return false;
+  const set = { id: raw.id || genUid(), name: raw.name || 'Imported set', entries: raw.entries };
+  let i = sets.findIndex(s => s.id === set.id);
+  if(i === -1) i = sets.findIndex(s => s.name.trim().toLowerCase() === set.name.trim().toLowerCase());
+  if(i === -1) sets.push(set); else sets[i] = set;
+  return true;
+}
+async function handleImportFiles(fileList){
+  let addedSongs = 0, addedSets = 0; const failures = [];
+  for(const file of Array.from(fileList)){
+    try{
+      const data = JSON.parse(await file.text());
+      if(Array.isArray(data)){
+        data.forEach(s => { if(upsertSong(s)) addedSongs++; });
+      } else if(data && data.chartbench === 'setlist'){
+        if(upsertSet(data)) addedSets++;
+        // A set may reference songs by uid only; charts themselves come
+        // from the library backup — nothing more to pull from this file.
+      } else if(upsertSong(data)){
+        addedSongs++;
+      } else {
+        throw new Error('unrecognized JSON shape');
+      }
+    }catch(err){ failures.push(file.name); console.error('Import failed:', file.name, err); }
+  }
+  if(addedSongs) await saveSongs();
+  if(addedSets) await saveSets();
+  renderHome();
+  const bits = [];
+  if(addedSongs) bits.push(`${addedSongs} song${addedSongs === 1 ? '' : 's'}`);
+  if(addedSets) bits.push(`${addedSets} set${addedSets === 1 ? '' : 's'}`);
+  if(bits.length && !failures.length) toast('Imported ' + bits.join(' and '));
+  else if(bits.length) toast(`Imported ${bits.join(' and ')} — failed: ${failures.join(', ')}`);
+  else toast('Import failed: ' + (failures.join(', ') || 'no usable files'));
+}
+
+/* ---------------------------------------------------------------------------
+   Same-browser pull from ChartBench. Only offered when indexedDB.databases()
+   PROVES WorshipChartBuilderDB exists — opening a non-existent DB would
+   create an empty one and sabotage ChartBench's own first-run upgrade path.
+--------------------------------------------------------------------------- */
+async function chartBenchDbExists(){
+  if(!indexedDB.databases) return false;
+  try{ return (await indexedDB.databases()).some(d => d.name === 'WorshipChartBuilderDB'); }
+  catch(e){ return false; }
+}
+async function pullFromChartBench(){
+  const db = await new Promise((res, rej) => {
+    const req = indexedDB.open('WorshipChartBuilderDB');
+    req.onsuccess = () => res(req.result); req.onerror = () => rej(req.error);
+  });
+  try{
+    if(!db.objectStoreNames.contains('songs')) throw new Error('no songs store');
+    const cbSongs = await new Promise((res, rej) => {
+      const r = db.transaction('songs').objectStore('songs').getAll();
+      r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+    });
+    let cbSets = [];
+    if(db.objectStoreNames.contains('prefs')){
+      cbSets = await new Promise(res => {
+        const r = db.transaction('prefs').objectStore('prefs').get('saved_setlists_v1');
+        r.onsuccess = () => res((r.result && Array.isArray(r.result.value)) ? r.result.value : []);
+        r.onerror = () => res([]);
+      });
+    }
+    let nSongs = 0, nSets = 0;
+    cbSongs.forEach(s => { if(upsertSong(s)) nSongs++; });
+    cbSets.forEach(s => { if(upsertSet(s)) nSets++; });
+    await saveSongs(); await saveSets();
+    renderHome();
+    toast(`Pulled ${nSongs} song${nSongs === 1 ? '' : 's'} and ${nSets} set${nSets === 1 ? '' : 's'} from ChartBench`);
+  }finally{ db.close(); }
+}
+
+/* ---------------------------------------------------------------------------
+   Demo seed — two public-domain hymns and a demo set, so the app is
+   try-able the moment it opens (even from file://, where nothing can be
+   fetched). Cleared the moment a real import replaces them, like any songs.
+--------------------------------------------------------------------------- */
+const DEMO_SEEDED_KEY = 'cbp_demo_seeded_v1';
+const DEMO_SONGS = [
+  {
+    uid: 'demo-amazing-grace', title: 'Amazing Grace', artist: 'John Newton', key: 'NN', capo: '',
+    copyrightMode: 'PD', tags: ['Demo'],
+    content: [
+      'Verse 1:',
+      'A[1]mazing grace, how [4]sweet the [1]sound',
+      'That saved a wretch like [5]me',
+      'I [1]once was lost, but [4]now am [1]found',
+      'Was [1/5]blind, but [5]now I [1]see',
+      '',
+      'Verse 2:',
+      "'Twas [1]grace that taught my [4]heart to [1]fear",
+      'And grace my fears re[5]lieved',
+      'How [1]precious did that [4]grace ap[1]pear',
+      'The [1/5]hour I [5]first be[1]lieved',
+      '',
+      'Verse 3:',
+      'Through [1]many dangers, [4]toils and [1]snares',
+      'I have already [5]come',
+      "'Tis [1]grace hath brought me [4]safe thus [1]far",
+      'And [1/5]grace will [5]lead me [1]home',
+      '',
+      'Verse 4:',
+      'When [1]we’ve been there ten [4]thousand [1]years',
+      'Bright shining as the [5]sun',
+      'We’ve [1]no less days to [4]sing God’s [1]praise',
+      'Than [1/5]when we’d [5]first be[1]gun',
+      '',
+      'Tag:',
+      'Was [1/5]blind, but [5]now I [1]see',
+    ].join('\n'),
+  },
+  {
+    uid: 'demo-doxology', title: 'Doxology', artist: 'Thomas Ken', key: 'NN', capo: '',
+    copyrightMode: 'PD', tags: ['Demo'],
+    content: [
+      'Verse:',
+      '[1]Praise God, from [5]whom all [6m]blessings [4]flow',
+      '[1]Praise Him, all [4]creatures [1]here be[5]low',
+      '[1]Praise Him a[5]bove, ye [6m]heavenly [4]host',
+      '[1]Praise [4]Father, [1/5]Son, and [5]Holy [1]Ghost',
+      '',
+      'Tag:',
+      '[4]A[5]men, [4]a[5]-[1]men',
+    ].join('\n'),
+  },
+];
+const DEMO_SET = {
+  id: 'demo-set', name: 'Demo Set',
+  entries: [
+    { uid: 'demo-amazing-grace', key: 'G', capo: '' },
+    { uid: 'demo-doxology', key: 'NN', capo: '' },
+  ],
+};
+async function seedDemoIfEmpty(){
+  if(localStorage.getItem(DEMO_SEEDED_KEY)) return;
+  if(songs.length || sets.length){ localStorage.setItem(DEMO_SEEDED_KEY, 'true'); return; }
+  DEMO_SONGS.forEach(upsertSong);
+  upsertSet(DEMO_SET);
+  await saveSongs(); await saveSets();
+  localStorage.setItem(DEMO_SEEDED_KEY, 'true');
+}
+
+/* ---------------------------------------------------------------------------
+   Home screen
+--------------------------------------------------------------------------- */
+function renderHome(){
+  const setsHost = el('setsList');
+  if(!sets.length){
+    setsHost.innerHTML = `<div class="empty-note">No set lists yet. Build one in ChartBench (Set List Builder &gt; Save set &gt; export), then <b>Import…</b> it here — or import your library backup and perform songs directly.</div>`;
+  } else {
+    setsHost.innerHTML = '';
+    sets.forEach(set => {
+      const n = (set.entries || []).length;
+      const card = document.createElement('div'); card.className = 'card';
+      card.innerHTML = `<div class="grow"><div class="title"></div><div class="sub">${n} item${n === 1 ? '' : 's'}</div></div>
+        <button class="play">▶ Perform</button><button class="edit" title="Edit this set">✎ Edit</button><button class="del" title="Remove this set">✕</button>`;
+      card.querySelector('.title').textContent = set.name;
+      card.querySelector('.play').onclick = () => performSet(set);
+      card.querySelector('.edit').onclick = () => openBuilder(set);
+      card.querySelector('.del').onclick = async () => {
+        if(!confirm(`Remove the set "${set.name}" from ChartBenchLive? (ChartBench keeps its own copy.)`)) return;
+        sets = sets.filter(s => s.id !== set.id); await saveSets(); renderHome();
+      };
+      setsHost.appendChild(card);
+    });
+  }
+  renderFilters();
+  renderSongList();
+}
+
+/* Library filters — tags / arrangements / preferred keys. ChartBench's
+   sidebar semantics: selecting several values in one row means "has at
+   least one of these"; rows combine with AND. Rows only render when the
+   library actually carries that kind of metadata. */
+const filt = { tags: new Set(), arrs: new Set(), keys: new Set() };
+function arrangementNamesOf(song){
+  // Only explicit arrangement arrays count — every song has an implicit
+  // lone "Main", which would make that filter value match everything.
+  return Array.isArray(song.arrangements) && song.arrangements.length
+    ? song.arrangements.map(a => a.name || 'Main') : [];
+}
+function renderFilters(){
+  const tagVals = [...new Set(songs.flatMap(s => s.tags || []))].sort((a, b) => a.localeCompare(b));
+  const arrVals = [...new Set(songs.flatMap(arrangementNamesOf))].sort((a, b) => a.localeCompare(b));
+  const keyVals = [...new Set(songs.flatMap(s => withPreferredKeysFallback(s).preferredKeys))]
+    .sort((a, b) => KEY_OPTIONS.indexOf(a) - KEY_OPTIONS.indexOf(b));
+  // Drop selections whose value left the library (re-import, deletion).
+  filt.tags.forEach(v => { if(!tagVals.includes(v)) filt.tags.delete(v); });
+  filt.arrs.forEach(v => { if(!arrVals.includes(v)) filt.arrs.delete(v); });
+  filt.keys.forEach(v => { if(!keyVals.includes(v)) filt.keys.delete(v); });
+  const host = el('songFilters');
+  host.innerHTML = '';
+  const anyActive = filt.tags.size || filt.arrs.size || filt.keys.size;
+  const rows = [
+    ['Tags', tagVals, filt.tags],
+    ['Arrangements', arrVals, filt.arrs],
+    ['Preferred key', keyVals, filt.keys],
+  ];
+  rows.forEach(([label, vals, set]) => {
+    if(!vals.length) return;
+    const row = document.createElement('div'); row.className = 'filt-row';
+    const lab = document.createElement('span'); lab.className = 'filt-lab'; lab.textContent = label;
+    row.appendChild(lab);
+    vals.forEach(v => {
+      const chip = document.createElement('button');
+      chip.className = 'chip' + (set.has(v) ? ' active' : '');
+      chip.textContent = v;
+      chip.onclick = () => { set.has(v) ? set.delete(v) : set.add(v); renderFilters(); renderSongList(); };
+      row.appendChild(chip);
+    });
+    host.appendChild(row);
+  });
+  if(anyActive){
+    const clear = document.createElement('button');
+    clear.className = 'chip clear'; clear.textContent = '✕ Clear filters';
+    clear.onclick = () => { filt.tags.clear(); filt.arrs.clear(); filt.keys.clear(); renderFilters(); renderSongList(); };
+    host.appendChild(clear);
+  }
+}
+function songPassesFilters(s){
+  if(filt.tags.size && !(s.tags || []).some(t => filt.tags.has(t))) return false;
+  if(filt.arrs.size && !arrangementNamesOf(s).some(n => filt.arrs.has(n))) return false;
+  if(filt.keys.size && !withPreferredKeysFallback(s).preferredKeys.some(k => filt.keys.has(k))) return false;
+  return true;
+}
+
+function renderSongList(){
+  const q = el('songSearch').value.trim().toLowerCase();
+  const host = el('songsList');
+  const shown = songs
+    .filter(s => !q || (s.title || '').toLowerCase().includes(q) || (s.artist || '').toLowerCase().includes(q))
+    .filter(songPassesFilters)
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  if(!songs.length){
+    host.innerHTML = `<div class="empty-note">No songs yet. In ChartBench: Settings &gt; Data &gt; <b>Export entire library (JSON)</b>, then <b>Import…</b> that file here. In this same browser, <b>Pull from ChartBench</b> does it in one tap.</div>`;
+    return;
+  }
+  host.innerHTML = '';
+  shown.forEach(s => {
+    const card = document.createElement('div'); card.className = 'card';
+    const pk = withPreferredKeysFallback(s).preferredKeys;
+    const sub = [s.artist, pk.length ? 'Prefers ' + pk.join(', ') : ''].filter(Boolean).join(' · ');
+    // Quick-open controls: pick a key/capo right on the row, hit ▶ — a
+    // one-off display choice for this performance, never saved to the song.
+    const defKey = KEY_OPTIONS.includes(s.key) ? s.key : 'NN';
+    card.innerHTML = `<div class="grow"><div class="title"></div><div class="sub"></div></div>
+      <select class="q-key" title="Key to open in">${KEY_OPTIONS.map(k => `<option value="${k}"${k === defKey ? ' selected' : ''}>${k}</option>`).join('')}</select>
+      <select class="q-capo" title="Capo"><option value="">Capo —</option>${Array.from({length: 11}, (_, c) => `<option value="${c + 1}"${String(s.capo) === String(c + 1) ? ' selected' : ''}>Capo ${c + 1}</option>`).join('')}</select>
+      <button class="play">▶</button><button class="del" title="Remove from ChartBenchLive">✕</button>`;
+    card.querySelector('.title').textContent = s.title || 'Untitled';
+    card.querySelector('.sub').textContent = sub;
+    card.querySelector('.play').onclick = () =>
+      performSingle(s, card.querySelector('.q-key').value, card.querySelector('.q-capo').value);
+    card.querySelector('.del').onclick = async () => {
+      if(!confirm(`Remove "${s.title || 'Untitled'}" from ChartBenchLive's library?`)) return;
+      songs = songs.filter(x => x.uid !== s.uid); await saveSongs(); renderHome();
+    };
+    host.appendChild(card);
+  });
+  if(!shown.length) host.innerHTML = `<div class="empty-note">No songs match the search/filters.</div>`;
+}
+
+/* ---------------------------------------------------------------------------
+   Perform pipeline. performRenderSong is ChartBench's setListRenderSong
+   verbatim in logic: canonical-NN songs need nothing (the renderer converts
+   per display key at draw time); legacy letter-key songs get their content
+   converted/transposed the same two ways the editor uses.
+--------------------------------------------------------------------------- */
+function performRenderSong(stored, key, capo){
+  key = key || 'NN';
+  let content = stored.content || '';
+  if(stored.key && stored.key !== 'NN'){
+    const storedRoot = (stored.key || 'C').replace(/m$/, '');
+    if(key === 'NN'){
+      content = NashvilleSystem.contentToNumbers(content, storedRoot);
+    } else if(key !== stored.key){
+      const from = Transposer.noteIndex(storedRoot);
+      const to = Transposer.noteIndex(key.replace(/m$/, ''));
+      if(from !== undefined && to !== undefined){
+        content = Transposer.transposeText(content, ((to - from) % 12 + 12) % 12, Transposer.FLAT_KEYS.has(key));
+      }
+    }
+  }
+  return Object.assign({}, stored, { key, capo: capo || '', content });
+}
+
+const KEY_OPTIONS = ['NN','C','C#','Db','D','Eb','E','F','F#','Gb','G','Ab','A','Bb','B'];
+const DEFAULT_SCALE = 135;
+const SCALE_MIN = 70, SCALE_MAX = 260, SCALE_STEP = 10;
+const STAGE_PAD_X = 18, STAGE_PAD_Y = 14;
+const POS_KEY = 'cbp_pos_v1';
+const RESUME_WINDOW_MS = 6 * 3600 * 1000;
+
+function stageMetrics(){
+  const vw = window.innerWidth;
+  const vh = window.visualViewport ? window.visualViewport.height : window.innerHeight;
+  return { contentW: vw - STAGE_PAD_X * 2, pageH: vh - STAGE_PAD_Y * 2 };
+}
+function bodyAlignClass(song){
+  return song.bodyAlign === 'center' ? ' cs-body-center' : (song.bodyAlign === 'right' ? ' cs-body-right' : '');
+}
+function stageHeaderHtml(song, sectionsHtmlRoadmap){
+  const metaBits = [];
+  if(song.key) metaBits.push('Key: ' + song.key);
+  if(song.capo) metaBits.push('Capo: ' + song.capo);
+  if(song.artist) metaBits.push(song.artist);
+  return `<div class="stage-header">
+    <div class="cs-title">${Renderer.escapeHtml(song.title || 'Untitled')}</div>
+    ${sectionsHtmlRoadmap ? `<div class="cs-roadmap">${sectionsHtmlRoadmap}</div>` : ''}
+    ${metaBits.length ? `<div class="cs-meta">${metaBits.map(Renderer.escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
+  </div>`;
+}
+function stageContHeaderHtml(song){
+  return `<div class="stage-cont-header">${Renderer.escapeHtml(song.title || 'Untitled')} (cont’d)</div>`;
+}
+
+// One song -> screen-sized page HTML chunks, using the same offscreen
+// measure-then-paginate pattern as ChartBench's buildPrintPagesFor, with
+// the viewport standing in for the sheet of paper.
+//
+// Every .cs-section gets a data-ord ordinal BEFORE pagination. cloneNode
+// in the Paginator's splitSection preserves attributes, so every chunk of
+// a split section carries its canonical section's ordinal — that ordinal
+// (plus the chunk's index among its section's chunks) is what ink strokes
+// anchor to, so they survive re-pagination. chunkBases[p] maps ord -> how
+// many chunks of that section sit on pages BEFORE p, letting the display
+// side compute each on-screen chunk's global index.
+function buildStagePages(song, scalePct){
+  const { contentW, pageH } = stageMetrics();
+  const host = document.createElement('div');
+  host.style.cssText = 'position:fixed;left:-9999px;top:0;';
+  host.style.width = contentW + 'px';
+  host.style.setProperty('--chart-font-scale', scalePct / 100);
+  document.body.appendChild(host);
+  const sheet = document.createElement('div');
+  host.appendChild(sheet);
+  const sections = Renderer.renderChordSheet(sheet, song, {});
+  Array.from(sheet.querySelectorAll('.cs-section')).forEach((s, i) => { s.dataset.ord = i; });
+  const roadmap = Renderer.buildRoadmap(sections);
+  const headerHtml = stageHeaderHtml(song, roadmap);
+  const probe = document.createElement('div');
+  probe.innerHTML = headerHtml;
+  host.appendChild(probe);
+  const headerPx = probe.getBoundingClientRect().height;
+  probe.remove();
+  const contProbe = document.createElement('div');
+  contProbe.className = 'stage-cont-header';
+  contProbe.textContent = 'X (cont’d)';
+  host.appendChild(contProbe);
+  const contPx = contProbe.getBoundingClientRect().height + 10;
+  contProbe.remove();
+  const units = Paginator.paginate(sheet, pageH, { contHeaderPx: contPx, headerHeightPx: headerPx });
+  document.body.removeChild(host);
+  const pages = units.map((sectionHtmls, i) =>
+    (i === 0 ? headerHtml : stageContHeaderHtml(song)) + sectionHtmls.join(''));
+  const chunkBases = []; const running = {};
+  const probe2 = document.createElement('div');
+  pages.forEach(html => {
+    chunkBases.push(Object.assign({}, running));
+    probe2.innerHTML = html;
+    probe2.querySelectorAll('.cs-section[data-ord]').forEach(s => {
+      const ord = s.dataset.ord;
+      running[ord] = (running[ord] || 0) + 1;
+    });
+  });
+  return { pages, chunkBases };
+}
+
+/* ---------------------------------------------------------------------------
+   Performance state + navigation
+--------------------------------------------------------------------------- */
+const perf = {
+  active: false,
+  sid: null,          // position-recovery identity: 'set:<id>' or 'song:<uid>'
+  setName: '',
+  entries: [],        // [{uid, key, capo, arrangementId}] — key/capo mutable via HUD (session-only)
+  idx: 0, page: 0,
+  cache: {},          // idx -> {pages, scalePct}
+};
+let wakeLock = null, hudTimer = null, clockTimer = null;
+
+function entryStoredSong(entry){
+  const s = songs.find(x => x.uid === entry.uid);
+  return s ? songWithArrangement(s, entry.arrangementId) : null;
+}
+function entryScale(entry){
+  return scales[entry.uid] || DEFAULT_SCALE;
+}
+async function setEntryScale(entry, pct){
+  scales[entry.uid] = pct;
+  await saveScales();
+}
+function entryPages(i){
+  const c = perf.cache[i];
+  if(c) return c;
+  const entry = perf.entries[i];
+  const stored = entryStoredSong(entry);
+  if(!stored) return { pages: ['<div class="stage-cont-header">Missing song</div>'], scalePct: DEFAULT_SCALE, song: null };
+  const scalePct = entryScale(entry);
+  const song = performRenderSong(stored, entry.key, entry.capo);
+  const { pages, chunkBases } = buildStagePages(song, scalePct);
+  const built = { pages, chunkBases, scalePct, song };
+  perf.cache[i] = built;
+  return built;
+}
+
+function renderStage(){
+  const built = entryPages(perf.idx);
+  perf.page = Math.max(0, Math.min(perf.page, built.pages.length - 1));
+  const pageEl = el('stagePage');
+  pageEl.className = built.song ? bodyAlignClass(built.song).trim() : '';
+  pageEl.style.setProperty('--chart-font-scale', built.scalePct / 100);
+  pageEl.innerHTML = built.pages[perf.page];
+  Ink.pageRendered(built);
+  updateHud(built);
+  savePosition();
+}
+function updateHud(built){
+  built = built || entryPages(perf.idx);
+  const entry = perf.entries[perf.idx];
+  const title = built.song ? (built.song.title || 'Untitled') : 'Missing song';
+  const keyBit = entry.key && entry.key !== 'NN' ? entry.key + (entry.capo ? ' · capo ' + entry.capo : '') : 'NN';
+  el('hudTitle').innerHTML = `${Renderer.escapeHtml(title)}<small>${Renderer.escapeHtml(keyBit)}</small>`;
+  el('hudPos').textContent = `${perf.idx + 1}/${perf.entries.length} · p ${perf.page + 1}/${built.pages.length}`;
+  el('hudKey').value = entry.key || 'NN';
+  el('hudCapo').value = entry.capo || '';
+  const next = perf.entries[perf.idx + 1];
+  if(next){
+    const ns = entryStoredSong(next);
+    el('hudNext').innerHTML = ns ? `Next: <b>${Renderer.escapeHtml(ns.title || 'Untitled')}</b>${next.key && next.key !== 'NN' ? ' (' + Renderer.escapeHtml(next.key) + ')' : ''}` : '';
+  } else {
+    el('hudNext').textContent = 'Last song';
+  }
+  el('hudClock').textContent = new Date().toLocaleTimeString([], {hour:'numeric', minute:'2-digit'});
+}
+
+let flashTimer = null;
+function flash(title, sub, ms = 1100){
+  const f = el('flash');
+  f.querySelector('.f-title').textContent = title;
+  f.querySelector('.f-sub').textContent = sub || '';
+  f.classList.add('show');
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => f.classList.remove('show'), ms);
+}
+function flashEntry(i){
+  const entry = perf.entries[i];
+  const s = entryStoredSong(entry);
+  if(!s) return;
+  const keyBit = entry.key && entry.key !== 'NN' ? 'Key of ' + entry.key + (entry.capo ? ' · capo ' + entry.capo : '') : 'Nashville Numbers';
+  flash(s.title || 'Untitled', keyBit);
+}
+
+function goNext(){
+  const built = entryPages(perf.idx);
+  if(perf.page < built.pages.length - 1){ perf.page++; renderStage(); return; }
+  if(perf.idx < perf.entries.length - 1){
+    perf.idx++; perf.page = 0; flashEntry(perf.idx); renderStage(); return;
+  }
+  flash('End of set', '', 800);
+}
+function goPrev(){
+  if(perf.page > 0){ perf.page--; renderStage(); return; }
+  if(perf.idx > 0){
+    perf.idx--;
+    perf.page = entryPages(perf.idx).pages.length - 1;
+    flashEntry(perf.idx); renderStage(); return;
+  }
+  flash('Top of set', '', 800);
+}
+function jumpTo(i){
+  perf.idx = i; perf.page = 0;
+  closeDrawer(); flashEntry(i); renderStage();
+}
+
+function savePosition(){
+  try{ localStorage.setItem(POS_KEY, JSON.stringify({sid: perf.sid, idx: perf.idx, page: perf.page, ts: Date.now()})); }catch(e){}
+}
+function restorePosition(sid){
+  try{
+    const p = JSON.parse(localStorage.getItem(POS_KEY));
+    if(p && p.sid === sid && Date.now() - p.ts < RESUME_WINDOW_MS) return p;
+  }catch(e){}
+  return null;
+}
+
+/* ---- HUD show/hide, drawer, clock ---- */
+function showHud(autohideMs = 4000){
+  el('stage').classList.remove('hud-hidden');
+  clearTimeout(hudTimer);
+  if(autohideMs) hudTimer = setTimeout(hideHud, autohideMs);
+}
+function hideHud(){ el('stage').classList.add('hud-hidden'); clearTimeout(hudTimer); }
+function hudVisible(){ return !el('stage').classList.contains('hud-hidden'); }
+function openDrawer(){
+  const host = el('setDrawerList');
+  el('setDrawerName').textContent = perf.setName || 'Set';
+  host.innerHTML = '';
+  perf.entries.forEach((entry, i) => {
+    const s = entryStoredSong(entry);
+    const row = document.createElement('div');
+    row.className = 'sd-row' + (i === perf.idx ? ' current' : '');
+    row.innerHTML = `<span class="n">${i + 1}</span><span class="t"></span><span class="key-badge"></span>`;
+    row.querySelector('.t').textContent = s ? (s.title || 'Untitled') : '(missing song)';
+    row.querySelector('.key-badge').textContent = entry.key || 'NN';
+    row.onclick = () => jumpTo(i);
+    host.appendChild(row);
+  });
+  el('setDrawer').classList.add('open');
+  showHud(0);
+}
+function closeDrawer(){ el('setDrawer').classList.remove('open'); showHud(); }
+function drawerOpen(){ return el('setDrawer').classList.contains('open'); }
+
+/* ---------------------------------------------------------------------------
+   INK — finger/stylus markup on the chart.
+   Strokes are vectors saved PER SONG (uid), so a song's markings reappear
+   in every set it's performed in, like pencil on a paper chart. Each
+   stroke anchors to a section chunk — (ord, chunk index) from the
+   data-ord tagging in buildStagePages — with points stored relative to
+   that chunk's top-left in font-scale-normalized units. Re-pagination
+   moves sections between pages; the ink moves with them. (If a section's
+   SPLIT POINT itself moves — a different device or font size — strokes on
+   continuation chunks can be parked off-screen until the layout returns;
+   the data is never lost.)
+   Palm rejection rule: a stylus draws at any time; a finger draws only
+   while ink mode is armed (armed mode pins the HUD and suspends tap
+   page-turns — pedal/arrow keys still turn pages while you draw).
+--------------------------------------------------------------------------- */
+const Ink = (() => {
+  const PEN_W = 2.6, HL_W = 16, ERASE_R = 14, UNDO_MAX = 40;
+  const COLORS = { 'pen-red': '#ff5a5a', 'pen-amber': '#ffb84d', hl: 'rgba(255,224,102,.32)' };
+  let armed = false;
+  let tool = localStorage.getItem('cbp_ink_tool') || 'pen-red';
+  let lastScale = 100;
+  const data = {};        // uid -> {strokes:[...]}
+  const undoStacks = {};  // uid -> [json snapshots]
+  let chunkEls = [];      // current page: [{el, ord, chunk}]
+  let drawing = null;
+  let suppressClick = false;
+  let saveTimer = null;
+
+  const uidNow = () => { const e = perf.entries[perf.idx]; return e && e.uid; };
+  function strokesNow(){
+    const u = uidNow(); if(!u) return [];
+    if(!data[u]) data[u] = { strokes: [] };
+    return data[u].strokes;
+  }
+  // Tracks which uids came from storage — strokesNow() lazily seeds empty
+  // records (renderStage runs before this async load finishes), so `in
+  // data` alone can't tell "loaded" from "seeded"; strokes drawn during
+  // the load window are merged in rather than clobbered.
+  const loadedUids = new Set();
+  async function loadFor(uids){
+    for(const u of new Set(uids.filter(Boolean))){
+      if(loadedUids.has(u)) continue;
+      const v = (await KV.get('ink_' + u, null)) || { strokes: [] };
+      if(data[u] && data[u].strokes.length) v.strokes = v.strokes.concat(data[u].strokes);
+      data[u] = v;
+      loadedUids.add(u);
+    }
+  }
+  function scheduleSave(){
+    const u = uidNow(); if(!u) return;
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => KV.set('ink_' + u, data[u]), 400);
+  }
+  function pushUndo(){
+    const u = uidNow(); if(!u) return;
+    const st = undoStacks[u] = undoStacks[u] || [];
+    st.push(JSON.stringify(data[u].strokes));
+    if(st.length > UNDO_MAX) st.shift();
+  }
+
+  function pageRendered(built){
+    lastScale = built.scalePct || lastScale;
+    const canvas = el('inkCanvas');
+    const w = el('stage').clientWidth, h = el('stage').clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    if(canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)){
+      canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr);
+    }
+    canvas.style.width = w + 'px'; canvas.style.height = h + 'px';
+    const base = Object.assign({}, (built.chunkBases && built.chunkBases[perf.page]) || {});
+    chunkEls = Array.from(el('stagePage').querySelectorAll('.cs-section[data-ord]')).map(elm => {
+      const ord = elm.dataset.ord;
+      const chunk = base[ord] || 0; base[ord] = chunk + 1;
+      return { el: elm, ord: Number(ord), chunk };
+    });
+    redraw();
+  }
+
+  function drawStroke(ctx, s, ox, oy, k){
+    if(!s.pts.length) return;
+    ctx.beginPath();
+    ctx.lineJoin = ctx.lineCap = 'round';
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = s.w * k;
+    s.pts.forEach((p, i) => {
+      const x = ox + p[0] * k, y = oy + p[1] * k;
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    if(s.pts.length === 1){ const p = s.pts[0]; ctx.lineTo(ox + p[0] * k + .1, oy + p[1] * k); }
+    ctx.stroke();
+  }
+  function redraw(){
+    const canvas = el('inkCanvas');
+    const dpr = window.devicePixelRatio || 1;
+    const ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const k = lastScale / 100;
+    const stageRect = el('stage').getBoundingClientRect();
+    for(const s of strokesNow()){
+      const target = chunkEls.find(c => c.ord === s.ord && c.chunk === s.chunk);
+      if(!target) continue;
+      const r = target.el.getBoundingClientRect();
+      drawStroke(ctx, s, r.left - stageRect.left, r.top - stageRect.top, k);
+    }
+    if(drawing && drawing.stroke) drawStroke(ctx, drawing.stroke, drawing.ox, drawing.oy, k);
+  }
+
+  // Anchor = the section chunk containing the start point, else nearest.
+  function pickAnchor(x, y){
+    let best = null, bestD = Infinity;
+    for(const c of chunkEls){
+      const r = c.el.getBoundingClientRect();
+      const d = y < r.top ? r.top - y : (y > r.bottom ? y - r.bottom : 0);
+      if(d < bestD){ bestD = d; best = { c, r }; }
+      if(d === 0) break;
+    }
+    return best;
+  }
+
+  function eraseAt(x, y){
+    const k = lastScale / 100;
+    const strokes = strokesNow();
+    for(let i = strokes.length - 1; i >= 0; i--){
+      const s = strokes[i];
+      const target = chunkEls.find(c => c.ord === s.ord && c.chunk === s.chunk);
+      if(!target) continue;
+      const r = target.el.getBoundingClientRect();
+      const hit = s.pts.some(p => {
+        const dx = r.left + p[0] * k - x, dy = r.top + p[1] * k - y;
+        return dx * dx + dy * dy < ERASE_R * ERASE_R;
+      });
+      if(hit){
+        if(!drawing.undoPushed){ pushUndo(); drawing.undoPushed = true; }
+        strokes.splice(i, 1);
+        scheduleSave();
+      }
+    }
+    redraw();
+  }
+
+  const wantsDraw = ev => ev.isPrimary && (ev.pointerType === 'pen' || armed);
+  function onDown(ev){
+    if(!perf.active || !wantsDraw(ev)) return;
+    if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
+    if(!chunkEls.length) return;
+    ev.preventDefault();
+    try{ el('stage').setPointerCapture(ev.pointerId); }catch(e){}
+    if(tool === 'eraser'){
+      drawing = { erase: true, undoPushed: false };
+      eraseAt(ev.clientX, ev.clientY);
+      return;
+    }
+    const anchor = pickAnchor(ev.clientX, ev.clientY);
+    if(!anchor){ drawing = null; return; }
+    const k = lastScale / 100;
+    const stageRect = el('stage').getBoundingClientRect();
+    drawing = {
+      stroke: {
+        tool: tool === 'hl' ? 'hl' : 'pen',
+        color: COLORS[tool] || COLORS['pen-red'],
+        w: tool === 'hl' ? HL_W : PEN_W,
+        ord: anchor.c.ord, chunk: anchor.c.chunk,
+        pts: [[(ev.clientX - anchor.r.left) / k, (ev.clientY - anchor.r.top) / k]],
+      },
+      ox: anchor.r.left - stageRect.left,
+      oy: anchor.r.top - stageRect.top,
+      anchorRect: anchor.r,
+    };
+    redraw();
+  }
+  function onMove(ev){
+    if(!drawing) return;
+    ev.preventDefault();
+    if(drawing.erase){ eraseAt(ev.clientX, ev.clientY); return; }
+    const k = lastScale / 100;
+    drawing.stroke.pts.push([(ev.clientX - drawing.anchorRect.left) / k, (ev.clientY - drawing.anchorRect.top) / k]);
+    redraw();
+  }
+  function onUp(ev){
+    if(!drawing) return;
+    if(!drawing.erase && drawing.stroke.pts.length){
+      pushUndo();
+      strokesNow().push(drawing.stroke);
+      scheduleSave();
+    }
+    drawing = null;
+    suppressClick = true;
+    redraw();
+  }
+
+  function setTool(t){
+    tool = t;
+    try{ localStorage.setItem('cbp_ink_tool', t); }catch(e){}
+    const map = { 'pen-red': 'toolPenRed', 'pen-amber': 'toolPenAmber', hl: 'toolHl', eraser: 'toolEraser' };
+    Object.entries(map).forEach(([name, id]) => el(id).classList.toggle('active', name === t));
+  }
+  function arm(on){
+    armed = on;
+    el('inkTools').classList.toggle('hidden', !on);
+    el('btnInk').classList.toggle('armed', on);
+    el('stage').style.touchAction = on ? 'none' : 'manipulation';
+    if(on){ setTool(tool); showHud(0); } else showHud();
+  }
+  function undo(){
+    const u = uidNow(); const st = undoStacks[u];
+    if(!st || !st.length){ toast('Nothing to undo'); return; }
+    data[u].strokes = JSON.parse(st.pop());
+    scheduleSave(); redraw();
+  }
+  function clear(){
+    const strokes = strokesNow();
+    if(!strokes.length){ toast('No ink on this song'); return; }
+    if(!confirm('Clear all ink on this song? (It’s removed from every set it appears in.)')) return;
+    pushUndo();
+    strokes.length = 0;
+    scheduleSave(); redraw();
+  }
+  function consumeSuppress(){ const v = suppressClick; suppressClick = false; return v; }
+
+  return { pageRendered, loadFor, arm, isArmed: () => armed, setTool, undo, clear,
+           onDown, onMove, onUp, refresh: redraw, consumeSuppress };
+})();
+
+/* ---- wake lock ---- */
+async function acquireWakeLock(){
+  try{
+    if('wakeLock' in navigator){
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    }
+  }catch(e){ console.warn('Wake lock unavailable:', e.message); }
+}
+function releaseWakeLock(){ if(wakeLock){ wakeLock.release().catch(() => {}); wakeLock = null; } }
+document.addEventListener('visibilitychange', () => {
+  if(document.visibilityState === 'visible' && perf.active && !wakeLock) acquireWakeLock();
+});
+
+/* ---------------------------------------------------------------------------
+   Enter / exit
+--------------------------------------------------------------------------- */
+function performSet(set){
+  let missing = 0, pdfs = 0;
+  const entries = [];
+  for(const e of set.entries || []){
+    if(e.type === 'pdf'){ pdfs++; continue; }
+    const s = songs.find(x => x.uid === e.uid) || (e.songId != null ? songs.find(x => x.id === e.songId) : null);
+    if(!s){ missing++; continue; }
+    entries.push({ uid: s.uid, key: e.key || 'NN', capo: e.capo || '', arrangementId: e.arrangementId });
+  }
+  if(!entries.length){ toast('None of this set’s songs are in ChartBenchLive’s library — import your library backup first'); return; }
+  const notes = [];
+  if(missing) notes.push(`${missing} song${missing === 1 ? '' : 's'} not in the library`);
+  if(pdfs) notes.push(`${pdfs} attached PDF${pdfs === 1 ? '' : 's'} (not supported yet)`);
+  if(notes.length) toast('Skipped: ' + notes.join(' · '));
+  enterPerform(entries, set.name, 'set:' + set.id);
+}
+function performSingle(song, key, capo){
+  enterPerform(
+    [{ uid: song.uid,
+       key: key !== undefined ? (key || 'NN') : (song.key || 'NN'),
+       capo: capo !== undefined ? capo : (song.capo || ''),
+       arrangementId: song.activeArrangementId }],
+    song.title || 'Untitled', 'song:' + song.uid);
+}
+function enterPerform(entries, name, sid){
+  perf.active = true; perf.sid = sid; perf.setName = name;
+  perf.entries = entries.map(e => Object.assign({}, e));
+  perf.cache = {};
+  perf.idx = 0; perf.page = 0;
+  const saved = restorePosition(sid);
+  if(saved && saved.idx < entries.length){
+    perf.idx = saved.idx; perf.page = saved.page || 0;
+    if(perf.idx > 0 || perf.page > 0) toast('Resumed where you left off');
+  }
+  el('home').classList.add('hidden');
+  el('stage').classList.remove('hidden');
+  if(document.documentElement.requestFullscreen){
+    document.documentElement.requestFullscreen({navigationUI:'hide'}).catch(() => {});
+  }
+  acquireWakeLock();
+  clockTimer = setInterval(() => { if(hudVisible()) updateHud(); }, 15000);
+  flashEntry(perf.idx);
+  renderStage();
+  Ink.loadFor(perf.entries.map(e => e.uid)).then(() => Ink.refresh());
+  showHud();
+}
+let stageReturn = 'home'; // where exiting the stage lands: 'home' or 'builder'
+function exitPerform(){
+  perf.active = false;
+  Ink.arm(false);
+  releaseWakeLock();
+  clearInterval(clockTimer);
+  closeDrawer();
+  if(document.fullscreenElement) document.exitFullscreen().catch(() => {});
+  el('stage').classList.add('hidden');
+  el(stageReturn === 'builder' ? 'builder' : 'home').classList.remove('hidden');
+  stageReturn = 'home';
+}
+
+/* ---------------------------------------------------------------------------
+   Input: tap zones, keys (Bluetooth page-turn pedals present as keyboards
+   sending PageDown/PageUp or arrows — handled here, no pairing UI needed).
+--------------------------------------------------------------------------- */
+el('stage').addEventListener('pointerdown', Ink.onDown);
+el('stage').addEventListener('pointermove', Ink.onMove);
+el('stage').addEventListener('pointerup', Ink.onUp);
+el('stage').addEventListener('pointercancel', Ink.onUp);
+el('stage').addEventListener('click', (ev) => {
+  if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
+  if(Ink.consumeSuppress()) return;      // this tap drew ink — never turn the page
+  if(drawerOpen()){ closeDrawer(); return; }
+  if(Ink.isArmed()) return;              // armed = every stage touch is for drawing
+  const x = ev.clientX / window.innerWidth;
+  if(x >= 0.6) goNext();
+  else if(x <= 0.22) goPrev();
+  else (hudVisible() ? hideHud() : showHud());
+});
+document.addEventListener('keydown', (ev) => {
+  if(!perf.active) return;
+  if(ev.target && /^(input|select|textarea)$/i.test(ev.target.tagName)) return;
+  switch(ev.key){
+    case 'PageDown': case 'ArrowRight': case 'ArrowDown': case ' ': ev.preventDefault(); goNext(); break;
+    case 'PageUp': case 'ArrowLeft': case 'ArrowUp': ev.preventDefault(); goPrev(); break;
+    case 'Escape': ev.preventDefault(); if(drawerOpen()) closeDrawer(); else exitPerform(); break;
+    case 'Home': ev.preventDefault(); jumpTo(0); break;
+  }
+});
+
+/* ---- HUD wiring ---- */
+el('hudExit').onclick = exitPerform;
+el('hudPos').onclick = () => drawerOpen() ? closeDrawer() : openDrawer();
+el('btnInk').onclick = () => Ink.arm(!Ink.isArmed());
+el('toolPenRed').onclick = () => Ink.setTool('pen-red');
+el('toolPenAmber').onclick = () => Ink.setTool('pen-amber');
+el('toolHl').onclick = () => Ink.setTool('hl');
+el('toolEraser').onclick = () => Ink.setTool('eraser');
+el('toolUndo').onclick = () => Ink.undo();
+el('toolClear').onclick = () => Ink.clear();
+el('toolDone').onclick = () => Ink.arm(false);
+el('setDrawerClose').onclick = closeDrawer;
+async function nudgeScale(delta){
+  const entry = perf.entries[perf.idx];
+  const pct = Math.max(SCALE_MIN, Math.min(SCALE_MAX, entryScale(entry) + delta));
+  await setEntryScale(entry, pct);
+  delete perf.cache[perf.idx];
+  renderStage(); showHud();
+}
+el('fontMinus').onclick = () => nudgeScale(-SCALE_STEP);
+el('fontPlus').onclick = () => nudgeScale(SCALE_STEP);
+el('fontFit').onclick = async () => {
+  const entry = perf.entries[perf.idx];
+  let pct = entryScale(entry);
+  if(entryPages(perf.idx).pages.length <= 1){ toast('Already fits on one screen'); return; }
+  while(pct > SCALE_MIN){
+    pct -= SCALE_STEP;
+    const song = performRenderSong(entryStoredSong(entry), entry.key, entry.capo);
+    if(buildStagePages(song, pct).pages.length <= 1) break;
+  }
+  await setEntryScale(entry, pct);
+  delete perf.cache[perf.idx];
+  perf.page = 0;
+  renderStage(); showHud();
+};
+el('hudKey').innerHTML = KEY_OPTIONS.map(k => `<option value="${k}">${k}</option>`).join('');
+el('hudCapo').innerHTML = ['<option value="">—</option>'].concat(
+  Array.from({length: 11}, (_, i) => `<option value="${i + 1}">${i + 1}</option>`)).join('');
+el('hudKey').onchange = (ev) => {
+  perf.entries[perf.idx].key = ev.target.value;
+  delete perf.cache[perf.idx]; perf.page = 0;
+  renderStage(); showHud(0);
+};
+el('hudCapo').onchange = (ev) => {
+  perf.entries[perf.idx].capo = ev.target.value;
+  delete perf.cache[perf.idx]; perf.page = 0;
+  renderStage(); showHud(0);
+};
+
+/* ---- re-paginate on resize / rotation ---- */
+let resizeTimer = null;
+window.addEventListener('resize', () => {
+  if(!perf.active) return;
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => { perf.cache = {}; renderStage(); }, 250);
+});
+
+/* ---------------------------------------------------------------------------
+   Set List Builder — ChartBench's builder semantics kept intact: entries
+   are {uid, key:'NN', capo:''} on add, duplicates deliberately legal (a
+   reprise, a later key), per-entry key/capo/arrangement, saving under an
+   existing name updates that set after a confirm, and the working draft
+   survives closing the builder (or the whole app) via localStorage —
+   the same scratch-space behavior as ChartBench's wcb_setlist_v1.
+   Attached-PDF entries from imported sets are preserved (reorder/remove
+   only) so editing here never silently destroys them.
+--------------------------------------------------------------------------- */
+const SLB_DRAFT_KEY = 'cbp_slb_draft_v1';
+const bld = { editingId: null, entries: [] };
+
+function defaultSetName(){
+  return new Date().toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+}
+function bldSaveDraft(){
+  try{ localStorage.setItem(SLB_DRAFT_KEY, JSON.stringify({editingId: bld.editingId, name: el('bldName').value, entries: bld.entries})); }catch(e){}
+}
+function bldClearDraft(){ try{ localStorage.removeItem(SLB_DRAFT_KEY); }catch(e){} }
+
+function openBuilder(set){
+  if(set){
+    bld.editingId = set.id;
+    bld.entries = (set.entries || []).map(e => Object.assign({}, e));
+    el('bldName').value = set.name || '';
+    bldSaveDraft();
+  } else {
+    let draft = null;
+    try{ draft = JSON.parse(localStorage.getItem(SLB_DRAFT_KEY)); }catch(e){}
+    if(draft && Array.isArray(draft.entries) && draft.entries.length){
+      bld.editingId = draft.editingId || null;
+      bld.entries = draft.entries;
+      el('bldName').value = draft.name || '';
+      toast('Restored your set in progress');
+    } else {
+      bld.editingId = null; bld.entries = [];
+      el('bldName').value = '';
+    }
+  }
+  el('bldSearch').value = '';
+  el('home').classList.add('hidden');
+  el('builder').classList.remove('hidden');
+  renderBuilderLib(); renderBuilderSet();
+}
+function closeBuilder(){
+  bldSaveDraft();
+  el('builder').classList.add('hidden');
+  el('home').classList.remove('hidden');
+  renderHome();
+}
+
+function renderBuilderLib(){
+  const q = el('bldSearch').value.trim().toLowerCase();
+  const host = el('bldLibList');
+  const shown = songs
+    .filter(s => !q || (s.title || '').toLowerCase().includes(q) || (s.artist || '').toLowerCase().includes(q))
+    .sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+  host.innerHTML = '';
+  if(!songs.length){
+    host.innerHTML = '<div class="empty-note">No songs in the library yet — import your ChartBench library backup first.</div>';
+    return;
+  }
+  shown.forEach(s => {
+    const row = document.createElement('div'); row.className = 'bld-lib-row';
+    row.innerHTML = `<div class="grow" style="min-width:0;"><div class="t"></div><div class="sub"></div></div>
+      <span class="key-badge"></span><button class="add">+</button>`;
+    row.querySelector('.t').textContent = s.title || 'Untitled';
+    row.querySelector('.sub').textContent = s.artist || '';
+    row.querySelector('.key-badge').textContent = s.key || 'NN';
+    row.onclick = () => {
+      bld.entries.push({ uid: s.uid, key: 'NN', capo: '' });
+      bldSaveDraft(); renderBuilderSet();
+    };
+    host.appendChild(row);
+  });
+  if(!shown.length) host.innerHTML = '<div class="empty-note">No songs match.</div>';
+}
+
+let bldDragIndex = null;
+function bldMove(i, j){
+  if(j < 0 || j >= bld.entries.length) return;
+  const [e] = bld.entries.splice(i, 1);
+  bld.entries.splice(j, 0, e);
+  bldSaveDraft(); renderBuilderSet();
+}
+function renderBuilderSet(){
+  const host = el('bldSetList');
+  el('bldCount').textContent = bld.entries.length + (bld.entries.length === 1 ? ' song' : ' songs');
+  host.innerHTML = '';
+  if(!bld.entries.length){
+    host.innerHTML = '<div class="empty-note">Empty set — tap songs on the left to add them. The same song can appear twice (a reprise, a different key later on), each with its own key and capo.</div>';
+    return;
+  }
+  bld.entries.forEach((entry, i) => {
+    const row = document.createElement('div');
+    if(entry.type === 'pdf'){
+      row.className = 'bld-row pdf-row';
+      row.innerHTML = `<span class="n">${i + 1}</span>
+        <div class="grow"><div class="t"></div><div class="sub">PDF attachment · ${entry.pageCount || '?'} page${entry.pageCount === 1 ? '' : 's'} — performs in ChartBench only for now</div></div>
+        <button class="up" title="Move up">↑</button><button class="down" title="Move down">↓</button><button class="del" title="Remove">✕</button>`;
+      row.querySelector('.t').textContent = '📄 ' + (entry.name || 'PDF');
+    } else {
+      const s = songs.find(x => x.uid === entry.uid);
+      row.className = 'bld-row';
+      const arrs = s ? arrangementsOf(s) : [];
+      row.innerHTML = `<span class="n">${i + 1}</span>
+        <div class="grow"><div class="t"></div><div class="sub"></div></div>
+        <select class="e-key" title="Key this entry displays in">${KEY_OPTIONS.map(k => `<option value="${k}"${(entry.key || 'NN') === k ? ' selected' : ''}>${k}</option>`).join('')}</select>
+        <select class="e-capo" title="Capo for this entry"><option value="">Capo —</option>${Array.from({length: 11}, (_, c) => `<option value="${c + 1}"${String(entry.capo) === String(c + 1) ? ' selected' : ''}>Capo ${c + 1}</option>`).join('')}</select>
+        ${arrs.length > 1 ? `<select class="e-arr" title="Arrangement">${arrs.map(a => `<option value="${a.id}"${(entry.arrangementId || activeArrangementId(s)) === a.id ? ' selected' : ''}>${Renderer.escapeHtml(a.name || 'Main')}</option>`).join('')}</select>` : ''}
+        <button class="up" title="Move up">↑</button><button class="down" title="Move down">↓</button><button class="del" title="Remove">✕</button>`;
+      row.querySelector('.t').textContent = s ? (s.title || 'Untitled') : '(missing song)';
+      row.querySelector('.sub').textContent = s ? (s.artist || '') : 'Not in the library — import it, or remove this entry';
+      row.querySelector('.e-key').onchange = e => { entry.key = e.target.value; bldSaveDraft(); };
+      row.querySelector('.e-capo').onchange = e => { entry.capo = e.target.value; bldSaveDraft(); };
+      const arrSel = row.querySelector('.e-arr');
+      if(arrSel) arrSel.onchange = e => { entry.arrangementId = e.target.value; bldSaveDraft(); };
+    }
+    row.querySelector('.up').onclick = () => bldMove(i, i - 1);
+    row.querySelector('.down').onclick = () => bldMove(i, i + 1);
+    row.querySelector('.del').onclick = () => { bld.entries.splice(i, 1); bldSaveDraft(); renderBuilderSet(); };
+    // Desktop drag reorder (touch reorders with the ↑/↓ buttons).
+    row.draggable = true;
+    row.addEventListener('dragstart', () => { bldDragIndex = i; });
+    row.addEventListener('dragover', ev => { ev.preventDefault(); row.classList.add('drag-over'); });
+    row.addEventListener('dragleave', () => row.classList.remove('drag-over'));
+    row.addEventListener('drop', ev => {
+      ev.preventDefault(); row.classList.remove('drag-over');
+      if(bldDragIndex !== null && bldDragIndex !== i) bldMove(bldDragIndex, i);
+      bldDragIndex = null;
+    });
+    host.appendChild(row);
+  });
+}
+
+async function bldSaveSet(){
+  if(!bld.entries.length){ toast('The set is empty — add songs first'); return; }
+  let name = el('bldName').value.trim();
+  if(!name){ name = defaultSetName(); el('bldName').value = name; }
+  const entries = bld.entries.map(e => Object.assign({}, e));
+  let target = bld.editingId ? sets.find(s => s.id === bld.editingId) : null;
+  if(!target){
+    const clash = sets.find(s => s.name.trim().toLowerCase() === name.toLowerCase());
+    if(clash){
+      if(!confirm(`A saved set named "${clash.name}" already exists. Update it with this set?`)) return;
+      target = clash;
+    }
+  }
+  if(target){ target.name = name; target.entries = entries; bld.editingId = target.id; }
+  else { const ns = { id: genUid(), name, entries }; sets.push(ns); bld.editingId = ns.id; }
+  await saveSets();
+  bldClearDraft(); bldSaveDraft(); // draft now mirrors the saved set (editingId set), so Back is safe
+  toast(`Saved "${name}"`);
+}
+
+el('btnNewSet').onclick = () => openBuilder(null);
+el('bldBack').onclick = closeBuilder;
+el('bldSearch').oninput = renderBuilderLib;
+el('bldName').oninput = bldSaveDraft;
+el('bldSave').onclick = bldSaveSet;
+el('bldPerform').onclick = () => {
+  bldSaveDraft();
+  const name = el('bldName').value.trim() || defaultSetName();
+  stageReturn = 'builder';
+  el('builder').classList.add('hidden');
+  performSet({ id: bld.editingId || 'builder-draft', name, entries: bld.entries });
+  // performSet may refuse (nothing performable) — put the builder back up.
+  if(!perf.active){ stageReturn = 'home'; el('builder').classList.remove('hidden'); }
+};
+
+/* ---------------- Home wiring + boot ---------------- */
+el('btnImport').onclick = () => el('fileInput').click();
+el('fileInput').onchange = async (ev) => {
+  if(ev.target.files.length) await handleImportFiles(ev.target.files);
+  ev.target.value = '';
+};
+// Folder import — webkitdirectory hands over EVERY file in the tree
+// (webkitRelativePath included), so pointing it at ChartBench's Library
+// Folder mirror pulls the songs and the "Set Lists" subfolder in one go.
+// iOS/iPadOS Safari has the property but its Files picker never offers
+// folders, so the button stays hidden there (Import… + Select All covers
+// it); everywhere else it appears only when the input really supports it.
+const IS_IOS = /iP(ad|hone|od)/.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+if(!IS_IOS && 'webkitdirectory' in document.createElement('input')){
+  el('btnImportFolder').classList.remove('hidden');
+}
+el('btnImportFolder').onclick = () => el('folderInput').click();
+el('folderInput').onchange = async (ev) => {
+  const all = Array.from(ev.target.files);
+  const jsons = all.filter(f => /\.json$/i.test(f.name));
+  const skipped = all.length - jsons.length;
+  if(!jsons.length){ toast('No .json files found in that folder'); }
+  else{
+    await handleImportFiles(jsons);
+    // Let the import summary have its moment before noting what was ignored.
+    if(skipped) setTimeout(() => toast(`(${skipped} non-JSON file${skipped === 1 ? '' : 's'} ignored)`), 2400);
+  }
+  ev.target.value = '';
+};
+el('btnPull').onclick = () => pullFromChartBench().catch(err => {
+  console.error(err); toast('Pull failed: ' + err.message);
+});
+el('songSearch').oninput = renderSongList;
+
+/* ---- PWA: offline shell + home-screen install. Registration is guarded
+   to http(s), so the local file:// workflow is untouched. A new deploy
+   changes sw.js (build-stamped cache name); when the browser's update
+   check installs it, a tappable toast swaps it in and reloads. ---- */
+function showUpdateToast(worker){
+  const t = el('toast');
+  t.textContent = 'Update ready — tap to reload';
+  t.classList.add('show', 'clickable');
+  clearTimeout(toastTimer); // stays up until acted on
+  t.onclick = () => {
+    t.onclick = null; t.classList.remove('show', 'clickable');
+    worker.postMessage({ type: 'SKIP_WAITING' });
+  };
+}
+function registerServiceWorker(){
+  // Inside the Capacitor native app the bundle itself is the offline
+  // shell — a service worker would only get in the update path's way.
+  if(window.Capacitor) return;
+  if(!('serviceWorker' in navigator) || !/^https?:$/.test(location.protocol)) return;
+  navigator.serviceWorker.register('sw.js').then(reg => {
+    if(reg.waiting && navigator.serviceWorker.controller) showUpdateToast(reg.waiting);
+    reg.addEventListener('updatefound', () => {
+      const nw = reg.installing;
+      if(!nw) return;
+      nw.addEventListener('statechange', () => {
+        if(nw.state === 'installed' && navigator.serviceWorker.controller) showUpdateToast(nw);
+      });
+    });
+  }).catch(e => console.warn('Service worker registration failed:', e.message));
+  let reloading = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if(!reloading){ reloading = true; location.reload(); }
+  });
+}
+
+(async function boot(){
+  el('buildBadge').textContent = 'v' + APP_VERSION + ' · build ' + APP_BUILD;
+  await loadData();
+  await seedDemoIfEmpty();
+  renderHome();
+  if(await chartBenchDbExists()) el('btnPull').classList.remove('hidden');
+  registerServiceWorker();
+})();
+</script>
+</body>
+</html>
