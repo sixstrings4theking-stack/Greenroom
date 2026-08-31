@@ -246,6 +246,9 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .strip canvas.s-meter{width:8px; height:108px; background:#0d0f13; border-radius:2px;}
 .strip input.s-gain{writing-mode:vertical-rl; direction:rtl; width:24px; height:108px; accent-color:var(--accent); padding:0; margin:0;}
 .strip .s-btns{display:flex; gap:4px;}
+.strip .s-pan{display:flex; align-items:center; gap:3px; font-size:8px; color:var(--text-faint); width:100%; padding:0 2px;}
+.strip .s-pan input{flex:1; min-width:0; accent-color:var(--chord); height:14px;}
+.strip .s-pan input:disabled{opacity:.3;}
 .strip .s-btns button{width:26px; padding:2px 0; font-size:11px; font-weight:800;}
 .strip .s-btns .mute.on{background:var(--danger); color:#fff; border-color:var(--danger);}
 .strip .s-btns .solo.on{background:#e8d13f; color:#1b1406; border-color:#e8d13f;}
@@ -452,7 +455,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-30 19:40';
+const APP_BUILD = '2026-08-30 19:48';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -2540,7 +2543,7 @@ const Player = (() => {
   const metaCache = {};        // uid -> meta (tracks_/mix settings)
   const bufCache = new Map();  // uid -> Map(audioId -> AudioBuffer)
   let playing = false, offset = 0, startedAt = 0, duration = 0;
-  let sources = [], liveGains = new Map(), trackTaps = new Map();
+  let sources = [], liveGains = new Map(), trackTaps = new Map(), livePans = new Map();
   let uiTimer = null, saveTimer = null, scrubbing = false;
   let markerTimers = [];
   const firedLog = [];       // {label, t, at} — every marker actually fired (tests read this)
@@ -2595,6 +2598,10 @@ const Player = (() => {
       const g = liveGains.get(t.audioId);
       if(g) g.gain.value = audibleGain(t);
     });
+  }
+  function effectivePan(t){
+    if(meta.mode === 'split') return t.lr ? 0 : (t.click ? 1 : -1);
+    return Math.max(-1, Math.min(1, t.pan || 0));
   }
 
   /* ---- MIDI markers: scheduled against the same clock as the stems ---- */
@@ -2677,7 +2684,7 @@ const Player = (() => {
 
   function stopSources(){
     sources.forEach(s => { try{ s.onended = null; s.stop(); }catch(e){} });
-    sources = []; liveGains.clear(); trackTaps.clear();
+    sources = []; liveGains.clear(); trackTaps.clear(); livePans.clear();
     [...fxInstances.keys()].filter(k => k.startsWith('t:')).forEach(disposeChain);
     clearMarkerTimers();
   }
@@ -2740,11 +2747,15 @@ const Player = (() => {
         }
         preOut = mg;
       } else {
-        const pan = ctx.createStereoPanner();
-        pan.pan.value = meta.mode === 'split' ? (t.click ? 1 : -1) : 0;
-        src.connect(pan);
-        preOut = pan;
+        preOut = src;
       }
+      // User pan applies in stereo mix; split mode's routing is forced
+      // (click hard right, band hard left; L|R files pass through as-is).
+      const pan = ctx.createStereoPanner();
+      pan.pan.value = effectivePan(t);
+      preOut.connect(pan);
+      livePans.set(t.audioId, pan);
+      preOut = pan;
       const chain = buildInsertChain(t.inserts, 't:' + t.audioId);
       if(chain){ preOut.connect(chain.head); chain.tail.connect(g); }
       else preOut.connect(g);
@@ -2853,12 +2864,14 @@ const Player = (() => {
   function saveLive(){ clearTimeout(liveSaveTimer); liveSaveTimer = setTimeout(() => KV.set(LIVE_KEY, liveCfg), 300); }
   function wireLiveGraph(){
     const chain = buildInsertChain(liveCfg.inserts, '__live');
-    try{ liveNodes.src.disconnect(); liveNodes.gain.disconnect(); }catch(e){}
+    try{ liveNodes.src.disconnect(); liveNodes.gain.disconnect(); liveNodes.pan.disconnect(); }catch(e){}
     if(chain){ liveNodes.src.connect(chain.head); chain.tail.connect(liveNodes.gain); }
     else liveNodes.src.connect(liveNodes.gain);
     liveNodes.gain.gain.value = liveCfg.gain;
-    liveNodes.gain.connect(liveNodes.tap);
-    liveNodes.gain.connect(master);
+    liveNodes.pan.pan.value = Math.max(-1, Math.min(1, liveCfg.pan || 0));
+    liveNodes.gain.connect(liveNodes.pan);
+    liveNodes.pan.connect(liveNodes.tap);
+    liveNodes.pan.connect(master);
   }
   async function setLiveEnabled(on){
     if(!on){
@@ -2880,6 +2893,7 @@ const Player = (() => {
         stream,
         src: ctx.createMediaStreamSource(stream),
         gain: ctx.createGain(),
+        pan: ctx.createStereoPanner(),
         tap: ctx.createAnalyser(),
       };
       liveNodes.tap.fftSize = 512;
@@ -3151,6 +3165,7 @@ const Player = (() => {
       <div class="s-fader"><canvas class="s-meter" width="8" height="108"></canvas>
         <input type="range" class="s-gain" min="0" max="150" value="${Math.round(t.gain * 100)}"></div>
       <div class="s-btns"><button class="mute${t.mute ? ' on' : ''}">M</button><button class="solo${t.solo ? ' on' : ''}">S</button></div>
+      <div class="s-pan">L<input type="range" class="pan" min="-100" max="100" value="${Math.round((t.pan || 0) * 100)}" title="Pan (double-tap to center)"${meta.mode === 'split' ? ' disabled' : ''}>R</div>
       <div class="s-fx"></div>
       ${t.audioId ? '' : '<button class="loadfile" title="Attach an audio file to this track">📂 file</button>'}
       <label><input type="checkbox" class="tclick"${t.click ? ' checked' : ''}>Clk</label>
@@ -3166,6 +3181,17 @@ const Player = (() => {
     s.querySelector('.s-meter').dataset.id = t.audioId;
     buildFxSlotRow(s.querySelector('.s-fx'), 't:' + t.audioId, t);
     s.querySelector('.s-gain').oninput = ev => { t.gain = ev.target.value / 100; refreshGains(); scheduleSave(); };
+    const panInp = s.querySelector('.s-pan .pan');
+    panInp.oninput = ev => {
+      t.pan = ev.target.value / 100;
+      const pn = livePans.get(t.audioId); if(pn) pn.pan.value = effectivePan(t);
+      scheduleSave();
+    };
+    panInp.ondblclick = () => {
+      t.pan = 0; panInp.value = 0;
+      const pn = livePans.get(t.audioId); if(pn) pn.pan.value = effectivePan(t);
+      scheduleSave();
+    };
     s.querySelector('.mute').onclick = ev => { t.mute = !t.mute; ev.target.classList.toggle('on', t.mute); refreshGains(); scheduleSave(); };
     s.querySelector('.solo').onclick = ev => { t.solo = !t.solo; ev.target.classList.toggle('on', t.solo); refreshGains(); scheduleSave(); };
     s.querySelector('.tclick').onchange = ev => { t.click = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
@@ -3195,12 +3221,24 @@ const Player = (() => {
       <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__live"></canvas>
         <input type="range" class="s-gain" min="0" max="150" value="${Math.round(((liveCfg && liveCfg.gain) || 1) * 100)}"></div>
       <div class="s-btns"><button class="power" title="Enable/disable the live input (mic or interface)">⏻</button></div>
+      <div class="s-pan">L<input type="range" class="pan" min="-100" max="100" value="${Math.round(((liveCfg && liveCfg.pan) || 0) * 100)}" title="Pan (double-tap to center)">R</div>
       <div class="s-fx"></div>
       <label title="Your input through the FX chain to the master bus — the busking channel">input</label>`;
     s.querySelector('.power').onclick = () => setLiveEnabled(!(liveCfg && liveCfg.enabled));
     s.querySelector('.s-gain').oninput = ev => {
       liveCfg.gain = ev.target.value / 100;
       if(liveNodes) liveNodes.gain.gain.value = liveCfg.gain;
+      saveLive();
+    };
+    const lp = s.querySelector('.s-pan .pan');
+    lp.oninput = ev => {
+      liveCfg.pan = ev.target.value / 100;
+      if(liveNodes) liveNodes.pan.pan.value = liveCfg.pan;
+      saveLive();
+    };
+    lp.ondblclick = () => {
+      liveCfg.pan = 0; lp.value = 0;
+      if(liveNodes) liveNodes.pan.pan.value = 0;
       saveLive();
     };
     buildFxSlotRow(s.querySelector('.s-fx'), '__live', liveCfg || (liveCfg = LIVE_DEF()));
