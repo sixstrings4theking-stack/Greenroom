@@ -266,7 +266,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .strip.live .power{width:30px; height:24px; padding:0; font-size:13px;}
 .strip.live.on .power{background:#68c98f; color:#08130c; border-color:#68c98f;}
 /* FX editor panel */
-#fxPanel{position:fixed; left:50%; bottom:calc(62vh + 8px); transform:translateX(-50%); z-index:40; width:300px; max-width:94vw; background:var(--bg-panel-2); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,.7); padding:10px 12px;}
+#fxPanel{position:fixed; left:50%; top:50%; transform:translate(-50%,-50%); z-index:40; width:300px; max-width:94vw; max-height:calc(100vh - 16px); overflow-y:auto; background:var(--bg-panel-2); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,.7); padding:10px 12px;}
 #fxHead{display:flex; align-items:center; gap:6px; margin-bottom:8px;}
 #fxType{flex:1;}
 #fxHead label{font-size:10.5px; color:var(--text-dim); display:inline-flex; align-items:center; gap:3px;}
@@ -276,6 +276,17 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .fxp-row input[type=range]{flex:1; accent-color:var(--accent);}
 .fxp-row .val{width:40px; text-align:right; font-family:var(--mono); font-size:10.5px; color:var(--text);}
 #fxRemove{color:var(--danger); border-color:rgba(226,99,122,.4);}
+#fxPanel.wide{width:380px;}
+#peqCanvas{width:100%; height:150px; background:#0d0f13; border:1px solid var(--border-soft); border-radius:6px; touch-action:none; cursor:crosshair;}
+#peqBands{display:flex; gap:4px; margin:2px 0;}
+#peqBands button{flex:1; padding:3px 0; font-size:10px; font-weight:800; color:var(--text-faint);}
+#peqBands button.on{color:var(--accent);}
+#peqBands button.sel{outline:2px solid var(--accent); background:var(--bg-panel);}
+.peq-ctl{display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--text-dim);}
+.peq-ctl .lab{width:34px; flex-shrink:0;}
+.peq-ctl input[type=range]{flex:1; accent-color:var(--accent);}
+.peq-ctl .val{width:52px; text-align:right; font-family:var(--mono); font-size:10px; color:var(--text);}
+.peq-ctl select{font-size:10.5px; padding:2px 3px;}
 #cMarkers{width:280px; max-width:44vw; border-left:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0;}
 .cm-head{display:flex; align-items:center; gap:6px; padding:8px 10px 6px; font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px;}
 #midiOut{flex:1; min-width:0; font-size:11px; padding:2px 4px;}
@@ -441,7 +452,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-30 19:29';
+const APP_BUILD = '2026-08-30 19:40';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -2386,10 +2397,33 @@ const FX = (() => {
       params: [ {k:'rate', lab:'Rate Hz', min:.1, max:5, def:1.2, step:.1},
                 {k:'depth', lab:'Depth ms', min:0, max:10, def:3, step:.1},
                 {k:'mix', lab:'Mix', min:0, max:1, def:.5, step:.01} ] },
+    peq:    { name: 'Parametric EQ', abbrev: 'PEQ', custom: 'peq', params: [] },
   };
+  // 6-band parametric: HP, low shelf, three bells, high shelf — all
+  // retypeable per band. Band 1 ships disabled (HP only when wanted).
+  function peqDefaultBands(){
+    return [
+      { on: false, type: 'highpass',  freq: 40,   gain: 0, q: .8 },
+      { on: true,  type: 'lowshelf',  freq: 120,  gain: 0, q: .8 },
+      { on: true,  type: 'peaking',   freq: 400,  gain: 0, q: 1 },
+      { on: true,  type: 'peaking',   freq: 1200, gain: 0, q: 1 },
+      { on: true,  type: 'peaking',   freq: 3500, gain: 0, q: 1 },
+      { on: true,  type: 'highshelf', freq: 8000, gain: 0, q: .8 },
+    ];
+  }
   function defaults(type){
+    if(type === 'peq') return { bands: peqDefaultBands() };
     const o = {}; (DEFS[type] ? DEFS[type].params : []).forEach(p => { o[p.k] = p.def; });
     return o;
+  }
+  // One band -> one BiquadFilter. A disabled band becomes a flat bell so
+  // it can sit in the series chain without coloring anything.
+  function applyBand(f, b){
+    if(!b.on){ f.type = 'peaking'; f.frequency.value = b.freq || 1000; f.Q.value = 1; f.gain.value = 0; return; }
+    f.type = b.type;
+    f.frequency.value = Math.max(20, Math.min(20000, b.freq || 1000));
+    f.Q.value = Math.max(0.05, b.q || 1);
+    f.gain.value = b.gain || 0;
   }
   function makeIR(ctx, decay){
     const len = Math.max(1, Math.floor(Math.max(0.1, decay) * ctx.sampleRate));
@@ -2449,13 +2483,19 @@ const FX = (() => {
       lfo.start();
       update = q => { lfo.frequency.value = q.rate || 1.2; lfoGain.gain.value = (q.depth || 0) / 1000; wet.gain.value = q.mix != null ? q.mix : .5; };
       dispose = () => { try{ lfo.stop(); }catch(e){} };
+    } else if(type === 'peq'){
+      const filters = ((slot.params && slot.params.bands) || peqDefaultBands()).map(() => ctx.createBiquadFilter());
+      let node = input;
+      filters.forEach(f => { node.connect(f); node = f; });
+      node.connect(output);
+      update = q => { ((q && q.bands) || []).forEach((b, i) => { if(filters[i]) applyBand(filters[i], b); }); };
     } else {
       input.connect(output); // unknown type (e.g. an auv3 slot on web): clean pass-through
     }
     update(slot.params || {});
     return { input, output, update, dispose };
   }
-  return { DEFS, defaults, build, abbrev: t => (DEFS[t] ? DEFS[t].abbrev : '?') };
+  return { DEFS, defaults, build, applyBand, peqDefaultBands, abbrev: t => (DEFS[t] ? DEFS[t].abbrev : '?') };
 })();
 
 /* Web MIDI output — Chrome/Edge/Android webview today; iOS WKWebView has
@@ -2881,9 +2921,11 @@ const Player = (() => {
       Object.entries(FX.DEFS).map(([t, d]) => `<option value="${t}"${slot && slot.type === t ? ' selected' : ''}>${d.name}</option>`).join('');
     el('fxBypass').checked = !!(slot && slot.bypass);
     el('fxBypass').disabled = el('fxRemove').disabled = !slot;
+    el('fxPanel').classList.toggle('wide', !!(slot && slot.type === 'peq'));
     const host = el('fxParams');
     host.innerHTML = '';
     if(!slot) return;
+    if(slot.type === 'peq'){ renderPeqEditor(slot); return; }
     (FX.DEFS[slot.type] ? FX.DEFS[slot.type].params : []).forEach(p => {
       const row = document.createElement('div'); row.className = 'fxp-row';
       const v = slot.params[p.k] != null ? slot.params[p.k] : p.def;
@@ -2897,6 +2939,151 @@ const Player = (() => {
       host.appendChild(row);
     });
   }
+  /* ---- Parametric EQ editor: log-frequency graph with draggable band
+     dots. The curve is the EXACT response of the filters — computed with
+     BiquadFilterNode.getFrequencyResponse on probe filters mirroring the
+     band settings, magnitudes summed in dB across the series chain. ---- */
+  let peqSel = 0, peqDrag = null, peqProbes = null;
+  const PEQ_FMIN = 20, PEQ_FMAX = 20000, PEQ_DB = 18;
+  const peqX = (f, W) => W * Math.log(f / PEQ_FMIN) / Math.log(PEQ_FMAX / PEQ_FMIN);
+  const peqF = (x, W) => PEQ_FMIN * Math.pow(PEQ_FMAX / PEQ_FMIN, x / W);
+  const peqY = (db, H) => H / 2 - db * (H / 2) / PEQ_DB;
+  const peqDb = (y, H) => (H / 2 - y) * PEQ_DB / (H / 2);
+  function peqResponse(bands, freqs){
+    ensureCtx();
+    if(!peqProbes || peqProbes.length !== bands.length) peqProbes = bands.map(() => ctx.createBiquadFilter());
+    const total = new Float32Array(freqs.length);
+    const mag = new Float32Array(freqs.length), ph = new Float32Array(freqs.length);
+    bands.forEach((b, i) => {
+      FX.applyBand(peqProbes[i], b);
+      peqProbes[i].getFrequencyResponse(freqs, mag, ph);
+      for(let k = 0; k < freqs.length; k++) total[k] += 20 * Math.log10(Math.max(1e-6, mag[k]));
+    });
+    return total;
+  }
+  function peqDraw(slot){
+    const cv = el('peqCanvas');
+    if(!cv) return;
+    const W = cv.width, H = cv.height;
+    const g = cv.getContext('2d');
+    g.clearRect(0, 0, W, H);
+    // grid: octave-ish frequency lines + dB lines
+    g.strokeStyle = '#1c2028'; g.fillStyle = '#5f6779'; g.font = '9px sans-serif'; g.lineWidth = 1;
+    [50, 100, 200, 500, 1000, 2000, 5000, 10000].forEach(f => {
+      const x = peqX(f, W);
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.stroke();
+      g.fillText(f >= 1000 ? (f / 1000) + 'k' : f, x + 2, H - 3);
+    });
+    [-12, -6, 0, 6, 12].forEach(db => {
+      const y = peqY(db, H);
+      g.strokeStyle = db === 0 ? '#2e3440' : '#1c2028';
+      g.beginPath(); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+      if(db) g.fillText((db > 0 ? '+' : '') + db, 2, y - 2);
+    });
+    // exact response curve
+    const N = 160;
+    const freqs = new Float32Array(N);
+    for(let i = 0; i < N; i++) freqs[i] = peqF(W * i / (N - 1), W);
+    const resp = peqResponse(slot.params.bands, freqs);
+    g.strokeStyle = '#e8a13f'; g.lineWidth = 2; g.beginPath();
+    for(let i = 0; i < N; i++){
+      const x = W * i / (N - 1), y = peqY(Math.max(-PEQ_DB, Math.min(PEQ_DB, resp[i])), H);
+      i ? g.lineTo(x, y) : g.moveTo(x, y);
+    }
+    g.stroke();
+    // band dots (HP/LP have no gain — their dots ride the 0 dB line)
+    slot.params.bands.forEach((b, i) => {
+      const hasGain = !/pass$/.test(b.type);
+      const x = peqX(b.freq, W), y = peqY(hasGain ? (b.gain || 0) : 0, H);
+      g.beginPath(); g.arc(x, y, 6, 0, Math.PI * 2);
+      g.fillStyle = b.on ? (i === peqSel ? '#e8a13f' : 'rgba(232,161,63,.45)') : 'rgba(95,103,121,.5)';
+      g.fill();
+      if(i === peqSel){ g.strokeStyle = '#eceff4'; g.lineWidth = 1.5; g.stroke(); }
+      g.fillStyle = '#0d0f13'; g.font = 'bold 8px sans-serif'; g.textAlign = 'center';
+      g.fillText(String(i + 1), x, y + 3); g.textAlign = 'left';
+    });
+  }
+  function peqChanged(slot){
+    liveUpdateSlot(fxEd.ownerKey, slot);
+    if(fxEd.ownerKey === '__live') saveLive(); else scheduleSave();
+    peqDraw(slot);
+  }
+  function renderPeqEditor(slot){
+    if(!Array.isArray(slot.params.bands) || !slot.params.bands.length) slot.params.bands = FX.peqDefaultBands();
+    peqSel = Math.min(peqSel, slot.params.bands.length - 1);
+    const host = el('fxParams');
+    host.innerHTML = `<canvas id="peqCanvas" width="352" height="150"></canvas>
+      <div id="peqBands"></div><div id="peqCtrls"></div>`;
+    const bandsHost = el('peqBands');
+    slot.params.bands.forEach((b, i) => {
+      const btn = document.createElement('button');
+      btn.textContent = i + 1;
+      btn.className = (b.on ? 'on' : '') + (i === peqSel ? ' sel' : '');
+      btn.title = 'Select band ' + (i + 1) + ' (its On switch is below)';
+      btn.onclick = () => { peqSel = i; renderPeqEditor(slot); };
+      bandsHost.appendChild(btn);
+    });
+    const b = slot.params.bands[peqSel];
+    const ctl = el('peqCtrls');
+    const fPos = Math.log(b.freq / PEQ_FMIN) / Math.log(PEQ_FMAX / PEQ_FMIN);
+    ctl.innerHTML = `
+      <div class="peq-ctl"><span class="lab">Band</span>
+        <label style="display:inline-flex;align-items:center;gap:3px;"><input type="checkbox" id="pqOn"${b.on ? ' checked' : ''}> On</label>
+        <select id="pqType">
+          ${[['highpass','High-pass'],['lowshelf','Low shelf'],['peaking','Bell'],['highshelf','High shelf'],['lowpass','Low-pass']]
+            .map(([v, n]) => `<option value="${v}"${b.type === v ? ' selected' : ''}>${n}</option>`).join('')}
+        </select></div>
+      <div class="peq-ctl"><span class="lab">Freq</span><input type="range" id="pqFreq" min="0" max="1" step="0.002" value="${fPos}"><span class="val" id="pqFreqV"></span></div>
+      <div class="peq-ctl"><span class="lab">Gain</span><input type="range" id="pqGain" min="-18" max="18" step="0.5" value="${b.gain || 0}"><span class="val" id="pqGainV"></span></div>
+      <div class="peq-ctl"><span class="lab">Q</span><input type="range" id="pqQ" min="0.1" max="12" step="0.1" value="${b.q || 1}"><span class="val" id="pqQV"></span></div>`;
+    const showVals = () => {
+      el('pqFreqV').textContent = b.freq >= 1000 ? (b.freq / 1000).toFixed(2) + ' kHz' : Math.round(b.freq) + ' Hz';
+      el('pqGainV').textContent = (b.gain > 0 ? '+' : '') + (b.gain || 0).toFixed(1) + ' dB';
+      el('pqQV').textContent = 'Q ' + (b.q || 1).toFixed(1);
+    };
+    showVals();
+    el('pqOn').onchange = ev => { b.on = ev.target.checked; peqChanged(slot); renderPeqEditor(slot); };
+    el('pqType').onchange = ev => { b.type = ev.target.value; peqChanged(slot); };
+    el('pqFreq').oninput = ev => { b.freq = Math.round(peqF(parseFloat(ev.target.value) * 352, 352)); peqChanged(slot); showVals(); };
+    el('pqGain').oninput = ev => { b.gain = parseFloat(ev.target.value); peqChanged(slot); showVals(); };
+    el('pqQ').oninput = ev => { b.q = parseFloat(ev.target.value); peqChanged(slot); showVals(); };
+    // drag band dots on the graph: x = frequency, y = gain
+    const cv = el('peqCanvas');
+    const toCanvas = ev => {
+      const r = cv.getBoundingClientRect();
+      return { x: (ev.clientX - r.left) * cv.width / r.width, y: (ev.clientY - r.top) * cv.height / r.height };
+    };
+    cv.onpointerdown = ev => {
+      const p = toCanvas(ev);
+      let best = -1, bestD = 14 * 14;
+      slot.params.bands.forEach((bb, i) => {
+        const hasGain = !/pass$/.test(bb.type);
+        const dx = peqX(bb.freq, cv.width) - p.x, dy = peqY(hasGain ? (bb.gain || 0) : 0, cv.height) - p.y;
+        const dd = dx * dx + dy * dy;
+        if(dd < bestD){ bestD = dd; best = i; }
+      });
+      if(best === -1) return;
+      ev.preventDefault();
+      if(best !== peqSel){ peqSel = best; renderPeqEditor(slot); }
+      peqDrag = best;
+      try{ cv.setPointerCapture(ev.pointerId); }catch(e){}
+    };
+    cv.onpointermove = ev => {
+      if(peqDrag === null) return;
+      ev.preventDefault();
+      const p = toCanvas(ev);
+      const bb = slot.params.bands[peqDrag];
+      bb.freq = Math.round(Math.max(PEQ_FMIN, Math.min(PEQ_FMAX, peqF(p.x, cv.width))));
+      if(!/pass$/.test(bb.type)) bb.gain = Math.round(Math.max(-PEQ_DB, Math.min(PEQ_DB, peqDb(p.y, cv.height))) * 2) / 2;
+      if(!bb.on){ bb.on = true; }
+      peqChanged(slot); showVals();
+      el('pqFreq').value = Math.log(bb.freq / PEQ_FMIN) / Math.log(PEQ_FMAX / PEQ_FMIN);
+      el('pqGain').value = bb.gain || 0;
+    };
+    cv.onpointerup = cv.onpointercancel = () => { peqDrag = null; renderPeqEditor(slot); };
+    peqDraw(slot);
+  }
+
   function wireFxPanel(){
     el('fxType').onchange = ev => {
       const t = ev.target.value;
