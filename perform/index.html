@@ -251,6 +251,9 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .strip .s-btns .solo.on{background:#e8d13f; color:#1b1406; border-color:#e8d13f;}
 .strip label{font-size:9.5px; color:var(--text-faint); display:inline-flex; align-items:center; gap:2px;}
 .strip .del{background:transparent; border:none; color:var(--text-faint); font-size:12px; padding:0;}
+.strip .s-name{cursor:pointer;}
+.strip.nofile .s-name{color:var(--text-faint); font-style:italic;}
+.strip .loadfile{font-size:9px; padding:2px 6px; color:#79c2ff; border-color:rgba(121,194,255,.4);}
 .strip.addstrip{justify-content:center; cursor:pointer; border-style:dashed; color:#79c2ff; font-size:12px; font-weight:600;}
 /* Insert slots — 3 per strip; filled = amber abbrev, bypassed = dimmed. */
 .s-fx{display:flex; gap:3px;}
@@ -438,7 +441,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-30 19:19';
+const APP_BUILD = '2026-08-30 19:29';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -2617,7 +2620,7 @@ const Player = (() => {
     if(!m.tracks.length) return map;
     ensureCtx();
     for(const t of m.tracks){
-      if(map.has(t.audioId)) continue;
+      if(!t.audioId || map.has(t.audioId)) continue;
       const blob = await KV.get('audio_' + t.audioId, null);
       if(!blob) continue;
       try{ map.set(t.audioId, await ctx.decodeAudioData(await blob.arrayBuffer())); }
@@ -2655,7 +2658,7 @@ const Player = (() => {
     const bufs = await buffersFor(uid);
     const durs = meta.tracks.map(t => (bufs.get(t.audioId) || { duration: 0 }).duration);
     duration = Math.max(0, ...durs);
-    if(!duration){ toast('Tracks could not be loaded'); return; }
+    if(!duration){ toast('No audio loaded yet — tap 📂 on a track to attach a file'); return; }
     stopSources();
     if(offset >= duration) offset = 0;
     let t0 = ctx.currentTime + 0.08;
@@ -2749,23 +2752,47 @@ const Player = (() => {
   }
 
   /* ---- attach / remove ---- */
+  // Adding a track never demands a file: "+ Add" makes an empty channel
+  // strip (levels/FX/routing set up ahead of time); audio attaches later
+  // via the strip's 📂 button, which aims the picker at that track.
+  let pendingFileTarget = null;
+  function addEmptyTrack(){
+    if(meta.tracks.length >= MAX_TRACKS){ toast(`${MAX_TRACKS} tracks max per song`); return; }
+    meta.tracks.push({ audioId: null, name: 'Track ' + (meta.tracks.length + 1), gain: 1, mute: false, solo: false,
+                       click: false, lr: false, inserts: [null, null, null] });
+    scheduleSave(); renderConsole(); updateTransport();
+  }
+  async function attachFileToTrack(t, f){
+    const id = genUid();
+    await KV.set('audio_' + id, f);
+    t.audioId = id;
+    if(/^Track \d+$/.test(t.name || '')) t.name = f.name.replace(/\.[^.]+$/, '');
+    if(!t.click) t.click = /click|cue|met/i.test(f.name);
+  }
   async function addFiles(fileList){
     let added = 0;
     for(const f of Array.from(fileList)){
+      if(pendingFileTarget && !pendingFileTarget.audioId && meta.tracks.includes(pendingFileTarget)){
+        await attachFileToTrack(pendingFileTarget, f);
+        pendingFileTarget = null;
+        added++;
+        continue;
+      }
       if(meta.tracks.length >= MAX_TRACKS){ toast(`${MAX_TRACKS} tracks max per song`); break; }
-      const id = genUid();
-      await KV.set('audio_' + id, f);
-      meta.tracks.push({ audioId: id, name: f.name.replace(/\.[^.]+$/, ''), gain: 1, mute: false, solo: false,
-                         click: /click|cue|met/i.test(f.name), lr: false });
+      const t = { audioId: null, name: '', gain: 1, mute: false, solo: false, click: false, lr: false, inserts: [null, null, null] };
+      await attachFileToTrack(t, f);
+      t.name = t.name || f.name.replace(/\.[^.]+$/, '');
+      meta.tracks.push(t);
       added++;
     }
-    if(added){ scheduleSave(); renderMixer(); updateTransport(); toast(`Added ${added} track${added === 1 ? '' : 's'}`); }
+    pendingFileTarget = null;
+    if(added){ scheduleSave(); renderMixer(); updateTransport(); toast(`Loaded ${added} file${added === 1 ? '' : 's'}`); }
   }
   async function removeTrack(i){
     const t = meta.tracks[i];
     if(!confirm(`Remove track "${t.name}" from this song?`)) return;
     meta.tracks.splice(i, 1);
-    KV.del('audio_' + t.audioId); // blobs are single-referenced by design
+    if(t.audioId) KV.del('audio_' + t.audioId); // blobs are single-referenced by design
 
     if(bufCache.has(uid)) bufCache.get(uid).delete(t.audioId);
     scheduleSave(); reapplyIfPlaying(); renderMixer(); updateTransport();
@@ -2896,7 +2923,7 @@ const Player = (() => {
 
   /* ---- UI: HUD transport + the DAW console ---- */
   function updateTransport(){
-    const has = !!(meta && meta.tracks.length);
+    const has = !!(meta && meta.tracks.some(t => t.audioId));
     const pos = position();
     el('btnPlay').disabled = !has;
     el('btnPlay').textContent = playing ? '⏸' : '⏵';
@@ -2931,17 +2958,24 @@ const Player = (() => {
   }
 
   function makeStrip(t, i){
-    const s = document.createElement('div'); s.className = 'strip';
+    const s = document.createElement('div'); s.className = 'strip' + (t.audioId ? '' : ' nofile');
     s.innerHTML = `
-      <div class="s-name"></div>
+      <div class="s-name" title="Tap to rename"></div>
       <div class="s-fader"><canvas class="s-meter" width="8" height="108"></canvas>
         <input type="range" class="s-gain" min="0" max="150" value="${Math.round(t.gain * 100)}"></div>
       <div class="s-btns"><button class="mute${t.mute ? ' on' : ''}">M</button><button class="solo${t.solo ? ' on' : ''}">S</button></div>
       <div class="s-fx"></div>
+      ${t.audioId ? '' : '<button class="loadfile" title="Attach an audio file to this track">📂 file</button>'}
       <label><input type="checkbox" class="tclick"${t.click ? ' checked' : ''}>Clk</label>
       <label><input type="checkbox" class="tlr"${t.lr ? ' checked' : ''}>L|R</label>
       <button class="del" title="Remove track">✕</button>`;
     s.querySelector('.s-name').textContent = t.name;
+    s.querySelector('.s-name').onclick = () => {
+      const name = prompt('Track name:', t.name);
+      if(name && name.trim()){ t.name = name.trim(); scheduleSave(); renderConsole(); }
+    };
+    const lf = s.querySelector('.loadfile');
+    if(lf) lf.onclick = () => { pendingFileTarget = t; el('audioInput').click(); };
     s.querySelector('.s-meter').dataset.id = t.audioId;
     buildFxSlotRow(s.querySelector('.s-fx'), 't:' + t.audioId, t);
     s.querySelector('.s-gain').oninput = ev => { t.gain = ev.target.value / 100; refreshGains(); scheduleSave(); };
@@ -2996,8 +3030,8 @@ const Player = (() => {
         const add = document.createElement('div');
         add.className = 'strip addstrip';
         add.textContent = '+ Add';
-        add.title = 'Add an audio file (mp3 / m4a / wav…) — up to 8 tracks';
-        add.onclick = () => el('audioInput').click();
+        add.title = 'Add an empty channel — attach its audio later with the 📂 button';
+        add.onclick = addEmptyTrack;
         host.appendChild(add);
       }
       host.appendChild(makeLiveStrip());
