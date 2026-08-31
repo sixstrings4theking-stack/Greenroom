@@ -452,15 +452,15 @@ small{color:var(--text-faint);}
    into #titleStickyDock beside the Title — the one row that stays
    visible — and the Title box shortens to make room. Expanding sends
    them back to their homes above. */
-.title-sticky-row{display:flex; gap:6px; align-items:center;}
+.title-sticky-row{display:flex; gap:6px; align-items:flex-end;}
 .title-sticky-row input{flex:1; min-width:0;}
-#titleStickyDock{display:flex; gap:10px; align-items:center; flex-shrink:0; max-width:55%;}
+#titleStickyDock{display:flex; gap:10px; align-items:flex-end; flex-shrink:0; max-width:55%;}
 #titleStickyDock:empty{display:none;}
 #titleStickyDock .key-chips{justify-content:flex-end;}
-/* Docked .pk-arr lays out INLINE — the "Arrangement" label sits left of
-   the buttons instead of above them, so the header survives the collapse
-   without making the title row taller. */
-#titleStickyDock .pk-arr{display:flex; flex-direction:row; align-items:center; gap:8px; flex-shrink:0;}
+/* Docked .pk-arr keeps its label ABOVE the buttons — same convention as
+   the TITLE label above the title box. The row bottom-aligns so the
+   buttons sit level with the title input while the label floats above. */
+#titleStickyDock .pk-arr{display:flex; flex-direction:column; align-items:flex-start; gap:3px; flex-shrink:0;}
 #titleStickyDock .pk-arr label{margin:0;}
 /* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
    stripe + tinted background make it visually obvious this isn't the normal
@@ -1287,7 +1287,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-30 20:26';
+const APP_BUILD = '2026-08-30 20:31';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
