@@ -395,9 +395,9 @@ small{color:var(--text-faint);}
    name left and the caret pinned right, dropdown-style; it and the + are
    height-matched so the pair reads as one control. */
 .arr-btn{padding:2px 10px; font-size:11px; font-weight:600; color:var(--accent); border-color:var(--border); white-space:nowrap;
-  min-width:130px; height:26px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:space-between; gap:8px;}
+  min-width:130px; height:31px; box-sizing:border-box; display:inline-flex; align-items:center; justify-content:space-between; gap:8px;}
 .arr-control{flex-shrink:0;}
-.arr-add{padding:1px 9px; font-size:13px; line-height:1.2; height:26px; box-sizing:border-box; display:inline-flex; align-items:center;}
+.arr-add{padding:1px 9px; font-size:13px; line-height:1.2; height:31px; box-sizing:border-box; display:inline-flex; align-items:center;}
 .arr-menu{position:fixed; z-index:600; min-width:230px; background:var(--bg-panel); border:1px solid var(--border); border-radius:8px; box-shadow:0 8px 28px rgba(0,0,0,.5); padding:4px; font-size:12px; text-transform:none; letter-spacing:0; color:var(--text);}
 .arr-menu.hidden{display:none;}
 .arr-menu .item{padding:6px 10px; border-radius:6px; cursor:pointer; white-space:nowrap;}
@@ -446,7 +446,7 @@ small{color:var(--text-faint);}
 .pk-split .pk-main{flex:1; min-width:0;}
 .pk-split .pk-divider{width:1px; background:var(--border-soft); flex-shrink:0; align-self:stretch;}
 .pk-split .pk-arr{flex-shrink:0; display:flex; flex-direction:column; align-items:flex-end; gap:6px;}
-.pk-split .pk-arr .arr-control-row{display:flex; gap:4px; align-items:center;}
+.pk-arr .arr-control-row{display:flex; gap:4px; align-items:center;}
 /* Sticky docking (see applyMetaBarCollapse): when the metadata bar is
    collapsed, the preferred-key chips and the Arrangement buttons move
    into #titleStickyDock beside the Title — the one row that stays
@@ -454,9 +454,14 @@ small{color:var(--text-faint);}
    them back to their homes above. */
 .title-sticky-row{display:flex; gap:6px; align-items:center;}
 .title-sticky-row input{flex:1; min-width:0;}
-#titleStickyDock{display:flex; gap:6px; align-items:center; flex-shrink:0; max-width:55%;}
+#titleStickyDock{display:flex; gap:10px; align-items:center; flex-shrink:0; max-width:55%;}
 #titleStickyDock:empty{display:none;}
 #titleStickyDock .key-chips{justify-content:flex-end;}
+/* Docked .pk-arr lays out INLINE — the "Arrangement" label sits left of
+   the buttons instead of above them, so the header survives the collapse
+   without making the title row taller. */
+#titleStickyDock .pk-arr{display:flex; flex-direction:row; align-items:center; gap:8px; flex-shrink:0;}
+#titleStickyDock .pk-arr label{margin:0;}
 /* Lyrics-only view (see toggleLyricsOnlyView) — read-only, so a mint accent
    stripe + tinted background make it visually obvious this isn't the normal
    editable chart, matching the Lyrics button's own color. Tint lives on
@@ -1282,7 +1287,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-30 20:22';
+const APP_BUILD = '2026-08-30 20:26';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -8840,14 +8845,16 @@ ${versesXml}
     // Arrangement buttons beside the Title (the one row that stays
     // visible), shortening the Title box; expanding sends them home.
     // Moving the live DOM nodes keeps every listener and render target.
+    // The WHOLE .pk-arr moves (label included) so the "Arrangement" header
+    // stays visible while docked — it lays out inline there (see CSS).
     const chips = el('preferredKeyChips');
-    const arr = document.querySelector('.arr-control-row');
+    const arr = document.querySelector('.pk-arr');
     if(collapsed){
       const dock = el('titleStickyDock');
       dock.appendChild(chips); dock.appendChild(arr);
     } else {
       document.querySelector('.key-picker-row').appendChild(chips);
-      document.querySelector('.pk-arr').appendChild(arr);
+      document.querySelector('.pk-split').appendChild(arr);
     }
   }
   function toggleMetaBarCollapse(){
