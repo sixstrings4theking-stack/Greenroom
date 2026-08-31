@@ -199,30 +199,54 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 #btnNewSet{margin-bottom:8px; color:#79c2ff; border-color:rgba(121,194,255,.45); font-weight:600;}
 .card button.edit{background:transparent; border-color:var(--border); color:var(--text-dim); font-size:13px;}
 .card button.edit:hover{color:#79c2ff; border-color:#79c2ff;}
+.card button.tracks{background:transparent; border-color:var(--border); font-size:14px; padding:6px 8px;}
+.card button.tracks:hover{border-color:var(--accent);}
 
 /* ---------------- Tracks: transport + mixer drawer ---------------- */
 #transportGrp{flex-wrap:nowrap;}
 #playClock{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text-dim); white-space:nowrap;}
 #scrub{width:130px; accent-color:var(--accent);}
 #btnPlay:disabled{opacity:.35;}
-#mixDrawer{position:fixed; top:0; bottom:0; right:0; width:340px; max-width:92vw; z-index:26; background:var(--bg-panel); border-left:1px solid var(--border); box-shadow:-8px 0 30px rgba(0,0,0,.6); transform:translateX(105%); transition:transform .22s ease; display:flex; flex-direction:column;}
-#mixDrawer.open{transform:translateX(0);}
-#mixHead{padding:14px 14px 10px; border-bottom:1px solid var(--border-soft); font-weight:700; font-size:14px; display:flex; justify-content:space-between; align-items:center;}
-#mixBody{flex:1; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:10px;}
-.mix-track{background:var(--bg-panel-2); border:1px solid var(--border-soft); border-radius:8px; padding:8px 10px;}
-.mix-track .row1{display:flex; align-items:center; gap:8px;}
-.mix-track .tname{flex:1; min-width:0; font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
-.mix-track .row2{display:flex; align-items:center; gap:8px; margin-top:6px;}
-.mix-track input[type=range]{flex:1; accent-color:var(--accent); min-width:60px;}
-.mix-track .mute{width:30px; padding:3px 0; font-weight:700;}
-.mix-track .mute.on{background:var(--danger); color:#fff; border-color:var(--danger);}
-.mix-track .del{background:transparent; border:none; color:var(--text-faint); padding:2px 6px;}
-.mix-track label{font-size:10.5px; color:var(--text-dim); display:inline-flex; align-items:center; gap:3px; white-space:nowrap;}
-.mix-row{display:flex; align-items:center; gap:8px; font-size:12px; color:var(--text-dim); flex-wrap:wrap;}
-.mix-row input[type=range]{flex:1; accent-color:var(--accent);}
-.mix-row .mode-btn.on{background:rgba(232,161,63,.16); border-color:var(--accent); color:var(--accent); font-weight:600;}
-#mixBpm{width:60px;}
-.mix-note{font-size:11px; color:var(--text-faint); line-height:1.5;}
+/* The console — a DAW-style bottom sheet: transport bar on top, channel
+   strips (vertical faders + live meters) left, MIDI marker lane right.
+   Lives OUTSIDE #stage so it works over the home screen too. */
+#console{position:fixed; left:0; right:0; bottom:0; z-index:30; background:var(--bg-panel); border-top:1px solid var(--border); box-shadow:0 -10px 40px rgba(0,0,0,.6); transform:translateY(105%); transition:transform .25s ease; display:flex; flex-direction:column; max-height:62vh;}
+#console.open{transform:translateY(0);}
+#cHead{display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border-soft); flex-wrap:wrap;}
+#cTitle{font-weight:700; font-size:13px; max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+#cClock{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text-dim); white-space:nowrap;}
+#cTimeline{flex:1; min-width:120px; position:relative; height:22px; display:flex; align-items:center;}
+#cScrub{width:100%; accent-color:var(--accent);}
+#cTicks{position:absolute; left:0; right:0; top:0; height:5px; pointer-events:none;}
+#cTicks span{position:absolute; top:0; width:2px; height:5px; background:#b39dff;}
+#cHead label{font-size:10.5px; color:var(--text-dim); display:inline-flex; align-items:center; gap:4px;}
+#mixBpm{width:52px; padding:3px 5px;}
+.mode-btn.on{background:rgba(232,161,63,.16); border-color:var(--accent); color:var(--accent); font-weight:600;}
+#cBody{display:flex; min-height:0; flex:1;}
+#cStrips{flex:1; display:flex; gap:8px; overflow-x:auto; padding:10px 12px; align-items:stretch;}
+.strip{width:74px; flex-shrink:0; background:var(--bg-panel-2); border:1px solid var(--border-soft); border-radius:8px; padding:6px 4px; display:flex; flex-direction:column; align-items:center; gap:5px;}
+.strip.master{border-color:var(--accent-dim);}
+.strip .s-name{font-size:10px; font-weight:700; color:var(--text-dim); max-width:66px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;}
+.strip .s-fader{display:flex; align-items:center; gap:3px; height:112px;}
+.strip canvas.s-meter{width:8px; height:108px; background:#0d0f13; border-radius:2px;}
+.strip input.s-gain{writing-mode:vertical-rl; direction:rtl; width:24px; height:108px; accent-color:var(--accent); padding:0; margin:0;}
+.strip .s-btns{display:flex; gap:4px;}
+.strip .s-btns button{width:26px; padding:2px 0; font-size:11px; font-weight:800;}
+.strip .s-btns .mute.on{background:var(--danger); color:#fff; border-color:var(--danger);}
+.strip .s-btns .solo.on{background:#e8d13f; color:#1b1406; border-color:#e8d13f;}
+.strip label{font-size:9.5px; color:var(--text-faint); display:inline-flex; align-items:center; gap:2px;}
+.strip .del{background:transparent; border:none; color:var(--text-faint); font-size:12px; padding:0;}
+.strip.addstrip{justify-content:center; cursor:pointer; border-style:dashed; color:#79c2ff; font-size:12px; font-weight:600;}
+#cMarkers{width:280px; max-width:44vw; border-left:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0;}
+.cm-head{display:flex; align-items:center; gap:6px; padding:8px 10px 6px; font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px;}
+#midiOut{flex:1; min-width:0; font-size:11px; padding:2px 4px;}
+#cmList{flex:1; overflow-y:auto; padding:0 8px 8px; display:flex; flex-direction:column; gap:5px;}
+.cm-row{display:grid; grid-template-columns:44px 1fr 46px 26px 32px 32px 20px 20px; gap:3px; align-items:center; background:var(--bg-panel-2); border:1px solid var(--border-soft); border-radius:6px; padding:4px 5px;}
+.cm-row input,.cm-row select{font-size:10.5px; padding:2px 3px; min-width:0; width:100%;}
+.cm-row button{background:transparent; border:none; color:var(--text-faint); font-size:12px; padding:0;}
+.cm-row button:hover{color:var(--accent);}
+#cmAdd{margin:0 8px 10px; color:#b39dff; border-color:rgba(179,157,255,.4); font-weight:600; font-size:12px;}
+#cmNote{font-size:9.5px; color:var(--text-faint); padding:0 10px 8px; line-height:1.5;}
 
 /* Toast */
 #toast{position:fixed; bottom:70px; left:50%; transform:translateX(-50%); z-index:60; background:var(--bg-panel-2); border:1px solid var(--border); color:var(--text); border-radius:8px; padding:9px 16px; font-size:13px; opacity:0; pointer-events:none; transition:opacity .25s ease; max-width:86vw; text-align:center;}
@@ -326,21 +350,31 @@ input:focus,select:focus{outline:1px solid var(--accent);}
     <div id="setDrawerHead"><span id="setDrawerName">Set</span><button class="ghost" id="setDrawerClose">✕</button></div>
     <div id="setDrawerList"></div>
   </div>
-  <div id="mixDrawer">
-    <div id="mixHead"><span>Tracks</span><button class="ghost" id="mixClose">✕</button></div>
-    <div id="mixBody">
-      <div id="mixTracks"></div>
-      <button id="mixAdd">+ Add audio file…</button>
-      <input type="file" id="audioInput" class="hidden" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac" multiple>
-      <div class="mix-row">Output:
-        <button class="mode-btn" id="modeStereo" title="Everything as recorded, both ears">Stereo mix</button>
-        <button class="mode-btn" id="modeSplit" title="Click tracks hard right, band hard left — for a headphone splitter rig">Click → R</button>
-      </div>
-      <div class="mix-row">Master <input type="range" id="mixMaster" min="0" max="150" value="100"></div>
-      <div class="mix-row">BPM <input id="mixBpm" inputmode="numeric" placeholder="—">
-        <label><input type="checkbox" id="mixCountIn"> 1-bar count-in</label>
-      </div>
-      <div class="mix-note">Tracks belong to this song and play in every set. “Click” routes a track right in split mode. “L|R file” marks a single file recorded band-left/click-right: stereo mix plays the band in both ears (click dropped); split mode passes it straight through.</div>
+</div>
+
+<div id="console">
+  <div id="cHead">
+    <span id="cTitle">Tracks</span>
+    <button id="cPlay" title="Play/pause (Enter)">⏵</button>
+    <span id="cClock">0:00 / 0:00</span>
+    <div id="cTimeline">
+      <input type="range" id="cScrub" min="0" max="100" step="0.05" value="0">
+      <div id="cTicks"></div>
+    </div>
+    <button class="mode-btn" id="modeStereo" title="Everything as recorded, both ears">Stereo</button>
+    <button class="mode-btn" id="modeSplit" title="Click tracks hard right, band hard left — headphone splitter rig">Click→R</button>
+    <label>BPM <input id="mixBpm" inputmode="numeric" placeholder="—"></label>
+    <label><input type="checkbox" id="mixCountIn"> Count-in</label>
+    <button class="ghost" id="cClose">✕</button>
+  </div>
+  <div id="cBody">
+    <div id="cStrips"></div>
+    <input type="file" id="audioInput" class="hidden" accept="audio/*,.mp3,.m4a,.wav,.ogg,.aac,.flac" multiple>
+    <div id="cMarkers">
+      <div class="cm-head">MIDI markers <select id="midiOut"></select></div>
+      <div id="cmList"></div>
+      <button id="cmAdd">+ Marker at playhead</button>
+      <div id="cmNote">Markers fire at their timestamp during playback — Program Change for patches, CC for lights, Note for anything expecting a trigger. ⚡ test-fires one now. (MIDI output needs Chrome/Android; iOS gets it in the native build.)</div>
     </div>
   </div>
 </div>
@@ -351,7 +385,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-29 21:41';
+const APP_BUILD = '2026-08-30 19:04';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -1751,11 +1785,12 @@ function renderSongList(){
     card.innerHTML = `<div class="grow"><div class="title"></div><div class="sub"></div></div>
       <select class="q-key" title="Key to open in">${KEY_OPTIONS.map(k => `<option value="${k}"${k === defKey ? ' selected' : ''}>${k}</option>`).join('')}</select>
       <select class="q-capo" title="Capo"><option value="">Capo —</option>${Array.from({length: 11}, (_, c) => `<option value="${c + 1}"${String(s.capo) === String(c + 1) ? ' selected' : ''}>Capo ${c + 1}</option>`).join('')}</select>
-      <button class="play">▶</button><button class="del" title="Remove from ChartBenchLive">✕</button>`;
+      <button class="play">▶</button><button class="tracks" title="Tracks, levels &amp; MIDI markers">🎚</button><button class="del" title="Remove from ChartBenchLive">✕</button>`;
     card.querySelector('.title').textContent = s.title || 'Untitled';
     card.querySelector('.sub').textContent = sub;
     card.querySelector('.play').onclick = () =>
       performSingle(s, card.querySelector('.q-key').value, card.querySelector('.q-capo').value);
+    card.querySelector('.tracks').onclick = () => Player.openConsole(s.uid);
     card.querySelector('.del').onclick = async () => {
       if(!confirm(`Remove "${s.title || 'Untitled'}" from ChartBenchLive's library?`)) return;
       songs = songs.filter(x => x.uid !== s.uid); await saveSongs(); renderHome();
@@ -2162,7 +2197,7 @@ const Ink = (() => {
   const wantsDraw = ev => ev.isPrimary && (ev.pointerType === 'pen' || armed);
   function onDown(ev){
     if(!perf.active || !wantsDraw(ev)) return;
-    if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools') || ev.target.closest('#mixDrawer')) return;
+    if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
     if(!chunkEls.length) return;
     ev.preventDefault();
     try{ el('stage').setPointerCapture(ev.pointerId); }catch(e){}
@@ -2259,16 +2294,91 @@ const Ink = (() => {
    The master bus is tapped by two analysers (one per channel) — level
    meters someday, numeric verification in tests today.
 --------------------------------------------------------------------------- */
+/* Web MIDI output — Chrome/Edge/Android webview today; iOS WKWebView has
+   no Web MIDI, so there the markers still schedule + log and the native
+   build will bridge to CoreMIDI via a Capacitor plugin later. */
+const Midi = (() => {
+  let access = null, out = null;
+  let outId = localStorage.getItem('cbp_midi_out') || '';
+  async function init(){
+    if(access || !navigator.requestMIDIAccess) return;
+    try{
+      access = await navigator.requestMIDIAccess({ sysex: false });
+      pick(); access.onstatechange = pick;
+    }catch(e){ console.warn('MIDI unavailable:', e.message); }
+  }
+  function outputs(){ return access ? [...access.outputs.values()] : []; }
+  function pick(){
+    const outs = outputs();
+    out = outs.find(o => o.id === outId) || outs[0] || null;
+    renderMidiSelect();
+  }
+  function select(id){
+    outId = id;
+    try{ localStorage.setItem('cbp_midi_out', id); }catch(e){}
+    pick();
+  }
+  function send(bytes){ if(out){ try{ out.send(bytes); }catch(e){ console.warn('MIDI send failed:', e.message); } } }
+  function renderMidiSelect(){
+    const sel = el('midiOut');
+    const outs = outputs();
+    sel.innerHTML = outs.length
+      ? outs.map(o => `<option value="${o.id}"${out && o.id === out.id ? ' selected' : ''}>${Renderer.escapeHtml(o.name || o.id)}</option>`).join('')
+      : '<option value="">No MIDI outputs</option>';
+    sel.disabled = !outs.length;
+  }
+  return { init, send, select, outputs, hasOut: () => !!out, refreshUi: renderMidiSelect };
+})();
+
 const Player = (() => {
   let ctx = null, master = null, anL = null, anR = null;
   let uid = null, meta = null;
   const metaCache = {};        // uid -> meta (tracks_/mix settings)
   const bufCache = new Map();  // uid -> Map(audioId -> AudioBuffer)
   let playing = false, offset = 0, startedAt = 0, duration = 0;
-  let sources = [], liveGains = new Map();
+  let sources = [], liveGains = new Map(), trackTaps = new Map();
   let uiTimer = null, saveTimer = null, scrubbing = false;
+  let markerTimers = [];
+  const firedLog = [];       // {label, t, at} — every marker actually fired (tests read this)
+  const MAX_TRACKS = 8;
 
-  const DEF = () => ({ tracks: [], mode: 'stereo', master: 1, bpm: '', countIn: false });
+  const DEF = () => ({ tracks: [], markers: [], mode: 'stereo', master: 1, bpm: '', countIn: false });
+
+  // A track is audible unless muted — and when ANY track is solo'd, only
+  // solo'd tracks pass (standard DAW solo bus).
+  function audibleGain(t){
+    const anySolo = meta.tracks.some(x => x.solo);
+    if(t.mute) return 0;
+    if(anySolo && !t.solo) return 0;
+    return t.gain;
+  }
+  function refreshGains(){
+    meta.tracks.forEach(t => {
+      const g = liveGains.get(t.audioId);
+      if(g) g.gain.value = audibleGain(t);
+    });
+  }
+
+  /* ---- MIDI markers: scheduled against the same clock as the stems ---- */
+  function fireMarker(m){
+    firedLog.push({ label: m.label, t: m.t, at: Date.now() });
+    const ch = (Math.max(1, Math.min(16, m.ch || 1)) - 1);
+    const a = (m.a || 0) & 0x7f, b = (m.b || 0) & 0x7f;
+    if(m.type === 'CC') Midi.send([0xB0 | ch, a, b]);
+    else if(m.type === 'Note'){
+      Midi.send([0x90 | ch, a, b || 100]);
+      setTimeout(() => Midi.send([0x80 | ch, a, 0]), 120);
+    }
+    else Midi.send([0xC0 | ch, a]); // PC (default)
+  }
+  function clearMarkerTimers(){ markerTimers.forEach(clearTimeout); markerTimers = []; }
+  function scheduleMarkers(t0){
+    clearMarkerTimers();
+    (meta.markers || []).filter(m => m.t >= offset - 0.001).forEach(m => {
+      const delay = (t0 - ctx.currentTime + (m.t - offset)) * 1000;
+      markerTimers.push(setTimeout(() => fireMarker(m), Math.max(0, delay)));
+    });
+  }
   const fmt = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); };
 
   function ensureCtx(){
@@ -2329,7 +2439,8 @@ const Player = (() => {
 
   function stopSources(){
     sources.forEach(s => { try{ s.onended = null; s.stop(); }catch(e){} });
-    sources = []; liveGains.clear();
+    sources = []; liveGains.clear(); trackTaps.clear();
+    clearMarkerTimers();
   }
   function position(){
     if(!playing) return offset;
@@ -2371,8 +2482,11 @@ const Player = (() => {
       if(!buf) return;
       const src = ctx.createBufferSource(); src.buffer = buf;
       const g = ctx.createGain();
-      g.gain.value = t.mute ? 0 : t.gain;
+      g.gain.value = audibleGain(t);
       liveGains.set(t.audioId, g);
+      const tap = ctx.createAnalyser(); tap.fftSize = 512;
+      g.connect(tap);
+      trackTaps.set(t.audioId, tap);
       if(t.lr){
         const sp = ctx.createChannelSplitter(2);
         const mg = ctx.createChannelMerger(2);
@@ -2394,6 +2508,7 @@ const Player = (() => {
       src.start(t0, offset);
       sources.push(src);
     });
+    scheduleMarkers(t0);
     playing = true; startedAt = t0;
     clearInterval(uiTimer);
     uiTimer = setInterval(() => {
@@ -2425,7 +2540,7 @@ const Player = (() => {
   }
   function shutdown(){
     pause(); offset = 0;
-    closeMixer();
+    el('console').classList.remove('open');
     if(ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
   }
 
@@ -2433,9 +2548,10 @@ const Player = (() => {
   async function addFiles(fileList){
     let added = 0;
     for(const f of Array.from(fileList)){
+      if(meta.tracks.length >= MAX_TRACKS){ toast(`${MAX_TRACKS} tracks max per song`); break; }
       const id = genUid();
       await KV.set('audio_' + id, f);
-      meta.tracks.push({ audioId: id, name: f.name.replace(/\.[^.]+$/, ''), gain: 1, mute: false,
+      meta.tracks.push({ audioId: id, name: f.name.replace(/\.[^.]+$/, ''), gain: 1, mute: false, solo: false,
                          click: /click|cue|met/i.test(f.name), lr: false });
       added++;
     }
@@ -2451,85 +2567,208 @@ const Player = (() => {
     scheduleSave(); reapplyIfPlaying(); renderMixer(); updateTransport();
   }
 
-  /* ---- UI ---- */
+  /* ---- markers: live re-schedule after an edit mid-playback ---- */
+  function rescheduleMarkers(){
+    if(!playing) return;
+    clearMarkerTimers();
+    const pos = position();
+    (meta.markers || []).filter(m => m.t >= pos).forEach(m => {
+      markerTimers.push(setTimeout(() => fireMarker(m), Math.max(0, (m.t - pos) * 1000)));
+    });
+  }
+
+  /* ---- UI: HUD transport + the DAW console ---- */
   function updateTransport(){
     const has = !!(meta && meta.tracks.length);
+    const pos = position();
     el('btnPlay').disabled = !has;
     el('btnPlay').textContent = playing ? '⏸' : '⏵';
     el('playClock').classList.toggle('hidden', !has);
     el('scrub').classList.toggle('hidden', !has);
+    el('cPlay').disabled = !has;
+    el('cPlay').textContent = playing ? '⏸' : '⏵';
+    el('cClock').textContent = fmt(pos) + ' / ' + fmt(duration);
     if(has){
-      const pos = position();
       el('playClock').textContent = fmt(pos) + ' / ' + fmt(duration);
       if(!scrubbing){
         el('scrub').max = duration || 0;
         el('scrub').value = pos;
+        el('cScrub').max = duration || 0;
+        el('cScrub').value = pos;
       }
     }
   }
-  function renderMixer(){
-    const host = el('mixTracks');
+  function renderTicks(){
+    const host = el('cTicks');
+    if(!duration || !meta){ host.innerHTML = ''; return; }
+    host.innerHTML = (meta.markers || [])
+      .map(m => `<span style="left:${Math.min(100, m.t / duration * 100).toFixed(2)}%"></span>`).join('');
+  }
+
+  function makeStrip(t, i){
+    const s = document.createElement('div'); s.className = 'strip';
+    s.innerHTML = `
+      <div class="s-name"></div>
+      <div class="s-fader"><canvas class="s-meter" width="8" height="108"></canvas>
+        <input type="range" class="s-gain" min="0" max="150" value="${Math.round(t.gain * 100)}"></div>
+      <div class="s-btns"><button class="mute${t.mute ? ' on' : ''}">M</button><button class="solo${t.solo ? ' on' : ''}">S</button></div>
+      <label><input type="checkbox" class="tclick"${t.click ? ' checked' : ''}>Clk</label>
+      <label><input type="checkbox" class="tlr"${t.lr ? ' checked' : ''}>L|R</label>
+      <button class="del" title="Remove track">✕</button>`;
+    s.querySelector('.s-name').textContent = t.name;
+    s.querySelector('.s-meter').dataset.id = t.audioId;
+    s.querySelector('.s-gain').oninput = ev => { t.gain = ev.target.value / 100; refreshGains(); scheduleSave(); };
+    s.querySelector('.mute').onclick = ev => { t.mute = !t.mute; ev.target.classList.toggle('on', t.mute); refreshGains(); scheduleSave(); };
+    s.querySelector('.solo').onclick = ev => { t.solo = !t.solo; ev.target.classList.toggle('on', t.solo); refreshGains(); scheduleSave(); };
+    s.querySelector('.tclick').onchange = ev => { t.click = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
+    s.querySelector('.tlr').onchange = ev => { t.lr = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
+    s.querySelector('.del').onclick = () => removeTrack(i);
+    return s;
+  }
+  function renderConsole(){
+    const song = songs.find(x => x.uid === uid);
+    el('cTitle').textContent = song ? (song.title || 'Untitled') : 'Tracks';
+    const host = el('cStrips');
     host.innerHTML = '';
-    (meta ? meta.tracks : []).forEach((t, i) => {
-      const row = document.createElement('div'); row.className = 'mix-track';
-      row.innerHTML = `
-        <div class="row1"><span class="tname"></span><button class="del" title="Remove track">✕</button></div>
-        <div class="row2">
-          <button class="mute${t.mute ? ' on' : ''}" title="Mute">M</button>
-          <input type="range" class="tgain" min="0" max="150" value="${Math.round(t.gain * 100)}">
-          <label><input type="checkbox" class="tclick"${t.click ? ' checked' : ''}> Click</label>
-          <label><input type="checkbox" class="tlr"${t.lr ? ' checked' : ''}> L|R file</label>
-        </div>`;
-      row.querySelector('.tname').textContent = t.name;
-      row.querySelector('.mute').onclick = ev => {
-        t.mute = !t.mute; ev.target.classList.toggle('on', t.mute);
-        const g = liveGains.get(t.audioId); if(g) g.gain.value = t.mute ? 0 : t.gain;
+    if(meta){
+      meta.tracks.forEach((t, i) => host.appendChild(makeStrip(t, i)));
+      if(meta.tracks.length < MAX_TRACKS){
+        const add = document.createElement('div');
+        add.className = 'strip addstrip';
+        add.textContent = '+ Add';
+        add.title = 'Add an audio file (mp3 / m4a / wav…) — up to 8 tracks';
+        add.onclick = () => el('audioInput').click();
+        host.appendChild(add);
+      }
+      // master strip: fader + stereo meters
+      const ms = document.createElement('div'); ms.className = 'strip master';
+      ms.innerHTML = `
+        <div class="s-name">MASTER</div>
+        <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__L"></canvas><canvas class="s-meter" width="8" height="108" data-id="__R"></canvas>
+          <input type="range" class="s-gain" min="0" max="150" value="${Math.round((meta.master || 1) * 100)}"></div>
+        <div class="s-btns"></div><label>L&nbsp;·&nbsp;R</label>`;
+      ms.querySelector('.s-gain').oninput = ev => {
+        meta.master = ev.target.value / 100;
+        if(master) master.gain.value = meta.master;
         scheduleSave();
       };
-      row.querySelector('.tgain').oninput = ev => {
-        t.gain = ev.target.value / 100;
-        const g = liveGains.get(t.audioId); if(g && !t.mute) g.gain.value = t.gain;
-        scheduleSave();
-      };
-      row.querySelector('.tclick').onchange = ev => { t.click = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
-      row.querySelector('.tlr').onchange = ev => { t.lr = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
-      row.querySelector('.del').onclick = () => removeTrack(i);
-      host.appendChild(row);
-    });
+      host.appendChild(ms);
+    }
     el('modeStereo').classList.toggle('on', !meta || meta.mode !== 'split');
     el('modeSplit').classList.toggle('on', !!meta && meta.mode === 'split');
-    el('mixMaster').value = Math.round(((meta && meta.master) || 1) * 100);
     el('mixBpm').value = meta ? meta.bpm : '';
     el('mixCountIn').checked = !!(meta && meta.countIn);
+    renderMarkers();
+    Midi.refreshUi();
   }
-  function openMixer(){ renderMixer(); el('mixDrawer').classList.add('open'); showHud(0); }
-  function closeMixer(){ el('mixDrawer').classList.remove('open'); if(perf.active) showHud(); }
-  const mixerOpen = () => el('mixDrawer').classList.contains('open');
+  function renderMixer(){ renderConsole(); }
 
-  function setMode(m){ meta.mode = m; scheduleSave(); renderMixer(); reapplyIfPlaying(); }
+  const MARKER_TYPES = ['PC', 'CC', 'Note'];
+  function renderMarkers(){
+    const host = el('cmList');
+    host.innerHTML = '';
+    const list = meta ? (meta.markers || []) : [];
+    list.sort((a, b) => a.t - b.t);
+    list.forEach((m, i) => {
+      const row = document.createElement('div'); row.className = 'cm-row';
+      row.innerHTML = `
+        <input class="m-t" type="number" min="0" step="0.1" value="${m.t}" title="Seconds">
+        <input class="m-label" value="" title="Label">
+        <select class="m-type">${MARKER_TYPES.map(t => `<option${m.type === t ? ' selected' : ''}>${t}</option>`).join('')}</select>
+        <input class="m-ch" type="number" min="1" max="16" value="${m.ch || 1}" title="MIDI channel">
+        <input class="m-a" type="number" min="0" max="127" value="${m.a || 0}" title="Program / CC# / Note">
+        <input class="m-b" type="number" min="0" max="127" value="${m.b || 0}" title="Value / velocity">
+        <button class="m-fire" title="Test-fire now">⚡</button>
+        <button class="m-del" title="Delete">✕</button>`;
+      row.querySelector('.m-label').value = m.label || '';
+      row.querySelector('.m-t').onchange = ev => { m.t = Math.max(0, parseFloat(ev.target.value) || 0); scheduleSave(); rescheduleMarkers(); renderMarkers(); renderTicks(); };
+      row.querySelector('.m-label').oninput = ev => { m.label = ev.target.value; scheduleSave(); };
+      row.querySelector('.m-type').onchange = ev => { m.type = ev.target.value; scheduleSave(); };
+      row.querySelector('.m-ch').onchange = ev => { m.ch = Math.max(1, Math.min(16, parseInt(ev.target.value, 10) || 1)); scheduleSave(); };
+      row.querySelector('.m-a').onchange = ev => { m.a = Math.max(0, Math.min(127, parseInt(ev.target.value, 10) || 0)); scheduleSave(); };
+      row.querySelector('.m-b').onchange = ev => { m.b = Math.max(0, Math.min(127, parseInt(ev.target.value, 10) || 0)); scheduleSave(); };
+      row.querySelector('.m-fire').onclick = () => { fireMarker(m); toast('Fired: ' + (m.label || m.type)); };
+      row.querySelector('.m-del').onclick = () => { meta.markers.splice(meta.markers.indexOf(m), 1); scheduleSave(); rescheduleMarkers(); renderMarkers(); renderTicks(); };
+      host.appendChild(row);
+    });
+    renderTicks();
+  }
+  function addMarkerAtPlayhead(){
+    if(!meta) return;
+    if(!meta.markers) meta.markers = [];
+    meta.markers.push({ t: Math.round(position() * 10) / 10, label: 'Marker ' + (meta.markers.length + 1), type: 'PC', ch: 1, a: 0, b: 0 });
+    scheduleSave(); rescheduleMarkers(); renderMarkers();
+  }
+
+  /* ---- meters ---- */
+  function tapLevel(id){
+    const an = trackTaps.get(id);
+    if(!an) return 0;
+    const buf = new Float32Array(an.fftSize);
+    an.getFloatTimeDomainData(buf);
+    let s = 0; for(let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    return Math.sqrt(s / buf.length);
+  }
+  function meterLoop(){
+    if(!consoleOpen()) return;
+    document.querySelectorAll('#cStrips canvas.s-meter').forEach(cv => {
+      const id = cv.dataset.id;
+      const lvl = !playing ? 0 : (id === '__L' ? channelLevel('L') : id === '__R' ? channelLevel('R') : tapLevel(id));
+      const g = cv.getContext('2d');
+      g.clearRect(0, 0, 8, 108);
+      const h = Math.min(108, Math.round(lvl * 170));
+      if(h > 0){
+        g.fillStyle = h > 88 ? '#e2637a' : (h > 62 ? '#e8a13f' : '#68c98f');
+        g.fillRect(0, 108 - h, 8, h);
+      }
+    });
+    requestAnimationFrame(meterLoop);
+  }
+
+  /* ---- open / close (works over home AND stage) ---- */
+  function consoleOpen(){ return el('console').classList.contains('open'); }
+  async function openConsole(forUid){
+    if(forUid && forUid !== uid) await songChanged(forUid);
+    if(!meta && uid) meta = await metaFor(uid);
+    Midi.init();
+    renderConsole(); updateTransport();
+    el('console').classList.add('open');
+    if(perf.active) showHud(0);
+    requestAnimationFrame(meterLoop);
+  }
+  function closeConsole(){
+    el('console').classList.remove('open');
+    if(perf.active) showHud();
+  }
+
+  function setMode(m){ meta.mode = m; scheduleSave(); renderConsole(); reapplyIfPlaying(); }
   function wire(){
     el('btnPlay').onclick = toggle;
-    el('btnMixer').onclick = () => mixerOpen() ? closeMixer() : openMixer();
-    el('mixClose').onclick = closeMixer;
-    el('mixAdd').onclick = () => el('audioInput').click();
+    el('cPlay').onclick = toggle;
+    el('btnMixer').onclick = () => consoleOpen() ? closeConsole() : openConsole();
+    el('cClose').onclick = closeConsole;
     el('audioInput').onchange = ev => { if(ev.target.files.length) addFiles(ev.target.files); ev.target.value = ''; };
     el('modeStereo').onclick = () => setMode('stereo');
     el('modeSplit').onclick = () => setMode('split');
-    el('mixMaster').oninput = ev => {
-      meta.master = ev.target.value / 100;
-      if(master) master.gain.value = meta.master;
-      scheduleSave();
-    };
     el('mixBpm').oninput = ev => { meta.bpm = ev.target.value.trim(); scheduleSave(); };
     el('mixCountIn').onchange = ev => { meta.countIn = ev.target.checked; scheduleSave(); };
-    const scrub = el('scrub');
-    scrub.addEventListener('pointerdown', () => { scrubbing = true; });
-    scrub.addEventListener('change', ev => { scrubbing = false; seek(parseFloat(ev.target.value)); });
-    scrub.addEventListener('input', ev => { if(scrubbing) el('playClock').textContent = fmt(parseFloat(ev.target.value)) + ' / ' + fmt(duration); });
+    el('cmAdd').onclick = addMarkerAtPlayhead;
+    el('midiOut').onchange = ev => Midi.select(ev.target.value);
+    [el('scrub'), el('cScrub')].forEach(sc => {
+      sc.addEventListener('pointerdown', () => { scrubbing = true; });
+      sc.addEventListener('change', ev => { scrubbing = false; seek(parseFloat(ev.target.value)); });
+      sc.addEventListener('input', ev => {
+        if(scrubbing){
+          const txt = fmt(parseFloat(ev.target.value)) + ' / ' + fmt(duration);
+          el('playClock').textContent = txt; el('cClock').textContent = txt;
+        }
+      });
+    });
   }
 
-  return { songChanged, toggle, shutdown, wire, mixerOpen, closeMixer,
-           isPlaying: () => playing, position, channelLevel };
+  return { songChanged, toggle, shutdown, wire, openConsole, closeConsole, consoleOpen,
+           isPlaying: () => playing, position, channelLevel,
+           firedMarkers: () => firedLog.slice() };
 })();
 
 /* ---- wake lock ---- */
@@ -2618,9 +2857,9 @@ el('stage').addEventListener('pointermove', Ink.onMove);
 el('stage').addEventListener('pointerup', Ink.onUp);
 el('stage').addEventListener('pointercancel', Ink.onUp);
 el('stage').addEventListener('click', (ev) => {
-  if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools') || ev.target.closest('#mixDrawer')) return;
+  if(ev.target.closest('#hudTop') || ev.target.closest('#hudBottom') || ev.target.closest('#setDrawer') || ev.target.closest('#inkTools')) return;
   if(Ink.consumeSuppress()) return;      // this tap drew ink — never turn the page
-  if(Player.mixerOpen()){ Player.closeMixer(); return; }
+  if(Player.consoleOpen()){ Player.closeConsole(); return; }
   if(drawerOpen()){ closeDrawer(); return; }
   if(Ink.isArmed()) return;              // armed = every stage touch is for drawing
   const x = ev.clientX / window.innerWidth;
@@ -2635,7 +2874,7 @@ document.addEventListener('keydown', (ev) => {
     case 'PageDown': case 'ArrowRight': case 'ArrowDown': case ' ': ev.preventDefault(); goNext(); break;
     case 'PageUp': case 'ArrowLeft': case 'ArrowUp': ev.preventDefault(); goPrev(); break;
     case 'Enter': ev.preventDefault(); Player.toggle(); break;
-    case 'Escape': ev.preventDefault(); if(Player.mixerOpen()) Player.closeMixer(); else if(drawerOpen()) closeDrawer(); else exitPerform(); break;
+    case 'Escape': ev.preventDefault(); if(Player.consoleOpen()) Player.closeConsole(); else if(drawerOpen()) closeDrawer(); else exitPerform(); break;
     case 'Home': ev.preventDefault(); jumpTo(0); break;
   }
 });
