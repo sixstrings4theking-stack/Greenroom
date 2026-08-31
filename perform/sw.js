@@ -5,7 +5,7 @@
    page shows an "Update ready" toast, and SKIP_WAITING + controllerchange
    swap it in. Keep SW_BUILD in sync with APP_BUILD in index.html —
    build-deploy checks are the reminder. */
-const SW_BUILD = '2026-08-30 19:48';
+const SW_BUILD = '2026-08-30 20:01';
 const CACHE = 'cblive-' + SW_BUILD.replace(/[^0-9]/g, '');
 const PRECACHE = [
   './',

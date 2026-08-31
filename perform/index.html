@@ -246,9 +246,13 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .strip canvas.s-meter{width:8px; height:108px; background:#0d0f13; border-radius:2px;}
 .strip input.s-gain{writing-mode:vertical-rl; direction:rtl; width:24px; height:108px; accent-color:var(--accent); padding:0; margin:0;}
 .strip .s-btns{display:flex; gap:4px;}
-.strip .s-pan{display:flex; align-items:center; gap:3px; font-size:8px; color:var(--text-faint); width:100%; padding:0 2px;}
-.strip .s-pan input{flex:1; min-width:0; accent-color:var(--chord); height:14px;}
-.strip .s-pan input:disabled{opacity:.3;}
+/* Pan knob — hold and slide up (right) / down (left); double-tap centers. */
+.strip .s-pan{display:flex; flex-direction:column; align-items:center; gap:1px;}
+.knob{width:26px; height:26px; border-radius:50%; background:var(--bg-input); border:2px solid var(--border); position:relative; touch-action:none; cursor:ns-resize; transform:rotate(var(--rot, 0deg));}
+.knob .k-ind{position:absolute; left:50%; top:2px; width:2px; height:9px; margin-left:-1px; border-radius:1px; background:var(--chord);}
+.knob:not(.dis):hover{border-color:var(--accent-dim);}
+.knob.dis{opacity:.3; cursor:default;}
+.k-val{font-size:8px; font-family:var(--mono); font-weight:700; color:var(--text-faint);}
 .strip .s-btns button{width:26px; padding:2px 0; font-size:11px; font-weight:800;}
 .strip .s-btns .mute.on{background:var(--danger); color:#fff; border-color:var(--danger);}
 .strip .s-btns .solo.on{background:#e8d13f; color:#1b1406; border-color:#e8d13f;}
@@ -455,7 +459,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-30 19:48';
+const APP_BUILD = '2026-08-30 20:01';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -3165,7 +3169,6 @@ const Player = (() => {
       <div class="s-fader"><canvas class="s-meter" width="8" height="108"></canvas>
         <input type="range" class="s-gain" min="0" max="150" value="${Math.round(t.gain * 100)}"></div>
       <div class="s-btns"><button class="mute${t.mute ? ' on' : ''}">M</button><button class="solo${t.solo ? ' on' : ''}">S</button></div>
-      <div class="s-pan">L<input type="range" class="pan" min="-100" max="100" value="${Math.round((t.pan || 0) * 100)}" title="Pan (double-tap to center)"${meta.mode === 'split' ? ' disabled' : ''}>R</div>
       <div class="s-fx"></div>
       ${t.audioId ? '' : '<button class="loadfile" title="Attach an audio file to this track">📂 file</button>'}
       <label><input type="checkbox" class="tclick"${t.click ? ' checked' : ''}>Clk</label>
@@ -3181,17 +3184,16 @@ const Player = (() => {
     s.querySelector('.s-meter').dataset.id = t.audioId;
     buildFxSlotRow(s.querySelector('.s-fx'), 't:' + t.audioId, t);
     s.querySelector('.s-gain').oninput = ev => { t.gain = ev.target.value / 100; refreshGains(); scheduleSave(); };
-    const panInp = s.querySelector('.s-pan .pan');
-    panInp.oninput = ev => {
-      t.pan = ev.target.value / 100;
-      const pn = livePans.get(t.audioId); if(pn) pn.pan.value = effectivePan(t);
-      scheduleSave();
-    };
-    panInp.ondblclick = () => {
-      t.pan = 0; panInp.value = 0;
-      const pn = livePans.get(t.audioId); if(pn) pn.pan.value = effectivePan(t);
-      scheduleSave();
-    };
+    s.insertBefore(
+      makePanKnob(
+        () => t.pan,
+        v => {
+          t.pan = v;
+          const pn = livePans.get(t.audioId); if(pn) pn.pan.value = effectivePan(t);
+          scheduleSave();
+        },
+        meta.mode === 'split'),
+      s.querySelector('.s-fx'));
     s.querySelector('.mute').onclick = ev => { t.mute = !t.mute; ev.target.classList.toggle('on', t.mute); refreshGains(); scheduleSave(); };
     s.querySelector('.solo').onclick = ev => { t.solo = !t.solo; ev.target.classList.toggle('on', t.solo); refreshGains(); scheduleSave(); };
     s.querySelector('.tclick').onchange = ev => { t.click = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
@@ -3199,6 +3201,38 @@ const Player = (() => {
     s.querySelector('.del').onclick = () => removeTrack(i);
     return s;
   }
+  // Pan knob: vertical drag (up = right, down = left, ~120px full swing),
+  // double-tap recenters. Disabled knobs render dimmed and inert.
+  function makePanKnob(getVal, setVal, disabled){
+    const wrap = document.createElement('div'); wrap.className = 's-pan';
+    wrap.innerHTML = `<div class="knob${disabled ? ' dis' : ''}" title="Pan — hold and slide up/down; double-tap to center"><div class="k-ind"></div></div><span class="k-val"></span>`;
+    const face = wrap.querySelector('.knob');
+    const valEl = wrap.querySelector('.k-val');
+    function render(){
+      const v = getVal() || 0;
+      face.style.setProperty('--rot', (v * 135).toFixed(1) + 'deg');
+      valEl.textContent = Math.abs(v) < 0.01 ? 'C' : (v < 0 ? 'L' : 'R') + Math.round(Math.abs(v) * 100);
+    }
+    render();
+    if(!disabled){
+      let startY = null, startV = 0;
+      face.onpointerdown = ev => {
+        ev.preventDefault(); ev.stopPropagation();
+        startY = ev.clientY; startV = getVal() || 0;
+        try{ face.setPointerCapture(ev.pointerId); }catch(e){}
+      };
+      face.onpointermove = ev => {
+        if(startY === null) return;
+        ev.preventDefault();
+        setVal(Math.max(-1, Math.min(1, startV + (startY - ev.clientY) / 120)));
+        render();
+      };
+      face.onpointerup = face.onpointercancel = () => { startY = null; };
+      face.ondblclick = () => { setVal(0); render(); };
+    }
+    return wrap;
+  }
+
   // The three insert-slot buttons every strip carries.
   function buildFxSlotRow(host, ownerKey, owner){
     if(!Array.isArray(owner.inserts)) owner.inserts = [null, null, null];
@@ -3221,7 +3255,6 @@ const Player = (() => {
       <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__live"></canvas>
         <input type="range" class="s-gain" min="0" max="150" value="${Math.round(((liveCfg && liveCfg.gain) || 1) * 100)}"></div>
       <div class="s-btns"><button class="power" title="Enable/disable the live input (mic or interface)">⏻</button></div>
-      <div class="s-pan">L<input type="range" class="pan" min="-100" max="100" value="${Math.round(((liveCfg && liveCfg.pan) || 0) * 100)}" title="Pan (double-tap to center)">R</div>
       <div class="s-fx"></div>
       <label title="Your input through the FX chain to the master bus — the busking channel">input</label>`;
     s.querySelector('.power').onclick = () => setLiveEnabled(!(liveCfg && liveCfg.enabled));
@@ -3230,17 +3263,16 @@ const Player = (() => {
       if(liveNodes) liveNodes.gain.gain.value = liveCfg.gain;
       saveLive();
     };
-    const lp = s.querySelector('.s-pan .pan');
-    lp.oninput = ev => {
-      liveCfg.pan = ev.target.value / 100;
-      if(liveNodes) liveNodes.pan.pan.value = liveCfg.pan;
-      saveLive();
-    };
-    lp.ondblclick = () => {
-      liveCfg.pan = 0; lp.value = 0;
-      if(liveNodes) liveNodes.pan.pan.value = 0;
-      saveLive();
-    };
+    s.insertBefore(
+      makePanKnob(
+        () => liveCfg.pan,
+        v => {
+          liveCfg.pan = v;
+          if(liveNodes) liveNodes.pan.pan.value = v;
+          saveLive();
+        },
+        false),
+      s.querySelector('.s-fx'));
     buildFxSlotRow(s.querySelector('.s-fx'), '__live', liveCfg || (liveCfg = LIVE_DEF()));
     return s;
   }
