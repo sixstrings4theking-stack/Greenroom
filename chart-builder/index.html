@@ -513,10 +513,16 @@ small{color:var(--text-faint);}
 .cs-meta{font-size:10.5px; color:#888; display:flex; gap:14px; border-top:1px solid #ddd; padding-top:4px; margin-bottom:10px; flex-wrap:wrap;}
 /* Arrangement name, opposite Key/Capo on the same line (see arrangementLabelFor) */
 .cs-meta-arr{margin-left:auto; color:#555; font-weight:600;}
-/* "Chords used" diagram strip under the chart header (page 1 only) — see
-   Renderer.buildChordDiagramStrip. Sized by the chart text scale so big-
-   print charts get big diagrams. Diagrams draw in currentColor. */
-.cs-chord-diagrams{display:flex; flex-wrap:wrap; gap:calc(4px * var(--chart-font-scale)); padding-top:2px; margin-bottom:10px; color:#111;}
+/* "Chords used" diagrams live IN the title band (page 1 only) — see
+   Renderer.buildChordDiagramSides: they fill whichever side the title's
+   justification leaves empty (left title → diagrams right, right title →
+   diagrams left, centered title → flanked half and half). Sized by the
+   chart text scale; drawn in currentColor. */
+.cs-head-row{display:flex; gap:12px; align-items:flex-start;}
+.cs-head-row .cs-head-main{flex:0 1 auto; min-width:45%;}
+.cs-chord-diagrams{flex:1 1 0; display:flex; flex-wrap:wrap; gap:calc(4px * var(--chart-font-scale)); padding-top:2px; color:#111; align-content:flex-start;}
+.cs-dgs-left{justify-content:flex-start;}
+.cs-dgs-right{justify-content:flex-end;}
 .cs-chord-diagrams svg{width:calc(54px * var(--chart-font-scale)); height:auto; display:block; font-family:var(--sans, 'Segoe UI', sans-serif);}
 /* Chords on the preview are clickable (diagram popup); purely a screen
    affordance — spans add no width, print is unaffected. */
@@ -1276,7 +1282,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-30 20:12';
+const APP_BUILD = '2026-08-30 20:22';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1284,7 +1290,7 @@ const APP_VERSION = '1.3.0';
 const VERSION_NOTES = [
   { version: '1.3.0', date: 'August 30, 2026', sections: [
     ['New', [
-      'Chord diagram library: tick "Chords" in the Live Preview header and the chart prints a strip of guitar fretboard diagrams for every chord it shows — automatically the shapes as played (capo and key changes included), sized with the chart text, on preview, Print and PDF alike. Needs a letter Display Key; saved with the song per arrangement.',
+      'Chord diagram library: tick "Chords" in the Live Preview header and the chart prints guitar fretboard diagrams for every chord it shows, right in the title band — filling the side your title justification leaves empty (centered titles are flanked half and half). Automatically the shapes as played (capo and key changes included), sized with the chart text, on preview, Print and PDF alike. Needs a letter Display Key; saved with the song per arrangement.',
       'Click any chord on the preview to open its diagram: choose among voicings, type a custom shape ("x32010", or "5:131211" for base fret 5), or flip to left-handed diagrams. Choices remember browser-wide.',
       'The ⌗ Chord Book: a teal button beside the Circle of 5ths opens a browsable window of every chord shape ChartBench knows — pick a root and quality, click a voicing to make it the one your charts print. Pin on Top works like the Circle’s.',
     ]],
@@ -2247,15 +2253,27 @@ const Renderer = (() => {
     });
     return out;
   }
-  // The "chords used" strip for the top of the chart (page 1 only — see
-  // buildPageHeaderHtml). Empty string when the toggle is off, the view is
-  // Nashville numbers, or nothing is diagram-able.
-  function buildChordDiagramStrip(song){
-    if(!song || !song.chordDiagrams) return '';
+  // The "chords used" diagrams live in the TITLE BAND (page 1 only — see
+  // buildPageHeaderHtml), filling whichever side the title's justification
+  // leaves empty: a left-justified title gets diagrams on the right, a
+  // right-justified one gets them on the left, and a centered title is
+  // FLANKED — the set split half and half. Returns {left, right, any} so
+  // both header builders (renderChordSheet for measuring, buildPageHeader
+  // Html for the real pages) assemble the identical row.
+  function buildChordDiagramSides(song){
+    const none = {left: '', right: '', any: false};
+    if(!song || !song.chordDiagrams) return none;
     const cells = collectDisplayChords(song)
       .map(sym => { const v = pickVoicing(sym); return v ? `<span class="cs-diagram">${chordDiagramSvg(sym, v)}</span>` : ''; })
-      .join('');
-    return cells ? `<div class="cs-chord-diagrams">${cells}</div>` : '';
+      .filter(Boolean);
+    if(!cells.length) return none;
+    const ta = song.titleAlign || DefaultAlignStore.get();
+    let L = [], R = [];
+    if(ta === 'right') L = cells;
+    else if(ta === 'left') R = cells;
+    else { const half = Math.ceil(cells.length / 2); L = cells.slice(0, half); R = cells.slice(half); }
+    const wrap = (arr, side) => arr.length ? `<div class="cs-chord-diagrams cs-dgs-${side}">${arr.join('')}</div>` : '';
+    return {left: wrap(L, 'left'), right: wrap(R, 'right'), any: true};
   }
 
   // Chords render wrapped in a .cs-chord span (same text, no layout change
@@ -2513,14 +2531,16 @@ const Renderer = (() => {
     if(song.ccli) artistLineParts.push('CCLI Song #' + escapeHtml(song.ccli));
     const copyrightText = buildCopyrightText(song);
     const roadmap = buildRoadmap(sections);
-    container.innerHTML = `
+    const sides = buildChordDiagramSides(song);
+    const headMain = `
       <div class="cs-title" style="text-align:${titleAlign};">${escapeHtml(song.title || 'Untitled')}</div>
       <div class="cs-artist" style="text-align:${titleAlign};">${artistLineParts.join(' | ')}</div>
       ${copyrightText ? `<div class="cs-copyright" style="text-align:${titleAlign};">${escapeHtml(copyrightText)}</div>` : ''}
       ${song.churchCcli ? `<div class="cs-permission" style="text-align:${titleAlign};">Used by Permission CCLI #: ${escapeHtml(song.churchCcli)}</div>` : ''}
-      ${roadmap ? `<div class="cs-roadmap" style="justify-content:${titleAlign==='center'?'center':(titleAlign==='right'?'flex-end':'flex-start')};">${roadmap}</div>` : ''}
+      ${roadmap ? `<div class="cs-roadmap" style="justify-content:${titleAlign==='center'?'center':(titleAlign==='right'?'flex-end':'flex-start')};">${roadmap}</div>` : ''}`;
+    container.innerHTML = `
+      ${sides.any ? `<div class="cs-head-row">${sides.left}<div class="cs-head-main">${headMain}</div>${sides.right}</div>` : headMain}
       ${metaBits.length ? `<div class="cs-meta">${metaBits.map(escapeHtml).join(' &nbsp;•&nbsp; ')}</div>` : ''}
-      ${buildChordDiagramStrip(song)}
       ${renderSections(sections, song.key, song.capo, !!song.expandRepeats, maxChars)}
     `;
     container.classList.toggle('cols-2', !!opts.twoCol);
@@ -2528,7 +2548,7 @@ const Renderer = (() => {
   }
 
   return { renderChordSheet, renderSections, escapeHtml, buildCopyrightText, buildRoadmap,
-           chordVoicings, pickVoicing, chordDiagramSvg, buildChordDiagramStrip, parseVoicingStr, voicingPrefs, setVoicingPref, leftyDiagrams };
+           chordVoicings, pickVoicing, chordDiagramSvg, buildChordDiagramSides, parseVoicingStr, voicingPrefs, setVoicingPref, leftyDiagrams };
 })();
 
 /* ---------------------------------------------------------------------------
@@ -2609,7 +2629,7 @@ const Paginator = (() => {
   // silently break this (title/artist/copyright/permission/roadmap/meta
   // can appear in any order).
   function measureHeaderHeight(container){
-    const headerCandidates = ['.cs-title', '.cs-artist', '.cs-copyright', '.cs-permission', '.cs-roadmap', '.cs-meta', '.cs-chord-diagrams']
+    const headerCandidates = ['.cs-head-row', '.cs-title', '.cs-artist', '.cs-copyright', '.cs-permission', '.cs-roadmap', '.cs-meta']
       .map(sel => container.querySelector(sel))
       .filter(Boolean);
     return headerCandidates.length ?
@@ -3911,21 +3931,23 @@ const App = (() => {
     const copyrightText = Renderer.buildCopyrightText(song);
     const roadmap = Renderer.buildRoadmap(ChordParser.parse(song.content || ''));
     return {metaBits, artistLineParts, copyrightText, roadmap, arrangementLabel: arrangementLabelFor(song),
-            chordStrip: Renderer.buildChordDiagramStrip(song)};
+            diagramSides: Renderer.buildChordDiagramSides(song)};
   }
   function buildPageHeaderHtml(song, pageIndex, parts){
     if(pageIndex !== 0){
       return `<div class="cs-meta">${Renderer.escapeHtml(song.title||'')} (cont'd) — page ${pageIndex+1}</div>`;
     }
     const ta = song.titleAlign || DefaultAlignStore.get();
-    return `
+    const sides = parts.diagramSides || {left:'', right:'', any:false};
+    const headMain = `
       <div class="cs-title" style="text-align:${ta};">${Renderer.escapeHtml(song.title||'Untitled')}</div>
       <div class="cs-artist" style="text-align:${ta};">${parts.artistLineParts.join(' | ')}</div>
       ${parts.copyrightText ? `<div class="cs-copyright" style="text-align:${ta};">${Renderer.escapeHtml(parts.copyrightText)}</div>` : ''}
       ${song.churchCcli ? `<div class="cs-permission" style="text-align:${ta};">Used by Permission CCLI #: ${Renderer.escapeHtml(song.churchCcli)}</div>` : ''}
-      ${parts.roadmap ? `<div class="cs-roadmap" style="justify-content:${ta==='center'?'center':(ta==='right'?'flex-end':'flex-start')};">${parts.roadmap}</div>` : ''}
+      ${parts.roadmap ? `<div class="cs-roadmap" style="justify-content:${ta==='center'?'center':(ta==='right'?'flex-end':'flex-start')};">${parts.roadmap}</div>` : ''}`;
+    return `
+      ${sides.any ? `<div class="cs-head-row">${sides.left}<div class="cs-head-main">${headMain}</div>${sides.right}</div>` : headMain}
       ${(parts.metaBits.length || parts.arrangementLabel) ? `<div class="cs-meta">${parts.metaBits.map(Renderer.escapeHtml).join(' &nbsp;•&nbsp; ')}${parts.arrangementLabel ? `<span class="cs-meta-arr">${Renderer.escapeHtml(parts.arrangementLabel)}</span>` : ''}</div>` : ''}
-      ${parts.chordStrip || ''}
     `;
   }
 
