@@ -55,7 +55,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 #homeHead h1 b{color:var(--accent); font-weight:700;}
 #homeHead .build{font-size:10px; color:var(--text-faint);}
 #homeHead .spacer{flex:1;}
-#homeBody{flex:1; overflow-y:auto; padding:14px 16px 40px; -webkit-overflow-scrolling:touch;}
+#homeBody{flex:1; overflow-y:auto; padding:14px 16px 100px; -webkit-overflow-scrolling:touch;}
 #homeBody h2{font-size:12px; text-transform:uppercase; letter-spacing:.6px; color:var(--text-faint); margin:20px 0 8px;}
 #homeBody h2:first-child{margin-top:0;}
 .card-list{display:flex; flex-direction:column; gap:8px;}
@@ -201,6 +201,8 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .card button.edit:hover{color:#79c2ff; border-color:#79c2ff;}
 .card button.tracks{background:transparent; border-color:var(--border); font-size:14px; padding:6px 8px;}
 .card button.tracks:hover{border-color:var(--accent);}
+.card .grow{cursor:pointer;}
+.card.sel{border-color:var(--accent-dim); box-shadow:inset 3px 0 0 0 var(--accent);}
 
 /* ---------------- Tracks: transport + mixer drawer ---------------- */
 #transportGrp{flex-wrap:nowrap;}
@@ -212,6 +214,19 @@ input:focus,select:focus{outline:1px solid var(--accent);}
    Lives OUTSIDE #stage so it works over the home screen too. */
 #console{position:fixed; left:0; right:0; bottom:0; z-index:30; background:var(--bg-panel); border-top:1px solid var(--border); box-shadow:0 -10px 40px rgba(0,0,0,.6); transform:translateY(105%); transition:transform .25s ease; display:flex; flex-direction:column; max-height:62vh;}
 #console.open{transform:translateY(0);}
+/* Docked: tucked ~90% away, the mini bar strip stays working. On stage
+   (.staged) the docked strip rides above the HUD bottom bar instead of
+   covering its key/capo/ink controls. */
+#console.min{transform:translateY(calc(100% - 44px));}
+#console.staged.min{bottom:calc(54px + env(safe-area-inset-bottom));}
+#cMini{position:relative; height:44px; display:flex; align-items:center; gap:10px; padding:0 12px; cursor:pointer; flex-shrink:0;}
+#cMiniProg{position:absolute; top:0; left:0; height:2px; background:var(--accent); width:0;}
+#mPlay{width:34px; height:30px; padding:0; font-size:14px; flex-shrink:0;}
+#mTitle{flex:1; min-width:0; font-size:12.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:var(--text-dim);}
+#mTitle b{color:var(--text);}
+#mClock{font-family:var(--mono); font-size:11.5px; font-weight:700; color:var(--text-faint); flex-shrink:0;}
+#mChevron{color:var(--accent); font-size:13px; flex-shrink:0;}
+#console.open #cMini{display:none;}
 #cHead{display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border-soft); flex-wrap:wrap;}
 #cTitle{font-weight:700; font-size:13px; max-width:170px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
 #cClock{font-family:var(--mono); font-size:12px; font-weight:700; color:var(--text-dim); white-space:nowrap;}
@@ -237,6 +252,27 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .strip label{font-size:9.5px; color:var(--text-faint); display:inline-flex; align-items:center; gap:2px;}
 .strip .del{background:transparent; border:none; color:var(--text-faint); font-size:12px; padding:0;}
 .strip.addstrip{justify-content:center; cursor:pointer; border-style:dashed; color:#79c2ff; font-size:12px; font-weight:600;}
+/* Insert slots — 3 per strip; filled = amber abbrev, bypassed = dimmed. */
+.s-fx{display:flex; gap:3px;}
+.fx-slot{width:22px; height:18px; padding:0; font-size:8.5px; font-weight:800; color:var(--text-faint); border-radius:4px;}
+.fx-slot.on{color:var(--accent); border-color:var(--accent-dim); background:rgba(232,161,63,.10);}
+.fx-slot.byp{color:var(--text-faint); border-color:var(--border); text-decoration:line-through;}
+/* Live input strip — the busking channel */
+.strip.live{border-color:#3f8e5c;}
+.strip.live .s-name{color:#68c98f;}
+.strip.live .power{width:30px; height:24px; padding:0; font-size:13px;}
+.strip.live.on .power{background:#68c98f; color:#08130c; border-color:#68c98f;}
+/* FX editor panel */
+#fxPanel{position:fixed; left:50%; bottom:calc(62vh + 8px); transform:translateX(-50%); z-index:40; width:300px; max-width:94vw; background:var(--bg-panel-2); border:1px solid var(--border); border-radius:10px; box-shadow:0 10px 40px rgba(0,0,0,.7); padding:10px 12px;}
+#fxHead{display:flex; align-items:center; gap:6px; margin-bottom:8px;}
+#fxType{flex:1;}
+#fxHead label{font-size:10.5px; color:var(--text-dim); display:inline-flex; align-items:center; gap:3px;}
+#fxParams{display:flex; flex-direction:column; gap:7px;}
+.fxp-row{display:flex; align-items:center; gap:8px; font-size:11px; color:var(--text-dim);}
+.fxp-row .lab{width:86px; flex-shrink:0;}
+.fxp-row input[type=range]{flex:1; accent-color:var(--accent);}
+.fxp-row .val{width:40px; text-align:right; font-family:var(--mono); font-size:10.5px; color:var(--text);}
+#fxRemove{color:var(--danger); border-color:rgba(226,99,122,.4);}
 #cMarkers{width:280px; max-width:44vw; border-left:1px solid var(--border-soft); display:flex; flex-direction:column; min-height:0;}
 .cm-head{display:flex; align-items:center; gap:6px; padding:8px 10px 6px; font-size:11px; font-weight:700; color:var(--text-dim); text-transform:uppercase; letter-spacing:.5px;}
 #midiOut{flex:1; min-width:0; font-size:11px; padding:2px 4px;}
@@ -353,6 +389,13 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 </div>
 
 <div id="console">
+  <div id="cMini">
+    <div id="cMiniProg"></div>
+    <button id="mPlay" title="Play/pause">⏵</button>
+    <span id="mTitle">No song loaded — tap 🎚 on a song</span>
+    <span id="mClock"></span>
+    <span id="mChevron">▲</span>
+  </div>
   <div id="cHead">
     <span id="cTitle">Tracks</span>
     <button id="cPlay" title="Play/pause (Enter)">⏵</button>
@@ -365,7 +408,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
     <button class="mode-btn" id="modeSplit" title="Click tracks hard right, band hard left — headphone splitter rig">Click→R</button>
     <label>BPM <input id="mixBpm" inputmode="numeric" placeholder="—"></label>
     <label><input type="checkbox" id="mixCountIn"> Count-in</label>
-    <button class="ghost" id="cClose">✕</button>
+    <button class="ghost" id="cClose" title="Collapse to the mini bar">▾</button>
   </div>
   <div id="cBody">
     <div id="cStrips"></div>
@@ -379,13 +422,23 @@ input:focus,select:focus{outline:1px solid var(--accent);}
   </div>
 </div>
 
+<div id="fxPanel" class="hidden">
+  <div id="fxHead">
+    <select id="fxType"></select>
+    <label><input type="checkbox" id="fxBypass"> Byp</label>
+    <button id="fxRemove" title="Empty this slot">✕</button>
+    <button class="ghost" id="fxClose">Done</button>
+  </div>
+  <div id="fxParams"></div>
+</div>
+
 <div id="toast"></div>
 
 <script>
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-30 19:04';
+const APP_BUILD = '2026-08-30 19:19';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -1788,6 +1841,14 @@ function renderSongList(){
       <button class="play">▶</button><button class="tracks" title="Tracks, levels &amp; MIDI markers">🎚</button><button class="del" title="Remove from ChartBenchLive">✕</button>`;
     card.querySelector('.title').textContent = s.title || 'Untitled';
     card.querySelector('.sub').textContent = sub;
+    card.classList.toggle('sel', s.uid === Player.currentUid());
+    // Tapping the song itself selects it — the docked console loads it.
+    card.querySelector('.grow').onclick = () => {
+      Player.songChanged(s.uid);
+      try{ localStorage.setItem('cbp_console_uid', s.uid); }catch(e){}
+      document.querySelectorAll('#songsList .card.sel').forEach(c => c.classList.remove('sel'));
+      card.classList.add('sel');
+    };
     card.querySelector('.play').onclick = () =>
       performSingle(s, card.querySelector('.q-key').value, card.querySelector('.q-capo').value);
     card.querySelector('.tracks').onclick = () => Player.openConsole(s.uid);
@@ -2294,6 +2355,106 @@ const Ink = (() => {
    The master bus is tapped by two analysers (one per channel) — level
    meters someday, numeric verification in tests today.
 --------------------------------------------------------------------------- */
+/* ---------------------------------------------------------------------------
+   FX — built-in insert effects. Every insert SLOT stores
+   {format:'builtin', type, params, bypass} — the same slots the native
+   iOS build will later fill with {format:'auv3', componentID, preset}.
+   Each built instance exposes {input, output, update(params), dispose()}
+   so params tweak live and modulators (chorus LFO) stop cleanly.
+--------------------------------------------------------------------------- */
+const FX = (() => {
+  const DEFS = {
+    eq3:    { name: '3-Band EQ',  abbrev: 'EQ',
+      params: [ {k:'low', lab:'Low dB', min:-12, max:12, def:0, step:.5},
+                {k:'mid', lab:'Mid dB', min:-12, max:12, def:0, step:.5},
+                {k:'high', lab:'High dB', min:-12, max:12, def:0, step:.5} ] },
+    comp:   { name: 'Compressor', abbrev: 'CMP',
+      params: [ {k:'threshold', lab:'Thresh dB', min:-60, max:0, def:-24, step:1},
+                {k:'ratio', lab:'Ratio', min:1, max:20, def:4, step:.5},
+                {k:'makeup', lab:'Makeup dB', min:0, max:24, def:0, step:.5} ] },
+    delay:  { name: 'Delay',      abbrev: 'DLY',
+      params: [ {k:'time', lab:'Time s', min:.05, max:1, def:.3, step:.01},
+                {k:'feedback', lab:'Feedback', min:0, max:.9, def:.35, step:.01},
+                {k:'mix', lab:'Mix', min:0, max:1, def:.3, step:.01} ] },
+    reverb: { name: 'Reverb',     abbrev: 'RVB',
+      params: [ {k:'decay', lab:'Decay s', min:.3, max:5, def:1.8, step:.1},
+                {k:'mix', lab:'Mix', min:0, max:1, def:.3, step:.01} ] },
+    chorus: { name: 'Chorus',     abbrev: 'CHO',
+      params: [ {k:'rate', lab:'Rate Hz', min:.1, max:5, def:1.2, step:.1},
+                {k:'depth', lab:'Depth ms', min:0, max:10, def:3, step:.1},
+                {k:'mix', lab:'Mix', min:0, max:1, def:.5, step:.01} ] },
+  };
+  function defaults(type){
+    const o = {}; (DEFS[type] ? DEFS[type].params : []).forEach(p => { o[p.k] = p.def; });
+    return o;
+  }
+  function makeIR(ctx, decay){
+    const len = Math.max(1, Math.floor(Math.max(0.1, decay) * ctx.sampleRate));
+    const buf = ctx.createBuffer(2, len, ctx.sampleRate);
+    for(let ch = 0; ch < 2; ch++){
+      const d = buf.getChannelData(ch);
+      for(let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.5);
+    }
+    return buf;
+  }
+  function build(ctx, slot){
+    const type = slot.type;
+    const input = ctx.createGain(), output = ctx.createGain();
+    let update = () => {}, dispose = () => {};
+    if(type === 'eq3'){
+      const lo = ctx.createBiquadFilter(); lo.type = 'lowshelf'; lo.frequency.value = 200;
+      const mid = ctx.createBiquadFilter(); mid.type = 'peaking'; mid.frequency.value = 1000; mid.Q.value = 1;
+      const hi = ctx.createBiquadFilter(); hi.type = 'highshelf'; hi.frequency.value = 4000;
+      input.connect(lo); lo.connect(mid); mid.connect(hi); hi.connect(output);
+      update = q => { lo.gain.value = q.low || 0; mid.gain.value = q.mid || 0; hi.gain.value = q.high || 0; };
+    } else if(type === 'comp'){
+      const c = ctx.createDynamicsCompressor();
+      c.knee.value = 30; c.attack.value = 0.003; c.release.value = 0.25;
+      const mk = ctx.createGain();
+      input.connect(c); c.connect(mk); mk.connect(output);
+      update = q => {
+        c.threshold.value = q.threshold != null ? q.threshold : -24;
+        c.ratio.value = q.ratio || 4;
+        mk.gain.value = Math.pow(10, (q.makeup || 0) / 20);
+      };
+    } else if(type === 'delay'){
+      const dry = ctx.createGain(), wet = ctx.createGain(), fb = ctx.createGain();
+      const dl = ctx.createDelay(1.2);
+      input.connect(dry); dry.connect(output);
+      input.connect(dl); dl.connect(wet); wet.connect(output);
+      dl.connect(fb); fb.connect(dl);
+      update = q => { dl.delayTime.value = q.time || .3; fb.gain.value = q.feedback || 0; wet.gain.value = q.mix != null ? q.mix : .3; };
+    } else if(type === 'reverb'){
+      const dry = ctx.createGain(), wet = ctx.createGain();
+      const conv = ctx.createConvolver();
+      let lastDecay = null;
+      input.connect(dry); dry.connect(output);
+      input.connect(conv); conv.connect(wet); wet.connect(output);
+      update = q => {
+        const decay = q.decay || 1.8;
+        if(decay !== lastDecay){ conv.buffer = makeIR(ctx, decay); lastDecay = decay; }
+        wet.gain.value = q.mix != null ? q.mix : .3;
+      };
+    } else if(type === 'chorus'){
+      const dry = ctx.createGain(), wet = ctx.createGain();
+      const dl = ctx.createDelay(0.06); dl.delayTime.value = 0.02;
+      const lfo = ctx.createOscillator(); lfo.type = 'sine';
+      const lfoGain = ctx.createGain();
+      lfo.connect(lfoGain); lfoGain.connect(dl.delayTime);
+      input.connect(dry); dry.connect(output);
+      input.connect(dl); dl.connect(wet); wet.connect(output);
+      lfo.start();
+      update = q => { lfo.frequency.value = q.rate || 1.2; lfoGain.gain.value = (q.depth || 0) / 1000; wet.gain.value = q.mix != null ? q.mix : .5; };
+      dispose = () => { try{ lfo.stop(); }catch(e){} };
+    } else {
+      input.connect(output); // unknown type (e.g. an auv3 slot on web): clean pass-through
+    }
+    update(slot.params || {});
+    return { input, output, update, dispose };
+  }
+  return { DEFS, defaults, build, abbrev: t => (DEFS[t] ? DEFS[t].abbrev : '?') };
+})();
+
 /* Web MIDI output — Chrome/Edge/Android webview today; iOS WKWebView has
    no Web MIDI, so there the markers still schedule + log and the native
    build will bridge to CoreMIDI via a Capacitor plugin later. */
@@ -2341,6 +2502,40 @@ const Player = (() => {
   let markerTimers = [];
   const firedLog = [];       // {label, t, at} — every marker actually fired (tests read this)
   const MAX_TRACKS = 8;
+  const fxInstances = new Map(); // ownerKey ('t:<audioId>' | '__live') -> {all:[inst], bySlot:Map(slot->inst)}
+  // Live input (the busking channel) — rig-level, not song-level.
+  let liveCfg = null;            // {enabled, gain, inserts:[3]}
+  let liveNodes = null;          // {stream, src, gain, tap}
+  const LIVE_KEY = 'live_input_v1';
+  const LIVE_DEF = () => ({ enabled: false, gain: 1, inserts: [null, null, null] });
+
+  /* ---- insert chains ---- */
+  function disposeChain(ownerKey){
+    const rec = fxInstances.get(ownerKey);
+    if(rec){ rec.all.forEach(i => { try{ i.dispose(); }catch(e){} }); fxInstances.delete(ownerKey); }
+  }
+  // Builds slot list into connected FX instances; returns {head, tail} or
+  // null when every slot is empty/bypassed.
+  function buildInsertChain(inserts, ownerKey){
+    disposeChain(ownerKey);
+    const all = [], bySlot = new Map();
+    let head = null, tail = null;
+    (inserts || []).forEach(slot => {
+      if(!slot || slot.bypass) return;
+      const inst = FX.build(ctx, slot);
+      all.push(inst); bySlot.set(slot, inst);
+      if(!head) head = inst.input; else tail.connect(inst.input);
+      tail = inst.output;
+    });
+    if(!all.length) return null;
+    fxInstances.set(ownerKey, { all, bySlot });
+    return { head, tail };
+  }
+  function liveUpdateSlot(ownerKey, slot){
+    const rec = fxInstances.get(ownerKey);
+    const inst = rec && rec.bySlot.get(slot);
+    if(inst) inst.update(slot.params || {});
+  }
 
   const DEF = () => ({ tracks: [], markers: [], mode: 'stereo', master: 1, bpm: '', countIn: false });
 
@@ -2440,6 +2635,7 @@ const Player = (() => {
   function stopSources(){
     sources.forEach(s => { try{ s.onended = null; s.stop(); }catch(e){} });
     sources = []; liveGains.clear(); trackTaps.clear();
+    [...fxInstances.keys()].filter(k => k.startsWith('t:')).forEach(disposeChain);
     clearMarkerTimers();
   }
   function position(){
@@ -2487,6 +2683,7 @@ const Player = (() => {
       const tap = ctx.createAnalyser(); tap.fftSize = 512;
       g.connect(tap);
       trackTaps.set(t.audioId, tap);
+      let preOut;
       if(t.lr){
         const sp = ctx.createChannelSplitter(2);
         const mg = ctx.createChannelMerger(2);
@@ -2498,12 +2695,16 @@ const Player = (() => {
           sp.connect(mg, 0, 0);
           sp.connect(mg, 0, 1);
         }
-        mg.connect(g);
+        preOut = mg;
       } else {
         const pan = ctx.createStereoPanner();
         pan.pan.value = meta.mode === 'split' ? (t.click ? 1 : -1) : 0;
-        src.connect(pan); pan.connect(g);
+        src.connect(pan);
+        preOut = pan;
       }
+      const chain = buildInsertChain(t.inserts, 't:' + t.audioId);
+      if(chain){ preOut.connect(chain.head); chain.tail.connect(g); }
+      else preOut.connect(g);
       g.connect(master);
       src.start(t0, offset);
       sources.push(src);
@@ -2533,6 +2734,7 @@ const Player = (() => {
 
   async function songChanged(newUid){
     if(newUid === uid) return;
+    closeFxEditor();
     pause(); offset = 0; duration = 0;
     uid = newUid;
     meta = uid ? await metaFor(uid) : DEF();
@@ -2540,8 +2742,10 @@ const Player = (() => {
   }
   function shutdown(){
     pause(); offset = 0;
-    el('console').classList.remove('open');
-    if(ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
+    el('console').classList.remove('staged');
+    dockMin(); // back on home: the console returns as the tucked bar
+    // Keep the context alive while the live (busking) channel is on air.
+    if(!(liveCfg && liveCfg.enabled) && ctx && ctx.state === 'running') ctx.suspend().catch(() => {});
   }
 
   /* ---- attach / remove ---- */
@@ -2567,6 +2771,119 @@ const Player = (() => {
     scheduleSave(); reapplyIfPlaying(); renderMixer(); updateTransport();
   }
 
+  /* ---- live input: the busking channel (mic/guitar via interface).
+     Independent of the transport — enable it and you're live through the
+     master bus, tracks playing or not. Music-friendly constraints (no
+     echo cancellation / AGC). Webview latency is ~20-40ms; the native
+     engine phase brings that down. ---- */
+  async function loadLive(){
+    if(!liveCfg) liveCfg = Object.assign(LIVE_DEF(), (await KV.get(LIVE_KEY, null)) || {});
+    if(!Array.isArray(liveCfg.inserts)) liveCfg.inserts = [null, null, null];
+    liveCfg.enabled = false; // never auto-open a mic on boot — the power button is the gesture
+    return liveCfg;
+  }
+  let liveSaveTimer = null;
+  function saveLive(){ clearTimeout(liveSaveTimer); liveSaveTimer = setTimeout(() => KV.set(LIVE_KEY, liveCfg), 300); }
+  function wireLiveGraph(){
+    const chain = buildInsertChain(liveCfg.inserts, '__live');
+    try{ liveNodes.src.disconnect(); liveNodes.gain.disconnect(); }catch(e){}
+    if(chain){ liveNodes.src.connect(chain.head); chain.tail.connect(liveNodes.gain); }
+    else liveNodes.src.connect(liveNodes.gain);
+    liveNodes.gain.gain.value = liveCfg.gain;
+    liveNodes.gain.connect(liveNodes.tap);
+    liveNodes.gain.connect(master);
+  }
+  async function setLiveEnabled(on){
+    if(!on){
+      if(liveNodes){
+        try{ liveNodes.stream.getTracks().forEach(t => t.stop()); }catch(e){}
+        try{ liveNodes.src.disconnect(); liveNodes.gain.disconnect(); }catch(e){}
+        disposeChain('__live');
+        liveNodes = null;
+      }
+      liveCfg.enabled = false; saveLive(); renderConsole();
+      return;
+    }
+    ensureCtx();
+    try{
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: {
+        echoCancellation: false, noiseSuppression: false, autoGainControl: false,
+      } });
+      liveNodes = {
+        stream,
+        src: ctx.createMediaStreamSource(stream),
+        gain: ctx.createGain(),
+        tap: ctx.createAnalyser(),
+      };
+      liveNodes.tap.fftSize = 512;
+      wireLiveGraph();
+      liveCfg.enabled = true; saveLive(); renderConsole();
+    }catch(e){
+      toast('Mic/input unavailable: ' + e.message);
+      liveCfg.enabled = false; renderConsole();
+    }
+  }
+  function rebuildLive(){ if(liveNodes) wireLiveGraph(); }
+  function liveLevel(){
+    if(!liveNodes) return 0;
+    const buf = new Float32Array(liveNodes.tap.fftSize);
+    liveNodes.tap.getFloatTimeDomainData(buf);
+    let s = 0; for(let i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    return Math.sqrt(s / buf.length);
+  }
+
+  /* ---- FX editor panel: edits one slot of one owner (track or live) ---- */
+  let fxEd = null; // {ownerKey, owner, si}  owner.inserts is the slot array
+  function fxOwnerChanged(){
+    if(!fxEd) return;
+    if(fxEd.ownerKey === '__live'){ saveLive(); rebuildLive(); }
+    else { scheduleSave(); reapplyIfPlaying(); }
+    renderConsole();
+  }
+  function openFxEditor(ownerKey, owner, si){
+    fxEd = { ownerKey, owner, si };
+    if(!Array.isArray(owner.inserts)) owner.inserts = [null, null, null];
+    renderFxPanel();
+    el('fxPanel').classList.remove('hidden');
+  }
+  function closeFxEditor(){ fxEd = null; el('fxPanel').classList.add('hidden'); }
+  function renderFxPanel(){
+    if(!fxEd) return;
+    const slot = fxEd.owner.inserts[fxEd.si];
+    el('fxType').innerHTML = '<option value="">— empty slot —</option>' +
+      Object.entries(FX.DEFS).map(([t, d]) => `<option value="${t}"${slot && slot.type === t ? ' selected' : ''}>${d.name}</option>`).join('');
+    el('fxBypass').checked = !!(slot && slot.bypass);
+    el('fxBypass').disabled = el('fxRemove').disabled = !slot;
+    const host = el('fxParams');
+    host.innerHTML = '';
+    if(!slot) return;
+    (FX.DEFS[slot.type] ? FX.DEFS[slot.type].params : []).forEach(p => {
+      const row = document.createElement('div'); row.className = 'fxp-row';
+      const v = slot.params[p.k] != null ? slot.params[p.k] : p.def;
+      row.innerHTML = `<span class="lab">${p.lab}</span><input type="range" min="${p.min}" max="${p.max}" step="${p.step}" value="${v}"><span class="val">${v}</span>`;
+      row.querySelector('input').oninput = ev => {
+        slot.params[p.k] = parseFloat(ev.target.value);
+        row.querySelector('.val').textContent = ev.target.value;
+        liveUpdateSlot(fxEd.ownerKey, slot);
+        if(fxEd.ownerKey === '__live') saveLive(); else scheduleSave();
+      };
+      host.appendChild(row);
+    });
+  }
+  function wireFxPanel(){
+    el('fxType').onchange = ev => {
+      const t = ev.target.value;
+      fxEd.owner.inserts[fxEd.si] = t ? { format: 'builtin', type: t, params: FX.defaults(t), bypass: false } : null;
+      fxOwnerChanged(); renderFxPanel();
+    };
+    el('fxBypass').onchange = ev => {
+      const slot = fxEd.owner.inserts[fxEd.si];
+      if(slot){ slot.bypass = ev.target.checked; fxOwnerChanged(); }
+    };
+    el('fxRemove').onclick = () => { fxEd.owner.inserts[fxEd.si] = null; fxOwnerChanged(); renderFxPanel(); };
+    el('fxClose').onclick = closeFxEditor;
+  }
+
   /* ---- markers: live re-schedule after an edit mid-playback ---- */
   function rescheduleMarkers(){
     if(!playing) return;
@@ -2588,6 +2905,14 @@ const Player = (() => {
     el('cPlay').disabled = !has;
     el('cPlay').textContent = playing ? '⏸' : '⏵';
     el('cClock').textContent = fmt(pos) + ' / ' + fmt(duration);
+    el('mPlay').disabled = !has;
+    el('mPlay').textContent = playing ? '⏸' : '⏵';
+    const miniSong = songs.find(x => x.uid === uid);
+    el('mTitle').innerHTML = miniSong
+      ? `<b>${Renderer.escapeHtml(miniSong.title || 'Untitled')}</b> · mixer &amp; MIDI markers`
+      : 'No song loaded — tap 🎚 on a song';
+    el('mClock').textContent = has ? fmt(pos) + ' / ' + fmt(duration) : '';
+    el('cMiniProg').style.width = (duration ? Math.min(100, pos / duration * 100) : 0) + '%';
     if(has){
       el('playClock').textContent = fmt(pos) + ' / ' + fmt(duration);
       if(!scrubbing){
@@ -2612,17 +2937,52 @@ const Player = (() => {
       <div class="s-fader"><canvas class="s-meter" width="8" height="108"></canvas>
         <input type="range" class="s-gain" min="0" max="150" value="${Math.round(t.gain * 100)}"></div>
       <div class="s-btns"><button class="mute${t.mute ? ' on' : ''}">M</button><button class="solo${t.solo ? ' on' : ''}">S</button></div>
+      <div class="s-fx"></div>
       <label><input type="checkbox" class="tclick"${t.click ? ' checked' : ''}>Clk</label>
       <label><input type="checkbox" class="tlr"${t.lr ? ' checked' : ''}>L|R</label>
       <button class="del" title="Remove track">✕</button>`;
     s.querySelector('.s-name').textContent = t.name;
     s.querySelector('.s-meter').dataset.id = t.audioId;
+    buildFxSlotRow(s.querySelector('.s-fx'), 't:' + t.audioId, t);
     s.querySelector('.s-gain').oninput = ev => { t.gain = ev.target.value / 100; refreshGains(); scheduleSave(); };
     s.querySelector('.mute').onclick = ev => { t.mute = !t.mute; ev.target.classList.toggle('on', t.mute); refreshGains(); scheduleSave(); };
     s.querySelector('.solo').onclick = ev => { t.solo = !t.solo; ev.target.classList.toggle('on', t.solo); refreshGains(); scheduleSave(); };
     s.querySelector('.tclick').onchange = ev => { t.click = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
     s.querySelector('.tlr').onchange = ev => { t.lr = ev.target.checked; scheduleSave(); reapplyIfPlaying(); };
     s.querySelector('.del').onclick = () => removeTrack(i);
+    return s;
+  }
+  // The three insert-slot buttons every strip carries.
+  function buildFxSlotRow(host, ownerKey, owner){
+    if(!Array.isArray(owner.inserts)) owner.inserts = [null, null, null];
+    host.innerHTML = '';
+    for(let si = 0; si < 3; si++){
+      const slot = owner.inserts[si];
+      const b = document.createElement('button');
+      b.className = 'fx-slot' + (slot ? (slot.bypass ? ' byp' : ' on') : '');
+      b.textContent = slot ? FX.abbrev(slot.type) : '+';
+      b.title = slot ? (FX.DEFS[slot.type] ? FX.DEFS[slot.type].name : slot.type) : 'Empty insert slot';
+      b.onclick = ev => { ev.stopPropagation(); openFxEditor(ownerKey, owner, si); };
+      host.appendChild(b);
+    }
+  }
+  function makeLiveStrip(){
+    const s = document.createElement('div');
+    s.className = 'strip live' + (liveCfg && liveCfg.enabled ? ' on' : '');
+    s.innerHTML = `
+      <div class="s-name">LIVE</div>
+      <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__live"></canvas>
+        <input type="range" class="s-gain" min="0" max="150" value="${Math.round(((liveCfg && liveCfg.gain) || 1) * 100)}"></div>
+      <div class="s-btns"><button class="power" title="Enable/disable the live input (mic or interface)">⏻</button></div>
+      <div class="s-fx"></div>
+      <label title="Your input through the FX chain to the master bus — the busking channel">input</label>`;
+    s.querySelector('.power').onclick = () => setLiveEnabled(!(liveCfg && liveCfg.enabled));
+    s.querySelector('.s-gain').oninput = ev => {
+      liveCfg.gain = ev.target.value / 100;
+      if(liveNodes) liveNodes.gain.gain.value = liveCfg.gain;
+      saveLive();
+    };
+    buildFxSlotRow(s.querySelector('.s-fx'), '__live', liveCfg || (liveCfg = LIVE_DEF()));
     return s;
   }
   function renderConsole(){
@@ -2640,6 +3000,7 @@ const Player = (() => {
         add.onclick = () => el('audioInput').click();
         host.appendChild(add);
       }
+      host.appendChild(makeLiveStrip());
       // master strip: fader + stereo meters
       const ms = document.createElement('div'); ms.className = 'strip master';
       ms.innerHTML = `
@@ -2713,7 +3074,9 @@ const Player = (() => {
     if(!consoleOpen()) return;
     document.querySelectorAll('#cStrips canvas.s-meter').forEach(cv => {
       const id = cv.dataset.id;
-      const lvl = !playing ? 0 : (id === '__L' ? channelLevel('L') : id === '__R' ? channelLevel('R') : tapLevel(id));
+      const lvl = id === '__live' ? liveLevel()
+        : !playing ? 0
+        : (id === '__L' ? channelLevel('L') : id === '__R' ? channelLevel('R') : tapLevel(id));
       const g = cv.getContext('2d');
       g.clearRect(0, 0, 8, 108);
       const h = Math.min(108, Math.round(lvl * 170));
@@ -2725,35 +3088,50 @@ const Player = (() => {
     requestAnimationFrame(meterLoop);
   }
 
-  /* ---- open / close (works over home AND stage) ---- */
+  /* ---- open / dock / hide ----
+     On the home screen the console never disappears: "closing" tucks it
+     down to the mini bar (~90% hidden, transport still working). On
+     stage the docked strip would fight the HUD, so there it hides fully
+     and reappears docked when the performance ends. */
   function consoleOpen(){ return el('console').classList.contains('open'); }
+  function dockMin(){
+    el('console').classList.remove('open');
+    el('console').classList.add('min');
+    updateTransport();
+  }
+  function hideDock(){ el('console').classList.remove('open', 'min'); }
   async function openConsole(forUid){
     if(forUid && forUid !== uid) await songChanged(forUid);
     if(!meta && uid) meta = await metaFor(uid);
+    if(uid){ try{ localStorage.setItem('cbp_console_uid', uid); }catch(e){} }
     Midi.init();
     renderConsole(); updateTransport();
+    el('console').classList.remove('min');
     el('console').classList.add('open');
     if(perf.active) showHud(0);
     requestAnimationFrame(meterLoop);
   }
   function closeConsole(){
-    el('console').classList.remove('open');
+    dockMin(); // ▾ collapses to the mini bar everywhere (staged CSS lifts it above the HUD)
     if(perf.active) showHud();
   }
 
-  function setMode(m){ meta.mode = m; scheduleSave(); renderConsole(); reapplyIfPlaying(); }
+  function setMode(m){ if(!meta) return; meta.mode = m; scheduleSave(); renderConsole(); reapplyIfPlaying(); }
   function wire(){
     el('btnPlay').onclick = toggle;
     el('cPlay').onclick = toggle;
     el('btnMixer').onclick = () => consoleOpen() ? closeConsole() : openConsole();
     el('cClose').onclick = closeConsole;
+    el('mPlay').onclick = ev => { ev.stopPropagation(); toggle(); };
+    el('cMini').onclick = () => openConsole();
     el('audioInput').onchange = ev => { if(ev.target.files.length) addFiles(ev.target.files); ev.target.value = ''; };
     el('modeStereo').onclick = () => setMode('stereo');
     el('modeSplit').onclick = () => setMode('split');
-    el('mixBpm').oninput = ev => { meta.bpm = ev.target.value.trim(); scheduleSave(); };
-    el('mixCountIn').onchange = ev => { meta.countIn = ev.target.checked; scheduleSave(); };
+    el('mixBpm').oninput = ev => { if(!meta) return; meta.bpm = ev.target.value.trim(); scheduleSave(); };
+    el('mixCountIn').onchange = ev => { if(!meta) return; meta.countIn = ev.target.checked; scheduleSave(); };
     el('cmAdd').onclick = addMarkerAtPlayhead;
     el('midiOut').onchange = ev => Midi.select(ev.target.value);
+    wireFxPanel();
     [el('scrub'), el('cScrub')].forEach(sc => {
       sc.addEventListener('pointerdown', () => { scrubbing = true; });
       sc.addEventListener('change', ev => { scrubbing = false; seek(parseFloat(ev.target.value)); });
@@ -2766,8 +3144,10 @@ const Player = (() => {
     });
   }
 
-  return { songChanged, toggle, shutdown, wire, openConsole, closeConsole, consoleOpen,
+  return { songChanged, toggle, shutdown, wire, openConsole, closeConsole, consoleOpen, dockMin, hideDock,
+           currentUid: () => uid,
            isPlaying: () => playing, position, channelLevel,
+           loadLive, setLiveEnabled, liveLevel,
            firedMarkers: () => firedLog.slice() };
 })();
 
@@ -2823,6 +3203,8 @@ function enterPerform(entries, name, sid){
     if(perf.idx > 0 || perf.page > 0) toast('Resumed where you left off');
   }
   el('home').classList.add('hidden');
+  Player.hideDock(); // reappears via ▾ collapse or when the performance ends
+  el('console').classList.add('staged');
   el('stage').classList.remove('hidden');
   if(document.documentElement.requestFullscreen){
     document.documentElement.requestFullscreen({navigationUI:'hide'}).catch(() => {});
@@ -3183,6 +3565,19 @@ function registerServiceWorker(){
   await loadData();
   await seedDemoIfEmpty();
   renderHome();
+  // The console docks as a persistent mini bar on the landing page,
+  // reloaded with whichever song it last had open.
+  await Player.loadLive();
+  const lastConsoleUid = localStorage.getItem('cbp_console_uid');
+  if(lastConsoleUid && songs.some(s => s.uid === lastConsoleUid)){
+    await Player.songChanged(lastConsoleUid);
+  } else if(songs.length){
+    // Always populated: default to the first song alphabetically.
+    const first = [...songs].sort((a, b) => (a.title || '').localeCompare(b.title || ''))[0];
+    await Player.songChanged(first.uid);
+  }
+  Player.dockMin();
+  renderSongList(); // reflect the selected-song highlight
   if(await chartBenchDbExists()) el('btnPull').classList.remove('hidden');
   registerServiceWorker();
 })();
