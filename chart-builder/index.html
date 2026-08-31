@@ -96,6 +96,9 @@ small{color:var(--text-faint);}
 #btnSave.saved:hover, #btnSave.unsaved:hover{filter:brightness(1.08);}
 .circle-btn{background:linear-gradient(135deg,#8b6ef2,#6a4fd8); color:#fff; border:1px solid #7a5ce8; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
 .circle-btn:hover{filter:brightness(1.1); border-color:#8b6ef2;}
+/* Chord Book — teal sibling of the Circle button, same pill treatment. */
+.chordbook-btn{background:linear-gradient(135deg,#3fb8ae,#2a8f87); color:#fff; border:1px solid #38aca3; font-weight:600; font-size:12px; padding:5px 12px; border-radius:14px; white-space:nowrap;}
+.chordbook-btn:hover{filter:brightness(1.1); border-color:#5ad1c8;}
 /* Mint/lime green, plain-outline by default like the RN/next-num toggle
    convention elsewhere, filling in solid once selected (dark text on the
    light fill for contrast, matching --accent-text's convention). */
@@ -824,6 +827,7 @@ small{color:var(--text-faint);}
   </div>
   <div class="tb-group">
     <button id="btnCircle" class="circle-btn" title="Open Circle of Fifths chord wheel in a new window">⭘ Circle of 5ths</button>
+    <button id="btnChordBook" class="chordbook-btn" title="Open the Chord Book in a new window — every chord shape ChartBench knows; pick the voicings your charts print">⌗ Chord Book</button>
   </div>
   <div class="tb-group">
     <button id="btnGuide" title="Open the ChartBench User Guide in a new tab">Guide</button>
@@ -1272,7 +1276,7 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-30 20:00';
+const APP_BUILD = '2026-08-30 20:12';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
@@ -1282,6 +1286,7 @@ const VERSION_NOTES = [
     ['New', [
       'Chord diagram library: tick "Chords" in the Live Preview header and the chart prints a strip of guitar fretboard diagrams for every chord it shows — automatically the shapes as played (capo and key changes included), sized with the chart text, on preview, Print and PDF alike. Needs a letter Display Key; saved with the song per arrangement.',
       'Click any chord on the preview to open its diagram: choose among voicings, type a custom shape ("x32010", or "5:131211" for base fret 5), or flip to left-handed diagrams. Choices remember browser-wide.',
+      'The ⌗ Chord Book: a teal button beside the Circle of 5ths opens a browsable window of every chord shape ChartBench knows — pick a root and quality, click a voicing to make it the one your charts print. Pin on Top works like the Circle’s.',
     ]],
   ]},
   { version: '1.2.1', date: 'August 30, 2026', sections: [
@@ -8202,6 +8207,189 @@ ${versesXml}
     w.focus();
   }
 
+  /* ---------------- Chord Book (opens in its own window) ----------------
+     Same convention as the Circle of Fifths: a named popup, dark-themed,
+     with the Pin-on-Top option. The page itself is a light shell — every
+     diagram it shows comes from the main window's chord library via hooks
+     the app attaches after writing the document, so the Book, the chart's
+     diagram strip, and the click-a-chord popup always agree on shapes and
+     on your preferred voicings (picking one here changes the charts too).
+     If the ChartBench window goes away the Book says so instead of dying. */
+  let chordBookWinRef = null;
+  const CHORD_BOOK_ROOTS = ['C','Db','D','Eb','E','F','F#','G','Ab','A','Bb','B'];
+  const CHORD_BOOK_QUALS = [
+    {q:'',      l:'maj'},  {q:'m',    l:'m'},    {q:'7',    l:'7'},    {q:'m7',   l:'m7'},
+    {q:'maj7',  l:'maj7'}, {q:'sus2', l:'sus2'}, {q:'sus4', l:'sus4'}, {q:'add9', l:'add9'},
+    {q:'6',     l:'6'},    {q:'9',    l:'9'},    {q:'dim',  l:'dim'},  {q:'aug',  l:'aug'},
+    {q:'m7b5',  l:'m7♭5'}, {q:'7sus4',l:'7sus4'},
+  ];
+  function chordBookInitialRoot(){
+    if(currentSong){
+      const dk = el('mDisplayKey').value;
+      if(CHORD_BOOK_ROOTS.includes(dk)) return dk;
+    }
+    return 'C';
+  }
+  // Everything the Book's page needs for one root+quality, rendered here so
+  // the library lives in exactly one place.
+  function chordBookRender(root, qual){
+    const symbol = root + qual;
+    const all = Renderer.chordVoicings(symbol);
+    const pref = Renderer.voicingPrefs()[symbol];
+    const custom = (pref && typeof pref === 'object' && pref.c) ? pref.c : null;
+    const activeIdx = custom ? -1 : ((typeof pref === 'number' && all[pref]) ? pref : 0);
+    const cards = all.map((v, i) =>
+      `<button type="button" class="card${i === activeIdx ? ' active' : ''}" data-i="${i}">${Renderer.chordDiagramSvg(symbol, v)}${i === activeIdx ? '<span class="star">★ preferred</span>' : ''}</button>`).join('')
+      + (custom ? `<div class="card active">${Renderer.chordDiagramSvg(symbol, Renderer.parseVoicingStr(custom))}<span class="star">★ custom</span></div>` : '');
+    return { symbol, custom, lefty: Renderer.leftyDiagrams(),
+             html: cards || '<p class="none">No built-in shape for this one — define a custom shape below.</p>' };
+  }
+  function attachChordBookHooks(w){
+    w.__cbBookHooks = {
+      render: chordBookRender,
+      select: (symbol, i) => { Renderer.setVoicingPref(symbol, i); renderPreview(); },
+      custom: (symbol, str) => {
+        if(str && !Renderer.parseVoicingStr(str)) return false;
+        Renderer.setVoicingPref(symbol, str ? {c: str} : null);
+        renderPreview(); return true;
+      },
+      lefty: (on) => { localStorage.setItem('wcb_lefty_diagrams', on ? '1' : '0'); renderPreview(); },
+      pip: (root, qual) => requestChordBookPiP(root, qual),
+    };
+    if(w.__cbBookInit) w.__cbBookInit();
+  }
+  function buildChordBookHTML(initialRoot, initialQual){
+    return `<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>Chord Book — ChartBench</title>
+<style>
+  :root{--bg:#12151b; --panel:#1a1f27; --border:#2e3440; --text:#e7e9ee; --text-dim:#8b93a3; --accent:#e8b45a; --teal:#5ad1c8;}
+  *{box-sizing:border-box;}
+  body{margin:0; background:var(--bg); color:var(--text); font-family:'Segoe UI', -apple-system, Roboto, Helvetica, Arial, sans-serif; padding:12px 14px; text-align:center;}
+  h2{margin:2px 0 2px; font-size:19px;}
+  .sub{margin:0 0 10px; font-size:11.5px; color:var(--text-dim);}
+  .chips{display:flex; flex-wrap:wrap; gap:4px; justify-content:center; margin-bottom:6px;}
+  .chips button{background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:5px 0; font-size:12.5px; cursor:pointer; width:44px;}
+  .chips button.on{background:var(--accent); color:#1a1408; border-color:var(--accent); font-weight:700;}
+  .chips.quals button{width:52px; font-size:11.5px;}
+  #symbol{margin:8px 0 4px; font-size:22px; font-weight:800; color:var(--teal);}
+  #grid{display:flex; flex-wrap:wrap; gap:10px; justify-content:center; padding:6px 0 10px;}
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:7px 7px 4px; cursor:pointer; color:var(--text); position:relative;}
+  .card.active{border-color:var(--accent); box-shadow:0 0 0 1px var(--accent);}
+  .card svg{width:104px; height:auto; display:block;}
+  .card .star{display:block; font-size:9.5px; color:var(--accent); margin-top:2px;}
+  .none{color:var(--text-dim); font-size:12.5px;}
+  #customRow{display:flex; gap:6px; justify-content:center; align-items:center; margin:2px auto 8px; max-width:420px;}
+  #customRow input{flex:1; min-width:0; background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:6px 8px; font-family:Consolas, monospace; font-size:12px;}
+  #customRow button{background:var(--panel); border:1px solid var(--border); color:var(--text); border-radius:7px; padding:6px 10px; cursor:pointer; font-size:12px;}
+  #foot{font-size:11px; color:var(--text-dim); display:flex; justify-content:center; gap:14px; align-items:center;}
+  #foot label{display:flex; gap:5px; align-items:center; cursor:pointer;}
+  #pinTopBtn{position:absolute; top:8px; right:10px; font-size:11px; padding:5px 10px; border-radius:14px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;}
+  #pinTopBtn:hover{border-color:var(--teal);}
+  #dead{display:none; background:#3a2626; border:1px solid #7a4a4a; border-radius:8px; padding:8px 10px; font-size:12px; margin:10px auto; max-width:420px;}
+</style></head>
+<body>
+  <button type="button" id="pinTopBtn" style="display:none;">📌 Pin on Top</button>
+  <h2>Chord Book</h2>
+  <p class="sub">Every shape ChartBench knows. Click a voicing to make it the one your charts print.</p>
+  <div class="chips roots" id="roots"></div>
+  <div class="chips quals" id="quals"></div>
+  <div id="symbol"></div>
+  <div id="grid"></div>
+  <div id="customRow">
+    <input id="customIn" placeholder="Custom shape — x32010, or 5:131211 (base fret 5)">
+    <button type="button" id="customUse">Use</button>
+    <button type="button" id="customClear" style="display:none;">Remove</button>
+  </div>
+  <div id="foot">
+    <label><input type="checkbox" id="lefty" style="width:auto;"> Left-handed diagrams</label>
+  </div>
+  <div id="dead">The ChartBench window is gone — reopen the Chord Book from the app.</div>
+<script>
+  var ROOTS = ${JSON.stringify(CHORD_BOOK_ROOTS)};
+  var QUALS = ${JSON.stringify(CHORD_BOOK_QUALS)};
+  var state = {root: ${JSON.stringify(initialRoot)}, qual: ${JSON.stringify(initialQual || '')}};
+  var lastSymbol = '';
+  function hooks(){ try{ if(window.__cbBookHooks) return window.__cbBookHooks; }catch(e){} return null; }
+  function dead(){ document.getElementById('dead').style.display = 'block'; }
+  function buildChips(){
+    var r = document.getElementById('roots');
+    r.innerHTML = ROOTS.map(function(n){ return '<button data-r="' + n + '"' + (n === state.root ? ' class="on"' : '') + '>' + n.replace('b','\\u266d').replace('#','\\u266f') + '</button>'; }).join('');
+    var q = document.getElementById('quals');
+    q.innerHTML = QUALS.map(function(o){ return '<button data-q="' + o.q + '"' + (o.q === state.qual ? ' class="on"' : '') + '>' + o.l + '</button>'; }).join('');
+    Array.prototype.forEach.call(r.querySelectorAll('button'), function(b){ b.onclick = function(){ state.root = b.dataset.r; rerender(); }; });
+    Array.prototype.forEach.call(q.querySelectorAll('button'), function(b){ b.onclick = function(){ state.qual = b.dataset.q; rerender(); }; });
+  }
+  function rerender(){
+    var h = hooks(); if(!h){ dead(); return; }
+    var res;
+    try{ res = h.render(state.root, state.qual); }catch(e){ dead(); return; }
+    buildChips();
+    lastSymbol = res.symbol;
+    document.getElementById('symbol').textContent = res.symbol;
+    document.getElementById('grid').innerHTML = res.html;
+    document.getElementById('customIn').value = res.custom || '';
+    document.getElementById('customClear').style.display = res.custom ? '' : 'none';
+    document.getElementById('lefty').checked = !!res.lefty;
+    Array.prototype.forEach.call(document.querySelectorAll('#grid .card[data-i]'), function(c){
+      c.onclick = function(){ var h2 = hooks(); if(!h2){ dead(); return; } h2.select(lastSymbol, parseInt(c.dataset.i, 10)); rerender(); };
+    });
+  }
+  document.getElementById('customUse').onclick = function(){
+    var h = hooks(); if(!h){ dead(); return; }
+    var str = document.getElementById('customIn').value.trim();
+    if(!str) return;
+    if(!h.custom(lastSymbol, str)){ alert('Shape must be six characters of x / 0\\u20139, with an optional "5:" base-fret prefix'); return; }
+    rerender();
+  };
+  document.getElementById('customClear').onclick = function(){
+    var h = hooks(); if(!h){ dead(); return; }
+    h.custom(lastSymbol, null); rerender();
+  };
+  document.getElementById('lefty').onchange = function(e){
+    var h = hooks(); if(!h){ dead(); return; }
+    h.lefty(e.target.checked); rerender();
+  };
+  (function(){
+    var btn = document.getElementById('pinTopBtn');
+    var supported = false;
+    try{ supported = !!(window.opener && !window.opener.closed && 'documentPictureInPicture' in window.opener); }catch(e){}
+    if(supported){
+      btn.style.display = '';
+      btn.onclick = function(){
+        var h = hooks(); if(!h){ dead(); return; }
+        h.pip(state.root, state.qual);
+        window.close();
+      };
+    }
+  })();
+  window.__cbBookInit = rerender;
+<\/script>
+</body></html>`;
+  }
+  function openChordBook(){
+    if(chordBookWinRef && !chordBookWinRef.closed){ chordBookWinRef.focus(); return; }
+    const w = window.open('', 'wcbChordBook', 'width=640,height=880,resizable=yes,scrollbars=yes,menubar=no,toolbar=no,location=no,status=no');
+    if(!w){ toast('Popup blocked — please allow popups for this site to use the Chord Book'); return; }
+    chordBookWinRef = w;
+    w.document.write(buildChordBookHTML(chordBookInitialRoot(), ''));
+    w.document.close();
+    attachChordBookHooks(w);
+    w.focus();
+  }
+  async function requestChordBookPiP(root, qual){
+    try{
+      const pip = await documentPictureInPicture.requestWindow({width:560, height:800});
+      pip.document.write(buildChordBookHTML(root || chordBookInitialRoot(), qual || ''));
+      pip.document.close();
+      attachChordBookHooks(pip);
+      if(chordBookWinRef && !chordBookWinRef.closed) chordBookWinRef.close();
+      chordBookWinRef = pip;
+      pip.addEventListener('pagehide', () => { if(chordBookWinRef === pip) chordBookWinRef = null; });
+    }catch(e){
+      toast('Could not pin on top: ' + e.message);
+    }
+  }
+
   /* ---------------- Lyrics-only view ---------------- */
   // ARCHITECTURE: Lyrics view does NOT edit the chart. currentSong.lyricsContent
   // is an independent copy of the song's lyrics (chords/note-annotations/
@@ -8784,6 +8972,7 @@ ${versesXml}
     el('backupNudgeLater').onclick = () => { BackupStore.snooze(7); renderBackupNudge(); };
     el('mirrorNudgeGo').onclick = mirrorReconnect;
     el('btnCircle').onclick = openCircleOfFifths;
+    el('btnChordBook').onclick = openChordBook;
     el('btnGuide').onclick = openUserGuide;
     el('arrMenuBtn').onclick = openArrangementMenu;
     el('arrAddBtn').onclick = addArrangement;
