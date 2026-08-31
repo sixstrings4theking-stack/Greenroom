@@ -1249,12 +1249,17 @@ const PATREON_URL = 'https://www.patreon.com/MatthewLee294';
 // always clear WHICH copy of the file is running (a cached page, a stale
 // download, the repo). Bumped with every change, same as the version
 // snapshot in chart-builder/versions/.
-const APP_BUILD = '2026-08-29 18:35';
+const APP_BUILD = '2026-08-30 19:47';
 // Semantic version, adopted at MVP. Bump on every release alongside a new
 // VERSION_NOTES entry (newest first) — the Settings "Version Notes" popup
 // renders straight from this list, so the notes ship inside the app itself.
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 const VERSION_NOTES = [
+  { version: '1.2.1', date: 'August 30, 2026', sections: [
+    ['Fixed', [
+      'The 2-Column setting is now saved with the song (per arrangement, like Repeated Sections) — it survives Save and reopen, rides along in exports, and set-list Print/PDF honor each song’s choice.',
+    ]],
+  ]},
   { version: '1.2.0', date: 'August 29, 2026', sections: [
     ['New', [
       'Chart-aware word wrap: a line too long for its space \u2014 a 2-Column column, or even a full-width page \u2014 wraps at a word boundary with every chord staying above its syllable, instead of clipping off the edge. Applies identically to the live preview, Print, and PDF.',
@@ -3451,7 +3456,7 @@ const App = (() => {
     // yet, loadIntoForm's default-key logic just shows NN, same as any
     // other song that's never been saved with a letter key showing.
     currentSong = {
-      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(), bodyAlign:DefaultBodyAlignStore.get(), expandRepeats:false,
+      title:'', artist:'', ccli:'', copyright:'', copyrightMode:'©', ccLicense:{monetization:null, modification:null}, churchCcli: ChurchCcliStore.get(), key:'NN', preferredKeys: [], capo:'', notationStyle:'roman', titleAlign:DefaultAlignStore.get(), bodyAlign:DefaultBodyAlignStore.get(), expandRepeats:false, twoCol:false,
       tags:[], libraries:[STARTING_LIBRARY], content:'', versions:[], createdAt: Date.now(), updatedAt: Date.now()
     };
     undoStack = []; redoStack = [];
@@ -3595,6 +3600,7 @@ const App = (() => {
     setTitleAlign(currentSong.titleAlign || DefaultAlignStore.get(), false);
     setBodyAlign(currentSong.bodyAlign || DefaultBodyAlignStore.get(), false);
     el('toggleExpandRepeats').checked = !!currentSong.expandRepeats;
+    el('toggle2col').checked = !!currentSong.twoCol;
     originalKey = usableKey;
     liveKey = usableKey;
     el('origKeyNote').textContent = '';
@@ -4603,7 +4609,7 @@ const App = (() => {
      arrangement object, then copy the target's fields up. A song with no
      `arrangements` array is one implicit arrangement called "Main"; the
      array only appears once a second one is added. */
-  const ARR_FIELDS = ['content', 'lyricsContent', 'lyricsSourceSnapshot', 'previewZoom', 'bodyAlign', 'expandRepeats', 'lastDisplayedKey', 'lastDisplayedNN', 'capo', 'versions'];
+  const ARR_FIELDS = ['content', 'lyricsContent', 'lyricsSourceSnapshot', 'previewZoom', 'bodyAlign', 'expandRepeats', 'twoCol', 'lastDisplayedKey', 'lastDisplayedNN', 'capo', 'versions'];
   const MAIN_ARR_ID = 'main';
   function arrangementsOf(song){
     if(song && Array.isArray(song.arrangements) && song.arrangements.length) return song.arrangements;
@@ -4671,6 +4677,7 @@ const App = (() => {
     currentSong.lastDisplayedNN = el('mDisplayKey').value === 'NN';
     currentSong.lastDisplayedKey = el('mDisplayKey').value;
     currentSong.expandRepeats = !!el('toggleExpandRepeats').checked;
+    currentSong.twoCol = !!el('toggle2col').checked;
     currentSong.content = resolveCanonicalContent();
   }
 
@@ -5709,7 +5716,7 @@ const App = (() => {
     const importedZoom = (!isNaN(zoom) && zoom >= FontScaleStore.MIN_PCT && zoom <= FontScaleStore.MAX_PCT) ? zoom : undefined;
     const toSave = {
       title: song.title||'', artist: song.artist||'', ccli: song.ccli||'',
-      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||DefaultBodyAlignStore.get(), expandRepeats: !!song.expandRepeats,
+      copyright: song.copyright||'', copyrightMode: song.copyrightMode||'©', ccLicense: song.ccLicense || {monetization:null, modification:null}, churchCcli: song.churchCcli||'', key: importedKey, preferredKeys: importedPreferredKeys, capo: song.capo||'', notationStyle: song.notationStyle||'arabic', titleAlign: song.titleAlign||DefaultAlignStore.get(), bodyAlign: song.bodyAlign||DefaultBodyAlignStore.get(), expandRepeats: !!song.expandRepeats, twoCol: !!song.twoCol,
       tags: song.tags||[], libraries: importedLibraries, content: importedContent,
       versions: song.versions||[],
       createdAt: Date.now(), updatedAt: Date.now()
@@ -5891,6 +5898,7 @@ const App = (() => {
       titleAlign: (currentSong && currentSong.titleAlign) || DefaultAlignStore.get(),
       bodyAlign: (currentSong && currentSong.bodyAlign) || DefaultBodyAlignStore.get(),
       expandRepeats: !!(currentSong && currentSong.expandRepeats),
+      twoCol: !!(currentSong && currentSong.twoCol),
       tags: el('mTags').value.split(',').map(t=>t.trim()).filter(Boolean),
       libraries: (currentSong && currentSong.libraries) || [],
       arrangements: currentSong && currentSong.arrangements, activeArrangementId: currentSong && currentSong.activeArrangementId,
@@ -6997,7 +7005,7 @@ ${versesXml}
       const song = setListRenderSong(entry);
       if(!song) continue;
       const scalePct = song.previewZoom || FontScaleStore.get();
-      const pages = buildPrintPagesFor(song, scalePct);
+      const pages = buildPrintPagesFor(song, scalePct, !!song.twoCol);
       const parts = buildPageMetaParts(song);
       chunks.push(pages.map((sections, i) => `
         <div class="cs-page${bodyAlignClass(song)}" style="--chart-font-scale:${scalePct/100};">
@@ -8593,7 +8601,15 @@ ${versesXml}
     el('editor').addEventListener('contextmenu', onEditorContextMenu);
     el('editor')._lastValue = '';
 
-    el('toggle2col').addEventListener('change', renderPreview);
+    // 2-Column is saved with the song (per arrangement, like Repeated
+    // Sections) — flipping it marks the song unsaved.
+    el('toggle2col').addEventListener('change', (e) => {
+      if(currentSong){
+        currentSong.twoCol = e.target.checked;
+        dirty = true; updateSaveStatus();
+      }
+      renderPreview();
+    });
     el('toggleExpandRepeats').addEventListener('change', (e) => {
       if(!currentSong) return;
       currentSong.expandRepeats = e.target.checked;
