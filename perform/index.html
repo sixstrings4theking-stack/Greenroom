@@ -242,9 +242,14 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 .strip{width:74px; flex-shrink:0; background:var(--bg-panel-2); border:1px solid var(--border-soft); border-radius:8px; padding:6px 4px; display:flex; flex-direction:column; align-items:center; gap:5px;}
 .strip.master{border-color:var(--accent-dim);}
 .strip .s-name{font-size:10px; font-weight:700; color:var(--text-dim); max-width:66px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; text-align:center;}
-.strip .s-fader{display:flex; align-items:center; gap:3px; height:112px;}
+.strip .s-fader{display:flex; align-items:center; gap:2px; height:112px;}
 .strip canvas.s-meter{width:8px; height:108px; background:#0d0f13; border-radius:2px;}
-.strip input.s-gain{writing-mode:vertical-rl; direction:rtl; width:24px; height:108px; accent-color:var(--accent); padding:0; margin:0;}
+.strip input.s-gain{writing-mode:vertical-rl; direction:rtl; width:22px; height:108px; accent-color:var(--accent); padding:0; margin:0;}
+/* dB scale beside each fader: tick + label per anchor; unity (U) gets
+   the accent line. Positions match the fader's dB taper. */
+.s-scale{position:relative; width:15px; height:108px; flex-shrink:0;}
+.s-scale i{position:absolute; left:0; right:0; transform:translateY(-50%); font-style:normal; font-size:6.5px; line-height:1; color:var(--text-faint); border-top:1px solid var(--border); padding-top:1px; text-align:left;}
+.s-scale i.unity{color:var(--accent); border-top:2px solid var(--accent-dim); font-weight:800;}
 .strip .s-btns{display:flex; gap:4px;}
 /* Pan knob — hold and slide up (right) / down (left); double-tap centers. */
 .strip .s-pan{display:flex; flex-direction:column; align-items:center; gap:1px;}
@@ -462,7 +467,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-30 20:05';
+const APP_BUILD = '2026-08-30 20:27';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -3169,8 +3174,8 @@ const Player = (() => {
     const s = document.createElement('div'); s.className = 'strip' + (t.audioId ? '' : ' nofile');
     s.innerHTML = `
       <div class="s-name" title="Tap to rename"></div>
-      <div class="s-fader"><canvas class="s-meter" width="8" height="108"></canvas>
-        <input type="range" class="s-gain" min="0" max="150" value="${Math.round(t.gain * 100)}"></div>
+      <div class="s-fader"><canvas class="s-meter" width="8" height="108"></canvas>${faderScaleHtml()}
+        <input type="range" class="s-gain"></div>
       <div class="s-btns"><button class="mute${t.mute ? ' on' : ''}">M</button><button class="solo${t.solo ? ' on' : ''}">S</button></div>
       <div class="s-fx"></div>
       ${t.audioId ? '' : '<button class="loadfile" title="Attach an audio file to this track">📂 file</button>'}
@@ -3186,7 +3191,7 @@ const Player = (() => {
     if(lf) lf.onclick = () => { pendingFileTarget = t; el('audioInput').click(); };
     s.querySelector('.s-meter').dataset.id = t.audioId;
     buildFxSlotRow(s.querySelector('.s-fx'), 't:' + t.audioId, t);
-    s.querySelector('.s-gain').oninput = ev => { t.gain = ev.target.value / 100; refreshGains(); scheduleSave(); };
+    wireFader(s.querySelector('.s-gain'), () => t.gain, g => { t.gain = g; refreshGains(); scheduleSave(); });
     s.insertBefore(
       makePanKnob(
         () => t.pan,
@@ -3204,6 +3209,51 @@ const Player = (() => {
     s.querySelector('.del').onclick = () => removeTrack(i);
     return s;
   }
+  /* ---- fader law: dB taper. Anchors (position -> dB):
+     1.0 -> +6, 0.75 -> 0 (UNITY), 0.5 -> -12, 0.25 -> -30, 0.02 -> -60,
+     below that -> -inf (gain 0). Piecewise-linear in dB between anchors —
+     the mixing range lives where your fingers are, like a real desk. ---- */
+  const FADER_SEGS = [[1, 6], [0.75, 0], [0.5, -12], [0.25, -30], [0.02, -60]];
+  function faderPosToGain(p){
+    p = Math.max(0, Math.min(1, p));
+    if(p <= 0.02) return p <= 0.001 ? 0 : Math.pow(10, -60 / 20) * (p / 0.02);
+    for(let i = 0; i < FADER_SEGS.length - 1; i++){
+      const [p1, d1] = FADER_SEGS[i], [p2, d2] = FADER_SEGS[i + 1];
+      if(p >= p2){
+        const db = d2 + (p - p2) / (p1 - p2) * (d1 - d2);
+        return Math.pow(10, db / 20);
+      }
+    }
+    return 0;
+  }
+  function gainToFaderPos(g){
+    if(!g || g <= 0) return 0;
+    const db = 20 * Math.log10(g);
+    if(db <= -60) return 0.02 * (g / Math.pow(10, -3));
+    for(let i = 0; i < FADER_SEGS.length - 1; i++){
+      const [p1, d1] = FADER_SEGS[i], [p2, d2] = FADER_SEGS[i + 1];
+      if(db <= d1 && db >= d2) return p2 + (db - d2) / (d1 - d2) * (p1 - p2);
+    }
+    return 1; // above +6 clamps to top
+  }
+  // Fader input helpers: inputs run 0..1000; scale column shares anchors.
+  const faderVal = g => Math.round(gainToFaderPos(g) * 1000);
+  function faderScaleHtml(){
+    const marks = [[1, '+6', false], [0.75, 'U', true], [0.5, '-12', false], [0.25, '-30', false], [0.02, '∞', false]];
+    // map fader position to the track's pixel span (thumb ~14px tall)
+    return '<div class="s-scale">' + marks.map(([p, lab, unity]) => {
+      const y = ((1 - p) * (108 - 14) + 7).toFixed(1);
+      return `<i class="${unity ? 'unity' : ''}" style="top:${y}px">${lab}</i>`;
+    }).join('') + '</div>';
+  }
+  function wireFader(inp, getGain, setGain){
+    inp.min = 0; inp.max = 1000; inp.step = 1;
+    inp.value = faderVal(getGain());
+    inp.oninput = ev => setGain(faderPosToGain(ev.target.value / 1000));
+    inp.ondblclick = () => { setGain(1); inp.value = faderVal(1); }; // double-tap = unity
+    inp.title = 'Level — double-tap for unity (0 dB)';
+  }
+
   // Pan knob: vertical drag (up = right, down = left, ~120px full swing),
   // double-tap recenters. Disabled knobs render dimmed and inert.
   function makePanKnob(getVal, setVal, disabled){
@@ -3255,17 +3305,17 @@ const Player = (() => {
     s.className = 'strip live' + (liveCfg && liveCfg.enabled ? ' on' : '');
     s.innerHTML = `
       <div class="s-name">LIVE</div>
-      <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__live"></canvas>
-        <input type="range" class="s-gain" min="0" max="150" value="${Math.round(((liveCfg && liveCfg.gain) || 1) * 100)}"></div>
+      <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__live"></canvas>${faderScaleHtml()}
+        <input type="range" class="s-gain"></div>
       <div class="s-btns"><button class="power" title="Enable/disable the live input (mic or interface)">⏻</button></div>
       <div class="s-fx"></div>
       <label title="Your input through the FX chain to the master bus — the busking channel">input</label>`;
     s.querySelector('.power').onclick = () => setLiveEnabled(!(liveCfg && liveCfg.enabled));
-    s.querySelector('.s-gain').oninput = ev => {
-      liveCfg.gain = ev.target.value / 100;
-      if(liveNodes) liveNodes.gain.gain.value = liveCfg.gain;
+    wireFader(s.querySelector('.s-gain'), () => (liveCfg && liveCfg.gain) || 1, g => {
+      liveCfg.gain = g;
+      if(liveNodes) liveNodes.gain.gain.value = g;
       saveLive();
-    };
+    });
     s.insertBefore(
       makePanKnob(
         () => liveCfg.pan,
@@ -3300,14 +3350,14 @@ const Player = (() => {
       const ms = document.createElement('div'); ms.className = 'strip master';
       ms.innerHTML = `
         <div class="s-name">MASTER</div>
-        <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__L"></canvas><canvas class="s-meter" width="8" height="108" data-id="__R"></canvas>
-          <input type="range" class="s-gain" min="0" max="150" value="${Math.round((meta.master || 1) * 100)}"></div>
+        <div class="s-fader"><canvas class="s-meter" width="8" height="108" data-id="__L"></canvas><canvas class="s-meter" width="8" height="108" data-id="__R"></canvas>${faderScaleHtml()}
+          <input type="range" class="s-gain"></div>
         <div class="s-btns"></div><label>L&nbsp;·&nbsp;R</label>`;
-      ms.querySelector('.s-gain').oninput = ev => {
-        meta.master = ev.target.value / 100;
-        if(master) master.gain.value = meta.master;
+      wireFader(ms.querySelector('.s-gain'), () => meta.master || 1, g => {
+        meta.master = g;
+        if(master) master.gain.value = g;
         scheduleSave();
-      };
+      });
       host.appendChild(ms);
     }
     el('modeStereo').classList.toggle('on', !meta || meta.mode !== 'split');
