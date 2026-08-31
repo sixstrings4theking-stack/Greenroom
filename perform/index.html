@@ -462,7 +462,7 @@ input:focus,select:focus{outline:1px solid var(--accent);}
 'use strict';
 const APP_NAME = 'ChartBenchLive';
 const APP_VERSION = '0.1.0';
-const APP_BUILD = '2026-08-30 20:03';
+const APP_BUILD = '2026-08-30 20:05';
 
 function el(id){ return document.getElementById(id); }
 let toastTimer = null;
@@ -3285,7 +3285,7 @@ const Player = (() => {
     const host = el('cStrips');
     host.innerHTML = '';
     if(meta){
-      meta.tracks.forEach((t, i) => host.appendChild(makeStrip(t, i)));
+      // "+ Add" pins FIRST so it never moves — five quick taps, five channels.
       if(meta.tracks.length < MAX_TRACKS){
         const add = document.createElement('div');
         add.className = 'strip addstrip';
@@ -3294,6 +3294,7 @@ const Player = (() => {
         add.onclick = addEmptyTrack;
         host.appendChild(add);
       }
+      meta.tracks.forEach((t, i) => host.appendChild(makeStrip(t, i)));
       host.appendChild(makeLiveStrip());
       // master strip: fader + stereo meters
       const ms = document.createElement('div'); ms.className = 'strip master';
